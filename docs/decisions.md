@@ -332,3 +332,14 @@ This document records architectural, design, and technical decisions made during
   - a one-sided exact binomial p-value for "share > threshold" (default 0.5, `--threshold` to demand a stronger majority).
 
   H2 is "supported" when p < 0.05. Units coded `nao-identificado`, or not coded, are counted and reported, never dropped silently.
+
+---
+
+## ADR-038: Discovery Pass with LDA and k-means as an Optional Extra
+
+- **Context:** A gazetteer-anchored miner mostly finds what it already knows. §7.6 requires an open discovery pass, and the report must state which fraction of the catalog came from it.
+- **Decision:** `msrkit analyze topics` runs over the text of the included items (`--status all` for every item). Fenced code is removed and bodies are truncated to 5,000 characters. It fits two models:
+  - LDA on term counts;
+  - k-means on TF-IDF.
+
+  Both use unigrams and bigrams, English plus Portuguese stop words, `min_df` and a recorded seed. Top terms of topics and clusters that share no token with any gazetteer name, alias, id or package, or with the protocol lexicon, are flagged as candidates. Candidates are then inspected manually. Accepted ones enter the gazetteer with `origin: discovery`, and the command reports the catalog fraction by origin. Outputs: `topics.csv`, `clusters.csv` (with the items closest to each centroid), `topic_assignments.csv` and `discovery.json`. scikit-learn is an optional extra (`analysis`), installed in CI. The core miner does not depend on it.

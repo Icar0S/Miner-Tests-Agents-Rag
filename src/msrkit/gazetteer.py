@@ -20,6 +20,7 @@ import yaml
 from pydantic import BaseModel, model_validator
 
 SystemLabel = Literal["rag", "agente"]
+Origin = Literal["seed", "discovery"]  # seed catalog, or added from the discovery pass (§7.6)
 OracleLevel = Literal["especificado", "derivado", "referencia", "pseudo-automatico", "humano"]
 
 
@@ -39,6 +40,7 @@ class ToolEntry(BaseModel):
     ambiguous: bool = False  # name collides with common words: needs context
     anchor: bool = True  # expands `{anchor}` / `{repo}` in query templates
     search_token: str | None = None  # token used for `{anchor}`; defaults to id
+    origin: Origin = "seed"
 
     def names(self) -> list[str]:
         """Every textual name of the tool (canonical name first)."""
@@ -57,6 +59,7 @@ class MethodEntry(BaseModel):
     aliases: list[str] = []
     oracle: OracleLevel | None = None  # typical rung on the oracle ladder (§5.3)
     applies_to: list[SystemLabel] = ["rag", "agente"]
+    origin: Origin = "seed"
 
     def names(self) -> list[str]:
         return list(dict.fromkeys([self.name, *self.aliases]))

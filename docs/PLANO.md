@@ -79,8 +79,8 @@ virar o produto" (§19):
 | N1 | Frequência por ferramenta e método, por nível de evidência, e co-ocorrência ferramenta × método | A1, A2 | P2 | ✅ |
 | N2 | Matriz de cobertura modo de falha × ferramenta/método, para RAG e agentes | A3 | P2 | ✅ |
 | N3 | Distribuição na escada de oráculos e por agregação (teste de H2) | A4 | P2 | ✅ |
-| N4 | LDA + clusterização para o passe de descoberta aberta, com a fração do catálogo vinda dele | A5, §7.6 | P2 | 🔄 |
-| N5 | Comparação RAG × agentes e curva de saturação por lote | A6, §11 | P2 | ⏳ |
+| N4 | LDA + clusterização para o passe de descoberta aberta, com a fração do catálogo vinda dele | A5, §7.6 | P2 | ✅ |
+| N5 | Comparação RAG × agentes e curva de saturação por lote | A6, §11 | P2 | 🔄 |
 
 ### Bloco M — Manutenção e qualidade de código
 

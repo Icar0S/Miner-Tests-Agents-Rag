@@ -24,6 +24,10 @@ dependencies = [
 msrkit = "msrkit.cli:app"
 
 [project.optional-dependencies]
+# Open discovery pass (msrkit analyze topics): LDA and k-means.
+analysis = [
+    "scikit-learn>=1.4,<2",
+]
 dev = [
     "pytest>=8,<9",
     "pytest-recording>=0.13,<1",
@@ -71,7 +75,7 @@ mypy_path = "src"
 packages = ["msrkit"]
 
 [[tool.mypy.overrides]]
-module = ["feedparser", "duckdb", "duckdb.*"]
+module = ["feedparser", "duckdb", "duckdb.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

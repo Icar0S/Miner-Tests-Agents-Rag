@@ -192,3 +192,93 @@ def analyze_oracles(
         )  # fmt: skip
     console.print(h2)
     console.print(f"[green]✓ CSV written to {out}[/green]")
+
+
+@analyze_app.command("topics")
+def analyze_topics(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    status: str = typer.Option(
+        "include", "--status", help="Items by final screening decision: include or all"
+    ),
+    n_topics: int = typer.Option(10, "--topics", help="LDA topics"),
+    n_clusters: int = typer.Option(10, "--clusters", help="k-means clusters"),
+    min_df: int = typer.Option(2, "--min-df", help="Minimum documents per term"),
+    seed: int = typer.Option(20260928, "--seed", help="Random seed (recorded)"),
+) -> None:
+    """A5: open discovery pass — LDA topics and k-means clusters over item text (§7.6).
+
+    Flags top terms outside the gazetteer and the lexicon as candidates for the
+    catalog. Needs the `analysis` extra (scikit-learn).
+    """
+    import json
+
+    from msrkit.analysis import write_csv
+    from msrkit.discovery import catalog_origin, discover, known_vocabulary
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    status = _unwrap(status)
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if status == "include":
+        final = final_decisions(load_decisions(_cli.DATA_DIR, run_id))
+        items = [it for it in items if final.get(it.id) == "include"]
+    elif status != "all":
+        console.print("[red]✗ --status must be include or all.[/red]")
+        raise typer.Exit(1)
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    gaz = proto.gazetteer_data if proto is not None else None
+    lexicon = (
+        [*proto.all_terms(), *(t for v in proto.concepts.values() for t in v)] if proto else []
+    )
+    try:
+        result = discover(
+            items,
+            known_vocabulary(gaz, lexicon),
+            n_topics=_unwrap(n_topics),
+            n_clusters=_unwrap(n_clusters),
+            min_df=_unwrap(min_df),
+            seed=_unwrap(seed),
+        )
+    except (RuntimeError, ValueError) as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
+
+    out = _out_dir(run_id)
+    write_csv(result.topics, out / "topics.csv")
+    write_csv(result.clusters, out / "clusters.csv")
+    write_csv(result.assignments, out / "topic_assignments.csv")
+    meta = {
+        "status": status,
+        "seed": _unwrap(seed),
+        "documents": result.documents,
+        "vocabulary": result.vocabulary,
+        "candidate_terms": result.candidate_terms,
+        "catalog_origin": catalog_origin(gaz) if gaz else None,
+    }
+    (out / "discovery.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), "utf-8")
+
+    table = Table(title=f"LDA topics — {result.documents} documents, {result.vocabulary} terms")
+    for col in ("Topic", "Docs", "Top terms", "Candidates"):
+        table.add_column(col)
+    for t in result.topics:
+        table.add_row(str(t.topic), str(t.documents), ", ".join(t.top_terms[:8]),
+                      ", ".join(t.candidates[:5]))  # fmt: skip
+    console.print(table)
+    ct = Table(title="k-means clusters")
+    for col in ("Cluster", "Size", "Top terms", "Example"):
+        ct.add_column(col)
+    for c in result.clusters:
+        ct.add_row(str(c.cluster), str(c.size), ", ".join(c.top_terms[:8]),
+                   c.examples[0] if c.examples else "")  # fmt: skip
+    console.print(ct)
+    console.print(f"Candidate terms for the catalog: {len(result.candidate_terms)}")
+    if gaz:
+        origin = catalog_origin(gaz)
+        total = sum(origin.values())
+        console.print(
+            f"Catalog from the discovery pass: {origin['discovery']}/{total} entries "
+            f"({origin['discovery'] / total:.0%})"
+        )
+    console.print(f"[green]✓ Written to {out}[/green]")
