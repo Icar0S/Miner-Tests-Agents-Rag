@@ -85,6 +85,3 @@ from msrkit.cli._common import (  # noqa: E402, F401
 )
 from msrkit.cli.collect import run  # noqa: E402, F401
 from msrkit.cli.menu import _toggle_source_in_protocol  # noqa: E402, F401
-
-if __name__ == "__main__":
-    app()

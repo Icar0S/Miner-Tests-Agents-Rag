@@ -1058,3 +1058,18 @@ class TestPartitionCheckpoint:
         items = ItemStorage(tmp_path).read_items(run_id)
         assert len(items) == 6  # partial item of the broken partition was dropped
         assert len({it.id for it in items}) == 6
+
+
+def test_module_entry_point_runs() -> None:
+    """`python -m msrkit.cli` works (CI uses it; the CLI is a package since M1)."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "msrkit.cli", "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "msrkit" in result.stdout
