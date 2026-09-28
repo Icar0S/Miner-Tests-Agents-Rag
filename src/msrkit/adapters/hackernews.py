@@ -60,6 +60,7 @@ class HackerNewsAdapter(BaseAdapter):
         supports_full_text_search=True,
         supports_date_filter=True,
         redistribution="metadata_only",
+        supports_raw_queries=True,
         tos_url="https://hn.algolia.com/api",
         docs_url="https://hn.algolia.com/api",
         notes=(

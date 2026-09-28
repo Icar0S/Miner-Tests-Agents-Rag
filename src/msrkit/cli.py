@@ -222,8 +222,27 @@ def validate(
     console.print(f"  Terms: {len(config.terms)}")
     console.print(f"  Enabled sources: {', '.join(config.enabled_sources())}")
 
-    # Check credentials for enabled sources
     registry = _get_registry()
+
+    # Literal per-source queries need an adapter that accepts its own syntax
+    bad_raw = [
+        name
+        for name, src in config.sources.items()
+        if src.queries
+        and name in registry
+        and not registry[name].policy.supports_raw_queries
+    ]
+    if bad_raw:
+        console.print(
+            f"[red]✗ `queries:` is not supported by source(s): {', '.join(bad_raw)} "
+            "(they have no search syntax; use terms or tags).[/red]"
+        )
+        raise typer.Exit(1)
+    n_raw = sum(len(src.queries) for src in config.sources.values() if src.enabled)
+    if n_raw:
+        console.print(f"  Literal queries: {n_raw}")
+
+    # Check credentials for enabled sources
     all_ok = True
     for source_name in config.enabled_sources():
         if source_name not in registry:
@@ -484,6 +503,12 @@ def run(
         console.print(f"  Status: [{avail.status}] {avail.reason}")
 
         queries = config.build_queries(source_name)
+        if not adapter_cls.policy.supports_raw_queries and any(q.raw for q in queries):
+            console.print(
+                f"  [yellow]`queries:` ignored: {source_name} "
+                "does not accept literal queries.[/yellow]"
+            )
+            queries = [q for q in queries if not q.raw]
         partitioned_queries = []
         for q in queries:
             try:
@@ -520,6 +545,8 @@ def run(
             query.limit = min(query.limit or 5000, remaining_for_source)
 
             query_label = f"[{query.kind}] " if query.kind else ""
+            if query.raw:
+                query_label += f"[raw{': ' + query.label if query.label else ''}] "
             console.print(f"  Query {qi}/{len(queries)}: {query_label}{query.terms[:3]}...")
             items_collected = 0
             raw_items_count = 0

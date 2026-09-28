@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
@@ -39,12 +39,24 @@ class WindowConfig(BaseModel):
         return v
 
 
+class RawQueryConfig(BaseModel):
+    """A literal query in the source's own search syntax (Protocol E2 v2, §7.3)."""
+
+    q: str
+    kind: str | None = None  # e.g. repo | code | issue for GitHub
+    label: str = ""
+    evidence: Literal["N1", "N2", "N3"] | None = None  # evidence level the query targets
+
+
 class SourceConfig(BaseModel):
     """Configuration for a single source in the protocol."""
 
     enabled: bool = False
     kinds: list[str] = []
     extra: dict[str, Any] = {}
+    # Literal per-source queries, run in addition to (or instead of) the lexicon.
+    queries: list[RawQueryConfig] = []
+    use_terms: bool = True  # False: run only `queries`
 
 
 class LimitsConfig(BaseModel):
@@ -113,16 +125,32 @@ class ProtocolConfig(BaseModel):
         # Se a fonte tem kinds configurados, cria uma query por kind
         kinds = src_cfg.kinds if src_cfg.kinds else [None]
 
-        for kind in kinds:
+        if src_cfg.use_terms:
+            for kind in kinds:
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=self.all_terms(),
+                        kind=kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
+                    )
+                )
+
+        for raw_q in src_cfg.queries:
             queries.append(
                 Query(
                     source=source_name,
-                    terms=self.all_terms(),
-                    kind=kind,
+                    terms=[raw_q.q],
+                    kind=raw_q.kind,
                     since=since,
                     until=until,
                     extra=src_cfg.extra,
                     limit=self.limits.max_items_per_source,
+                    raw=True,
+                    label=raw_q.label,
                 )
             )
 

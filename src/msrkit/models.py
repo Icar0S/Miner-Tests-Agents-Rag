@@ -173,6 +173,10 @@ class Query(BaseModel):
     until: date | None = None
     extra: dict[str, Any] = {}
     limit: int | None = None
+    # True when terms[0] is a literal query in the source's own search syntax
+    # (protocol `queries:`), passed through without quoting or extra qualifiers.
+    raw: bool = False
+    label: str = ""  # protocol label of a raw query, kept in provenance
     # Set by adapter.partition(): True when the source's result cap still cuts
     # this partition after all possible splits (potential sampling bias).
     truncated: bool = False
@@ -220,6 +224,8 @@ class SourcePolicy(BaseModel):
     # False when the source only serves recent items (e.g. RSS), so any
     # historical window is necessarily incomplete.
     historical_coverage: bool = True
+    # Accepts literal queries in its own syntax (protocol `queries:`).
+    supports_raw_queries: bool = False
     redistribution: RedistributionPolicy
     tos_url: str
     docs_url: str

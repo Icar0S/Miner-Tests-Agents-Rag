@@ -70,6 +70,7 @@ class GitHubAdapter(BaseAdapter):
         supports_full_text_search=True,
         supports_date_filter=True,
         redistribution="metadata_only",
+        supports_raw_queries=True,
         tos_url="https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
         docs_url="https://docs.github.com/en/rest/search",
         notes=(
@@ -120,7 +121,7 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
         terms: list[str | None] = list(q.terms) or [None]
-        languages = q.extra.get("languages") or [None]
+        languages = [None] if q.raw else (q.extra.get("languages") or [None])
 
         largest = 0
         for term in terms:
@@ -139,11 +140,14 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         if kind == "code" and not self._env("GITHUB_TOKEN"):
             return [q]  # search() skips unauthenticated code search
+        # Code search has no date qualifier; a raw query that fixes its own
+        # created: range cannot be split by date either.
+        fixed_dates = q.raw and "created:" in (q.terms[0] if q.terms else "")
         return partition_capped(
             q,
             self.policy.max_results_per_query,
             self.estimate,
-            split_dates=kind != "code",  # code search has no date qualifier
+            split_dates=kind != "code" and not fixed_dates,
         )
 
     def search(self, q: Query) -> Iterator[RawItem]:
@@ -159,7 +163,7 @@ class GitHubAdapter(BaseAdapter):
         seen_ids: set[str] = set()
 
         terms_to_search: list[str | None] = list(q.terms) or [None]
-        languages = q.extra.get("languages") or [None]
+        languages = [None] if q.raw else (q.extra.get("languages") or [None])
 
         for term in terms_to_search:
             for lang in languages:
@@ -394,6 +398,11 @@ class GitHubAdapter(BaseAdapter):
     ) -> str:
         """Build GitHub search query string for a single term and language qualifier."""
         kind = q.kind or "repo"
+        if q.raw and term:
+            # Literal protocol query: keep it verbatim, add only the date window.
+            if kind == "code" or "created:" in term or not (q.since and q.until):
+                return term
+            return f"{term} created:{q.since}..{q.until}"
         parts = []
         if term:
             parts.append(f'"{term}"' if " " in term else term)

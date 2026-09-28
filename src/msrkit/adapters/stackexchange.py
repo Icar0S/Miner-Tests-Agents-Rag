@@ -63,6 +63,7 @@ class StackExchangeAdapter(BaseAdapter):
         supports_full_text_search=True,
         supports_date_filter=True,
         redistribution="full_text_with_attribution",
+        supports_raw_queries=True,
         tos_url="https://stackoverflow.com/legal/terms-of-service",
         docs_url="https://api.stackexchange.com/docs",
         notes=(

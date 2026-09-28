@@ -37,9 +37,9 @@ virar o produto" (§19):
 
 | Etapa | Descrição | Protocolo | Prioridade | Status |
 |---|---|---|---|---|
-| A1 | **Consultas por fonte** no `protocol.yaml` (`queries:`), além dos termos globais: busca de código (`"from ragas import"`, `filename:promptfooconfig.yaml`), workflows (`path:.github/workflows <âncora>`) e issues das ferramentas-âncora (`repo:<owner>/<repo>`) | §7.3 | P0 | ⏳ |
+| A1 | **Consultas por fonte** no `protocol.yaml` (`queries:`), além dos termos globais: busca de código (`"from ragas import"`, `filename:promptfooconfig.yaml`), workflows (`path:.github/workflows <âncora>`) e issues das ferramentas-âncora (`repo:<owner>/<repo>`) | §7.3 | P0 | ✅ |
 | A2 | **Grupos de conceito e rótulo de sistema**: `concepts: {rag, agente, teste}` no protocolo; cada item recebe `sistema: rag \| agente \| rag+agente` pelos termos que casaram; consultas combinam sistema E teste | §3.1, RQ5 | P0 | ⏳ |
-| A3 | **Gazetteer versionado** (`gazetteer.yaml`): id canônico, aliases, família, padrões de import/dependência/config/CLI e regras de desambiguação; validado pelo `msrkit validate` | §7.2, §12.2 | P0 | ⏳ |
+| A3 | **Gazetteer versionado** (`gazetteer.yaml`): id canônico, aliases, família, padrões de import/dependência/config/CLI e regras de desambiguação; validado pelo `msrkit validate` | §7.2, §12.2 | P0 | 🔄 |
 | A4 | **`plan` realista**: opção `--estimate` que consulta as estimativas, mostra partições, truncamentos previstos e custo em requisições por fonte (hoje é heurística fixa) | §6.4, §7.4 | P1 | ⏳ |
 | A5 | **Retomada por partição**: checkpoint granular para que `--resume` continue da partição interrompida, não da fonte inteira | RNF3 | P1 | ⏳ |
 

@@ -169,3 +169,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Hacker News and RSS items carry only a link and, at most, a summary, but extraction (Protocol E2 v2, §12) codes oracle types and failure modes from the article text. The linked pages are ordinary public web pages, not APIs.
 - **Decision:** A separate, opt-in command `msrkit fetch` downloads the linked page for items of a run (by default only items with matched terms, from `hackernews` and `rss`). It honors robots.txt for the msrkit user agent, treats an unreadable robots.txt (5xx or network error) as disallowed, keeps a minimum per-host interval (5 s by default), processes only HTML up to 2 MB, and extracts visible text with the standard library. Results, including refusals, go to `data/fulltext/<run_id>.jsonl`; the command resumes without refetching. **Full text is never exported**: `export` does not read this directory.
 - **Conservative Principle:** Collection through official APIs is unchanged; reading linked pages is explicit, rate-limited, robots-aware, local-only and auditable (every refusal is recorded with its reason).
+
+---
+
+## ADR-020: Literal Per-Source Queries (`queries:`)
+
+- **Context:** Protocol E2 v2 §7.3 specifies source-specific searches that a global term list cannot express: GitHub code search for imports and config files (N2), workflow files (N3), issues of anchor tools.
+- **Decision:** Each source in `protocol.yaml` may declare `queries:` — literal strings in the source's own search syntax, with optional `kind`, `label` and target `evidence` level — run in addition to the terms (or alone, with `use_terms: false`). Adapters declare `supports_raw_queries`; `validate` rejects `queries:` on sources without a search syntax (dev.to, RSS). GitHub keeps the literal string untouched except for the `created:` window used by partitioning (not added to code search or when the query sets its own `created:`).
+- **Conservative Principle:** The exact string sent to the API is the one written in the protocol, so it is recorded verbatim in the manifest and reproducible.

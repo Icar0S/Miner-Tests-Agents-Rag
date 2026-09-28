@@ -75,6 +75,25 @@ sources:
         - Python
         - TypeScript
       min_stars: 3
+    # Consultas literais da §7.3 do Protocolo E2 v2, na sintaxe de busca do GitHub.
+    # Rodam além dos termos. `evidence` indica o nível de evidência que a consulta
+    # busca (N2: uso declarado; N3: invocação em CI).
+    queries:
+      - kind: repo
+        label: repos-rag
+        q: '("RAG" OR "retrieval augmented") (eval OR test OR testing) in:name,description,readme stars:>5'
+      - kind: repo
+        label: repos-agentes
+        q: '("agent" OR "agentic") (eval OR test OR testing) in:name,description,readme stars:>5'
+      - {kind: code, label: ragas-import, evidence: N2, q: '"from ragas import" language:Python'}
+      - {kind: code, label: deepeval-import, evidence: N2, q: '"import deepeval" language:Python'}
+      - {kind: code, label: promptfoo-config, evidence: N2, q: 'filename:promptfooconfig.yaml'}
+      - {kind: code, label: rag-metricas-teste, evidence: N2, q: '"faithfulness" "context_recall" language:Python path:tests'}
+      - {kind: code, label: golden-dataset, evidence: N2, q: '"golden" "dataset" path:evals'}
+      - {kind: code, label: tool-call-assert, evidence: N2, q: '"tool_call" "assert" language:Python path:tests'}
+      - {kind: code, label: ci-ragas, evidence: N3, q: 'ragas path:.github/workflows language:YAML'}
+      - {kind: code, label: ci-deepeval, evidence: N3, q: 'deepeval path:.github/workflows language:YAML'}
+      - {kind: code, label: ci-promptfoo, evidence: N3, q: 'promptfoo path:.github/workflows language:YAML'}
 
   stackexchange:
     enabled: true
