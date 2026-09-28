@@ -1574,6 +1574,54 @@ def _cell(value: Any) -> str:
 
 
 @app.command()
+def prisma(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+) -> None:
+    """PRISMA 2020 flow of a run from its manifest, discards, dedupe and screening (RF8).
+
+    Writes data/reports/<run_id>/prisma.json and prisma.md (with a Mermaid diagram).
+    """
+    from msrkit.coding import load_codings
+    from msrkit.prisma import build_flow, render_markdown
+    from msrkit.provenance import load_manifest
+    from msrkit.screening import load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    storage = ItemStorage(DATA_DIR)
+    manifest = None
+    with contextlib.suppress(FileNotFoundError):
+        manifest = load_manifest(DATA_DIR, run_id)
+    report_path = DATA_DIR / "items" / run_id / "dedupe_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
+    flow = build_flow(
+        run_id,
+        manifest,
+        storage.read_items(run_id),
+        storage.read_items(run_id, prefer_deduped=True),
+        report,
+        DATA_DIR / "runs" / run_id / "discarded.jsonl",
+        load_decisions(DATA_DIR, run_id),
+        {item_id for (item_id, _c) in load_codings(DATA_DIR, run_id)},
+    )
+    out_dir = DATA_DIR / "reports" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "prisma.json").write_text(flow.model_dump_json(indent=2), encoding="utf-8")
+    markdown = render_markdown(flow)
+    (out_dir / "prisma.md").write_text(markdown, encoding="utf-8")
+    dup = "n/a" if flow.duplicates is None else sum(flow.duplicates.values())
+    console.print(
+        f"Identified {flow.total_identified} → filtered {sum(flow.filtered.values())}, "
+        f"duplicates {dup} → screened {flow.screened} → excluded {flow.excluded}, "
+        f"uncertain {flow.uncertain}, pending {flow.pending} → included {flow.included} "
+        f"(coded {flow.coded})"
+    )
+    if manifest is None:
+        console.print("[yellow]⚠ No manifest: identification counts come from items only.[/yellow]")
+    console.print(f"[green]✓ PRISMA flow written to {out_dir}[/green]")
+
+
+@app.command()
 def recall(
     gold: str = typer.Argument(..., help="Gold set YAML (see msrkit.validation)"),
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),

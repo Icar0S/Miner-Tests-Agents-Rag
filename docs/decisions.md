@@ -247,3 +247,19 @@ This document records architectural, design, and technical decisions made during
 - **Context:** §15 requires independent double coding of ≥20% of eligible items and Cohen's κ per dimension (system, evidence level, failure mode, oracle type), with disagreements resolved by a third coder.
 - **Decision:** `msrkit coding sample` draws ⌈rate·n⌉ included items per source (at least one), with a recorded seed, into `double_sample.json`; `coding export --double-sample` restricts the sheet to it. `msrkit agreement` computes κ for every coder pair over the items both coded: the screening decision plus the fields listed in `coding.agreement` (or every categorical field with `--all-fields`). A blank `enum`/`bool` is its own category. For `multi` fields, each (item, value) is a binary decision over the values either coder used; κ is pooled over them and also reported per value. Text fields have no κ. Results go to `agreement.json`, with Landis & Koch bands, and `disagreements.csv` lists one row per item and dimension for the third coder.
 - **Limit:** κ is undefined (reported as "—") when both coders used a single identical category; the percent agreement is still reported.
+
+---
+
+## ADR-030: PRISMA Flow Derived Only from Run Records
+
+- **Context:** RF8 requires a PRISMA flow. Hand-counted flows drift from the data and cannot be audited.
+- **Decision:** `msrkit prisma` derives every number from files the run already produces:
+  - identification per source: items plus manifest `discarded`;
+  - an estimate of records not retrieved: `estimated_total` minus what was obtained, over queries truncated by a source cap;
+  - local-filter removals by reason, from `discarded.jsonl`; the manifest total is authoritative, and any gap is reported as "unspecified";
+  - duplicates by pass, from `dedupe_report.json`;
+  - screening outcomes, from the final decisions over the screening pool, with exclusion reasons being the E-criteria marked by the excluding coders;
+  - included items per source and coded items.
+
+  The output is `data/reports/<run>/prisma.json` and `prisma.md`, which has a Mermaid diagram.
+- **Conservative Principle:** a stage without input (dedupe not run) is shown as "n/a", never as zero. Records not retrieved are labelled as an estimate.

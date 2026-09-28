@@ -61,14 +61,14 @@ virar o produto" (§19):
 | T3 | **Ordenação da triagem** por relevância (termos casados, sinais N2/N3), em lotes fixos | §11 | P1 | ✅ |
 | T4 | **Formulário de extração** (Anexo A) e colunas de **qualidade da literatura cinza** (§9), exportados e importados do mesmo modo | Anexo A, §9 | P1 | ✅ |
 | T5 | **Concordância entre codificadores** (`msrkit agreement`): κ de Cohen por dimensão sobre a amostra de dupla codificação | §15 | P1 | ✅ |
-| T6 | **Fluxo PRISMA** gerado das contagens de manifesto, descartes, deduplicação e decisões de triagem | RF8 | P1 | 🔄 |
+| T6 | **Fluxo PRISMA** gerado das contagens de manifesto, descartes, deduplicação e decisões de triagem | RF8 | P1 | ✅ |
 
 ### Bloco V — Validação do instrumento (Design Science)
 
 | Etapa | Descrição | Protocolo | Prioridade | Status |
 |---|---|---|---|---|
 | V1 | **Recall sobre gold set**: formato do gold set (~50 artefatos) e comando que mede quantos o minerador recuperou | §10.3 | P0 | ✅ |
-| V2 | **Amostra de precisão**: exporta 200 detecções estratificadas por fonte e nível para revisão manual e calcula a precisão | §12.3 | P1 | ⏳ |
+| V2 | **Amostra de precisão**: exporta 200 detecções estratificadas por fonte e nível para revisão manual e calcula a precisão | §12.3 | P1 | 🔄 |
 | V3 | **Testes de contrato com cassettes**: gravar respostas reais por adaptador (vcrpy já é dependência; `tests/cassettes/` está vazio) e checar o esquema das APIs | §10.2 | P1 | ⏳ |
 | V4 | **Pacote de reprodutibilidade** (`msrkit package`): protocolo, manifestos, hashes, versão e corpus de metadados prontos para o Zenodo | §10.3, D2–D3 | P2 | ⏳ |
 
