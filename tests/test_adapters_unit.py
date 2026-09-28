@@ -571,6 +571,7 @@ class TestSearchLoopsAndQueryBuilding:
             extra={
                 "sites": ["stackoverflow", "softwareengineering"],
                 "tagged": ["rag", "langchain"],
+                "include_answers": False,
             },
             limit=10,
         )
@@ -582,6 +583,64 @@ class TestSearchLoopsAndQueryBuilding:
             ("softwareengineering", "agent evaluation"),
         ]
         assert all(c["tagged"] == "rag;langchain" for c in captured)
+
+    def test_stackexchange_thread_includes_answers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Answers are fetched in one batch per page and appended to the thread body (C4a)."""
+        adapter = StackExchangeAdapter()
+        urls: list[str] = []
+
+        def mock_get(url: str, params: dict[str, Any]) -> MagicMock:
+            urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            if url.endswith("/answers"):
+                resp.json.return_value = {
+                    "has_more": False,
+                    "items": [
+                        {
+                            "question_id": 1,
+                            "answer_id": 10,
+                            "body": "Use ragas in CI",
+                            "score": 5,
+                            "is_accepted": True,
+                        },
+                        {
+                            "question_id": 1,
+                            "answer_id": 11,
+                            "body": "Try a golden dataset",
+                            "score": 2,
+                        },
+                    ],
+                }
+            else:
+                resp.json.return_value = {
+                    "has_more": False,
+                    "items": [
+                        {
+                            "question_id": 1,
+                            "title": "How to test RAG?",
+                            "body": "Q body",
+                            "answer_count": 2,
+                        },
+                        {"question_id": 2, "title": "Unanswered", "body": "B", "answer_count": 0},
+                    ],
+                }
+            return resp
+
+        monkeypatch.setattr(adapter, "_governed_get", mock_get)
+        q = Query(source="stackexchange", terms=["RAG"], extra={"sites": ["stackoverflow"]})
+        raws = list(adapter.search(q))
+
+        assert len(urls) == 2
+        assert urls[1].endswith("/questions/1/answers")  # unanswered question not requested
+        assert len(raws[0].payload["_answers"]) == 2
+        assert raws[1].payload["_answers"] == []
+
+        item = adapter.normalize(raws[0], terms=["golden dataset"])
+        assert item.body.startswith("Q body")
+        assert "--- Resposta aceita (score 5) ---" in item.body
+        assert "Try a golden dataset" in item.body
+        assert item.matched_terms and item.matched_terms[0].term == "golden dataset"
 
     def test_hackernews_search_loop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = HackerNewsAdapter()

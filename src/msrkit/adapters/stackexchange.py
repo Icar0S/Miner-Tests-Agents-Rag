@@ -39,6 +39,7 @@ from msrkit.registry import register
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.stackexchange.com/2.3"
+_MAX_ANSWER_PAGES = 10  # per batch of 100 questions
 
 
 @register
@@ -159,6 +160,15 @@ class StackExchangeAdapter(BaseAdapter):
                     if not items:
                         break
 
+                    answers_by_qid: dict[str, list[dict[str, Any]]] = {}
+                    if q.extra.get("include_answers", True):
+                        ids = [
+                            str(it["question_id"])
+                            for it in items
+                            if it.get("question_id") and it.get("answer_count", 1)
+                        ]
+                        answers_by_qid = self._fetch_answers(site, ids)
+
                     for item in items:
                         if total_yielded >= limit:
                             return
@@ -170,13 +180,70 @@ class StackExchangeAdapter(BaseAdapter):
                         yield self._make_raw_item(
                             source=self.name,
                             native_id=qid,
-                            payload={**item, "_site": site},
+                            payload={
+                                **item,
+                                "_site": site,
+                                "_answers": answers_by_qid.get(qid, []),
+                            },
                         )
                         total_yielded += 1
 
                     if not data.get("has_more", False):
                         break
                     page += 1
+
+    def _fetch_answers(self, site: str, question_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Fetch answers (with body) for up to 100 questions per request.
+
+        The unit of analysis is the thread (question + answers); answers often
+        carry the actual testing practice (Protocol E2 v2, §3.5).
+        """
+        by_qid: dict[str, list[dict[str, Any]]] = {}
+        for start in range(0, len(question_ids), 100):
+            batch = ";".join(question_ids[start : start + 100])
+            page = 1
+            while page <= _MAX_ANSWER_PAGES:
+                params: dict[str, Any] = {
+                    "site": site,
+                    "page": page,
+                    "pagesize": 100,
+                    "sort": "votes",
+                    "order": "desc",
+                    "filter": "withbody",
+                }
+                key = self._env("STACKEXCHANGE_KEY")
+                if key:
+                    params["key"] = key
+                resp = self._governed_get(f"{_BASE_URL}/questions/{batch}/answers", params=params)
+                if resp.status_code != 200:
+                    logger.warning("SE answers returned %d for site=%s", resp.status_code, site)
+                    break
+                data = resp.json()
+                self._handle_backoff(data)
+                for ans in data.get("items", []):
+                    by_qid.setdefault(str(ans.get("question_id", "")), []).append(
+                        {
+                            "answer_id": ans.get("answer_id"),
+                            "body": ans.get("body") or "",
+                            "score": ans.get("score"),
+                            "is_accepted": bool(ans.get("is_accepted")),
+                        }
+                    )
+                if not data.get("has_more", False):
+                    break
+                page += 1
+        return by_qid
+
+    @staticmethod
+    def _thread_body(question_body: str | None, answers: list[dict[str, Any]]) -> str | None:
+        """Question body followed by its answers, each with a labelled header."""
+        if not answers:
+            return question_body
+        parts = [question_body or ""]
+        for ans in answers:
+            label = "Resposta aceita" if ans.get("is_accepted") else "Resposta"
+            parts.append(f"--- {label} (score {ans.get('score')}) ---\n{ans.get('body', '')}")
+        return "\n\n".join(parts)
 
     def normalize(self, raw: RawItem, terms: list[str] | None = None) -> Item:
         """Convert SE question to canonical Item."""
@@ -194,7 +261,8 @@ class StackExchangeAdapter(BaseAdapter):
         tags = p.get("tags", [])
         url = p.get("link", f"https://{site}.com/q/{p.get('question_id', '')}")
 
-        matched = match_terms(terms or [], title=p.get("title"), body=p.get("body"), tags=tags)
+        body = self._thread_body(p.get("body"), p.get("_answers") or [])
+        matched = match_terms(terms or [], title=p.get("title"), body=body, tags=tags)
 
         qid = str(p.get("question_id") or raw.native_id or "")
         native_key = f"{site}:{qid}" if site != "stackoverflow" else qid
@@ -205,7 +273,7 @@ class StackExchangeAdapter(BaseAdapter):
             kind=ItemKind.THREAD,
             url=url,  # type: ignore[arg-type]
             title=p.get("title"),
-            body=p.get("body"),
+            body=body,
             author_handle=(p.get("owner") or {}).get("display_name"),
             created_at=created_at,
             updated_at=updated_at,
