@@ -172,6 +172,10 @@ class Query(BaseModel):
     until: date | None = None
     extra: dict[str, Any] = {}
     limit: int | None = None
+    # Set by adapter.partition(): True when the source's result cap still cuts
+    # this partition after all possible splits (potential sampling bias).
+    truncated: bool = False
+    estimated_total: int | None = None
 
 
 # ---------------------------------------------------------------------------

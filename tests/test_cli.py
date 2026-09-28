@@ -440,6 +440,7 @@ limits:
             )
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(app, ["run", str(proto_file)])
         assert result.exit_code == 0
@@ -481,6 +482,7 @@ limits:
                 )
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,
@@ -570,6 +572,7 @@ limits:
         from msrkit.adapters.hackernews import HackerNewsAdapter
 
         monkeypatch.setattr(HackerNewsAdapter, "search", lambda *args, **kwargs: iter([]))
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,
@@ -671,6 +674,7 @@ limits:
             return iter([])
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
         # Should execute cleanly without Manifest validation error for OptionInfo run_id
         run(protocol="protocols/v0_rag_agents_testing.yaml", source="hackernews", limit=1)
 
@@ -789,6 +793,7 @@ limits:
                 )
 
         monkeypatch.setattr(GitHubAdapter, "search", mock_search)
+        monkeypatch.setattr(GitHubAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,

@@ -477,7 +477,13 @@ def run(
         queries = config.build_queries(source_name)
         partitioned_queries = []
         for q in queries:
-            partitioned_queries.extend(adapter.partition(q))
+            try:
+                partitioned_queries.extend(adapter.partition(q))
+            except Exception as e:
+                console.print(
+                    f"  [yellow]Partitioning failed ({e}); running query unpartitioned.[/yellow]"
+                )
+                partitioned_queries.append(q)
         queries = partitioned_queries
         if limit is not None:
             for q in queries:

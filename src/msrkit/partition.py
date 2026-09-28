@@ -146,3 +146,50 @@ def merge_date_ranges(queries: list[Query]) -> tuple[date | None, date | None]:
         min(since_dates) if since_dates else None,
         max(until_dates) if until_dates else None,
     )
+
+
+def split_by_term(q: Query) -> list[Query]:
+    """Split a multi-term query into one query per term.
+
+    Adapters search each term separately, and each term is its own API query
+    subject to the result cap, so estimation and partitioning must also be
+    per term.
+    """
+    if len(q.terms) <= 1:
+        return [q]
+    return [q.model_copy(update={"terms": [t]}) for t in q.terms]
+
+
+def partition_capped(
+    q: Query,
+    max_results: int | None,
+    estimate_fn: Callable[[Query], int | None],
+    secondary_axes: list[Callable[[Query], list[Query]]] | None = None,
+    split_dates: bool = True,
+) -> list[Query]:
+    """Per-term partitioning that records truncation on each resulting Query.
+
+    Args:
+        split_dates: False for searches without a date qualifier (e.g. GitHub
+            code search), where halving the window does not change the result
+            set; the query is then only estimated and flagged.
+    """
+    out: list[Query] = []
+    for term_q in split_by_term(q):
+        if max_results is None:
+            out.append(term_q)
+            continue
+        if not split_dates:
+            est = estimate_fn(term_q)
+            out.append(
+                term_q.model_copy(
+                    update={
+                        "truncated": est is not None and est > max_results,
+                        "estimated_total": est,
+                    }
+                )
+            )
+            continue
+        for part, truncated in partition(term_q, max_results, estimate_fn, secondary_axes):
+            out.append(part.model_copy(update={"truncated": truncated}))
+    return out

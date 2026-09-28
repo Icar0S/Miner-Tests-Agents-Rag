@@ -32,6 +32,7 @@ from msrkit.models import (
     SourcePolicy,
     TechContext,
 )
+from msrkit.partition import partition_capped
 from msrkit.registry import register
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class HackerNewsAdapter(BaseAdapter):
             per_seconds=60,
             burst=5,
         ),
-        max_results_per_query=None,  # Algolia has no hard cap like GitHub
+        max_results_per_query=1000,  # Algolia paginationLimitedTo caps every query
         max_page_size=1000,
         max_pages=None,
         supports_full_text_search=True,
@@ -61,7 +62,10 @@ class HackerNewsAdapter(BaseAdapter):
         redistribution="metadata_only",
         tos_url="https://hn.algolia.com/api",
         docs_url="https://hn.algolia.com/api",
-        notes="Free, no auth. Full-text search with date filters via numericFilters.",
+        notes=(
+            "Free, no auth. Full-text search with date filters via numericFilters. "
+            "Every query is capped at 1,000 hits; partition by date window."
+        ),
     )
 
     def available(self) -> Availability:
@@ -88,6 +92,10 @@ class HackerNewsAdapter(BaseAdapter):
                 return None
             total += resp.json().get("nbHits", 0)
         return total
+
+    def partition(self, q: Query) -> list[Query]:
+        """Split by term, then by date window until each query fits the 1,000 cap."""
+        return partition_capped(q, self.policy.max_results_per_query, self.estimate)
 
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search HN via Algolia, paginating through all results."""
