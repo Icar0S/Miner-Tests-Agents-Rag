@@ -216,6 +216,9 @@ class SourcePolicy(BaseModel):
     max_pages: int | None = None
     supports_full_text_search: bool
     supports_date_filter: bool
+    # False when the source only serves recent items (e.g. RSS), so any
+    # historical window is necessarily incomplete.
+    historical_coverage: bool = True
     redistribution: RedistributionPolicy
     tos_url: str
     docs_url: str
@@ -235,6 +238,10 @@ class QueryManifestEntry(BaseModel):
     requests: int
     items: int
     truncated: bool
+    # Why the query may be incomplete: "source_cap" (result cap not resolved by
+    # partitioning), "no_historical_coverage" (source serves only recent items),
+    # "item_limit" (collection stopped at the configured item limit).
+    truncation_reasons: list[str] = []
     estimated_total: int | None = None
     failed_partitions: list[str] = []
     response_sha256: list[str] = []

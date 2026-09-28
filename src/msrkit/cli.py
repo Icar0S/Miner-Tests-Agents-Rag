@@ -585,12 +585,21 @@ def run(
             total_source_requests += requests_made
             if hasattr(adapter, "pop_response_hashes"):
                 response_hashes = adapter.pop_response_hashes()
+            reasons: list[str] = []
+            if query.truncated:
+                reasons.append("source_cap")
+            if not adapter_cls.policy.historical_coverage:
+                reasons.append("no_historical_coverage")
+            if query.limit is not None and raw_items_count >= query.limit:
+                reasons.append("item_limit")
             query_entry = QueryManifestEntry(
                 query_string=query_display,
                 partitions=1,
                 requests=requests_made,
                 items=items_collected,
-                truncated=False,
+                truncated=bool(reasons),
+                truncation_reasons=reasons,
+                estimated_total=query.estimated_total,
                 response_sha256=response_hashes,
             )
             source_entry.queries.append(query_entry)
@@ -870,6 +879,11 @@ def stats(
         items = sum(q.items for q in source.queries)
         requests = sum(q.requests for q in source.queries)
         truncated = any(q.truncated for q in source.queries)
+        reason_counts: dict[str, int] = {}
+        for q in source.queries:
+            for reason in q.truncation_reasons:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        reason_text = ", ".join(f"{r}×{n}" for r, n in sorted(reason_counts.items()))
         total_items += items
         total_requests += requests
 
@@ -879,7 +893,9 @@ def stats(
             str(len(source.queries)),
             str(items),
             str(requests),
-            "[red]Yes[/red]" if truncated else "[green]No[/green]",
+            (f"[red]Yes[/red] ({reason_text})" if reason_text else "[red]Yes[/red]")
+            if truncated
+            else "[green]No[/green]",
         )
 
     console.print(table)

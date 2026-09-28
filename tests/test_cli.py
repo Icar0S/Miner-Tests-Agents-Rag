@@ -883,3 +883,63 @@ limits:
         assert len(items) == 1
         assert items[0].provenance.partition == "partA"
         assert items[0].provenance.raw_ref.endswith("partA.jsonl.gz:0")
+
+
+class TestTruncationManifest:
+    """The run manifest records truncation and its reasons (C2)."""
+
+    def _run_source(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str) -> Any:
+        from msrkit.provenance import load_manifest
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        result = runner.invoke(
+            app, ["run", "protocols/v0_rag_agents_testing.yaml", "--source", source, "--limit", "2"]
+        )
+        assert result.exit_code == 0, result.stdout
+        run_id = next(p.name for p in (tmp_path / "runs").iterdir() if p.is_dir())
+        entry = next(s for s in load_manifest(tmp_path, run_id).sources if s.name == source)
+        return entry, run_id
+
+    def test_source_cap_and_item_limit_are_recorded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.hackernews import HackerNewsAdapter
+
+        def mock_partition(self: Any, q: Query) -> list[Query]:
+            return [
+                q.model_copy(
+                    update={"terms": [q.terms[0]], "truncated": True, "estimated_total": 2500}
+                )
+            ]
+
+        def mock_search(self: Any, query: Query) -> Any:
+            for i in range(5):
+                yield RawItem(
+                    source="hackernews",
+                    native_id=str(i),
+                    payload={"objectID": str(i), "title": "LLM evaluation", "_tags": ["story"]},
+                    fetched_at=datetime.now(UTC),
+                )
+
+        monkeypatch.setattr(HackerNewsAdapter, "partition", mock_partition)
+        monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        entry, run_id = self._run_source(tmp_path, monkeypatch, "hackernews")
+
+        q = entry.queries[0]
+        assert q.truncated is True
+        assert q.truncation_reasons == ["source_cap", "item_limit"]
+        assert q.estimated_total == 2500
+
+        stats = runner.invoke(app, ["stats", "--run", run_id])
+        assert "source_cap×1" in stats.stdout
+
+    def test_rss_is_marked_without_historical_coverage(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.rss import RSSAdapter
+
+        monkeypatch.setattr(RSSAdapter, "search", lambda *args, **kwargs: iter([]))
+        entry, _ = self._run_source(tmp_path, monkeypatch, "rss")
+        assert entry.queries
+        assert all(q.truncated for q in entry.queries)
+        assert all("no_historical_coverage" in q.truncation_reasons for q in entry.queries)
