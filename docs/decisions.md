@@ -193,3 +193,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** RQ5 compares RAG and agentic systems, and §3.1 lets a hybrid item carry both labels. Items carried no system label.
 - **Decision:** The protocol declares `concepts:` — named lexicons (here `rag`, `agente`, `teste`). After normalization every item gets `concepts`, the list of groups whose lexicon matches (flexible matching, ADR-016), exported as a CSV column. The E2 system label is `concepts ∩ {rag, agente}`. Optional `concept_queries` adds query terms built as the product of concept lexicons (e.g. system × testing). The mechanism is domain-agnostic: another study defines other groups.
 - **Conservative Principle:** The label is an automatic pre-classification by lexicon, reproducible and auditable; manual coding (Annex A) remains the reference.
+
+---
+
+## ADR-023: Evidence-Level Extraction Rules
+
+- **Context:** §3.4 separates mention (N1), declared use (N2) and sustained adoption (N3), and every reported count must state its level.
+- **Decision:** `msrkit extract` applies the gazetteer. N1: tool or method name in title, body or tags (tool names in exact mode, methods in flexible mode). N2: a code search hit whose literal query is an import of the tool, a tool config file, or a tool package in a root dependency manifest. N3: the tool invoked in a CI workflow **and** the repository has commits in ≥2 distinct months of the window **and** ≥2 contributors; a CI invocation without both thresholds counts as N2. Methods are N1 only. Summaries count each unit (a repository, or an item outside GitHub) once per entry at its highest level, so N1/N2/N3 counts are disjoint. Every detection keeps its signal, location and an evidence excerpt of at most 300 characters.
+- **Limit:** a code search hit is trusted to contain its query string; precision is measured on a stratified sample (§12.3, step V2).
