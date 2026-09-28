@@ -10,7 +10,8 @@ import pytest
 from typer.testing import CliRunner
 
 from msrkit.cli import app
-from msrkit.models import Item, ItemKind, Provenance
+from msrkit.extract import Detection
+from msrkit.models import Item, ItemKind, Provenance, TermHit
 from msrkit.screening import (
     ScreeningCriteria,
     SheetError,
@@ -18,6 +19,8 @@ from msrkit.screening import (
     final_decisions,
     import_sheet,
     load_decisions,
+    rank_items,
+    relevance_score,
 )
 from msrkit.storage import ItemStorage
 
@@ -168,3 +171,59 @@ class TestScreenCommands:
             ],
         )
         assert "1 items written" in r.stdout  # already-decided items are skipped
+
+
+class TestRanking:
+    def _ranked_items(self) -> list[Item]:
+        items = _items(4)
+        items[1].concepts = ["rag", "teste"]
+        items[1].matched_terms = [
+            TermHit(term=t, field="title", context=t) for t in ("rag", "eval")
+        ]
+        items[2].concepts = ["agente"]
+        items[3].tech.has_ci = True
+        return items
+
+    def test_score_components(self) -> None:
+        items = self._ranked_items()
+        assert relevance_score(items[0]) == (0.0, "")
+        assert relevance_score(items[1]) == (6.0, "")  # 2 terms + system + testing
+        det = Detection(
+            item_id="it2", source="github", entry_id="ragas", entry_type="tool",
+            level="N3", signal="ci", location="ci.yml", evidence="ragas",
+        )  # fmt: skip
+        assert relevance_score(items[2], [det]) == (7.0, "N3")
+
+    def test_rank_is_deterministic_and_batches_fixed(self) -> None:
+        items = self._ranked_items()
+        ranking = rank_items(items, None, batch_size=2)
+        order = [r.item_id for r in sorted(ranking.values(), key=lambda r: r.rank)]
+        assert order == ["it1", "it2", "it3", "it0"]
+        assert [ranking[i].batch for i in order] == [1, 1, 2, 2]
+        assert rank_items(list(reversed(items)), None, batch_size=2) == ranking
+
+    def test_export_follows_ranking_and_filters_by_batch(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(self._ranked_items(), "run-r")
+        sheet = tmp_path / "b2.csv"
+        r = CliRunner().invoke(
+            app,
+            ["screen", "export", "--run", "run-r", "-p", PROTO, "-b", "2", "-o", str(sheet)],
+        )
+        assert r.exit_code == 0, r.stdout
+        with open(sheet, encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh, delimiter=";"))
+        assert rows == []  # protocol batch_size is 25: all four items are in batch 1
+        r = CliRunner().invoke(
+            app, ["screen", "export", "--run", "run-r", "-p", PROTO, "-o", str(sheet)]
+        )
+        with open(sheet, encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh, delimiter=";"))
+        assert [row["item_id"] for row in rows] == ["it1", "it2", "it3", "it0"]
+        assert [row["rank"] for row in rows] == ["1", "2", "3", "4"]
+
+    def test_invalid_order_rejected(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(_items(), "run-o")
+        r = CliRunner().invoke(app, ["screen", "export", "--run", "run-o", "--order", "x"])
+        assert r.exit_code == 1

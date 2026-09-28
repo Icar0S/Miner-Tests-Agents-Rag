@@ -1190,6 +1190,19 @@ def _screening_criteria(run_id: str, protocol: str | None) -> Any:
     return proto.screening if proto is not None else ScreeningCriteria()
 
 
+def _load_detections(run_id: str) -> list[Any]:
+    from msrkit.extract import Detection
+
+    path = DATA_DIR / "extract" / run_id / "detections.jsonl"
+    if not path.exists():
+        return []
+    return [
+        Detection.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 @screen_app.command("export")
 def screen_export(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
@@ -1199,21 +1212,59 @@ def screen_export(
     pending_only: bool = typer.Option(
         True, "--pending-only/--all", help="Skip items this coder already decided"
     ),
+    order: str = typer.Option(
+        "relevance", "--order", help="relevance (fixed ranked batches) or collected"
+    ),
+    batch: list[int] = typer.Option(  # noqa: B008
+        [], "--batch", "-b", help="Export only these batch numbers (repeatable)"
+    ),
 ) -> None:
-    """Write a screening sheet (CSV) with one column per eligibility criterion."""
-    from msrkit.screening import export_sheet, load_decisions
+    """Write a screening sheet (CSV) with one column per eligibility criterion.
+
+    By default items are ranked by relevance (matched terms, concepts, evidence
+    level from `msrkit extract`, CI/tests) and cut into fixed batches over the
+    whole run (§11), so batch numbers stay stable across coders and re-exports.
+    """
+    from msrkit.screening import Ranked, export_sheet, load_decisions, rank_items
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
     coder = _unwrap(coder)
+    order = _unwrap(order)
+    batches = set(_unwrap(batch) or [])
+    if order not in ("relevance", "collected"):
+        console.print("[red]✗ --order must be 'relevance' or 'collected'.[/red]")
+        raise typer.Exit(1)
     criteria = _screening_criteria(run_id, _unwrap(protocol))
     items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+    detections = _load_detections(run_id) if order == "relevance" else []
+    ranking = (
+        rank_items(items, detections, criteria.batch_size)
+        if order == "relevance"
+        else {
+            it.id: Ranked(
+                item_id=it.id, rank=i + 1, batch=i // max(criteria.batch_size, 1) + 1, score=0
+            )
+            for i, it in enumerate(items)
+        }
+    )
     if _unwrap(pending_only) and coder:
         done = {item_id for (item_id, c) in load_decisions(DATA_DIR, run_id) if c == coder}
         items = [it for it in items if it.id not in done]
+    if batches:
+        items = [it for it in items if ranking[it.id].batch in batches]
     out = Path(_unwrap(output) or DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv")
-    n = export_sheet(items, criteria, out, coder=coder)
-    console.print(f"[green]✓ {n} items written to {out}[/green]")
+    n = export_sheet(items, criteria, out, coder=coder, ranking=ranking)
+    total_batches = max((r.batch for r in ranking.values()), default=0)
+    console.print(
+        f"[green]✓ {n} items written to {out}[/green] "
+        f"(order: {order}; {total_batches} batches of {criteria.batch_size})"
+    )
+    if order == "relevance" and not detections:
+        console.print(
+            "[dim]No detections for this run: run `msrkit extract` first to rank by "
+            "evidence level.[/dim]"
+        )
 
 
 @screen_app.command("import")

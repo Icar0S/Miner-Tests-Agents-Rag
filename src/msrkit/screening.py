@@ -10,6 +10,12 @@ A sheet row has one column per criterion (mark with x/s/sim/y/yes/1), a
 Imported decisions are appended to data/screening/<run_id>/decisions.jsonl,
 one record per (item, coder), keeping every coder's answer for the agreement
 check (step T5). The latest import of a coder for an item wins.
+
+Ordering (step T3): items are ranked by a transparent relevance score —
+distinct matched terms, concept coverage (system and testing), the best
+evidence level detected and repository practice signals — and cut into fixed
+batches on the *whole* run, so an item keeps its batch number across
+re-exports and coders. Ranking only orders the work; every item is screened.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from msrkit.extract import Detection
     from msrkit.models import Item
 
 Decision = Literal["include", "exclude", "uncertain"]
@@ -63,9 +70,68 @@ class SheetError(ValueError):
 
 
 BASE_COLUMNS = [
-    "item_id", "batch", "source", "kind", "url", "title", "concepts", "matched_terms",
-    "has_ci", "contributors",
+    "item_id", "batch", "rank", "score", "source", "kind", "url", "title", "concepts",
+    "matched_terms", "evidence", "has_ci", "contributors",
 ]  # fmt: skip
+
+# Relevance weights (ADR-027). Kept small and additive so the score is explainable.
+W_TERM = 1.0  # per distinct matched term, capped
+MAX_TERMS = 5
+W_SYSTEM = 2.0  # at least one system concept (e.g. rag, agente)
+W_TESTING = 2.0  # the testing concept
+W_LEVEL = {"N1": 1.0, "N2": 3.0, "N3": 5.0}
+W_PRACTICE = 1.0  # each of has_tests / has_ci
+TESTING_CONCEPT = "teste"
+SYSTEM_CONCEPTS = ("rag", "agente")
+
+
+class Ranked(BaseModel):
+    """An item's place in the screening order."""
+
+    item_id: str
+    rank: int  # 1 = most relevant
+    batch: int
+    score: float
+    evidence: str = ""  # best evidence level detected, if any
+
+
+def relevance_score(item: Item, detections: list[Detection] | None = None) -> tuple[float, str]:
+    """Score and best evidence level of one item (higher = screen earlier)."""
+    terms = {h.term.lower() for h in item.matched_terms}
+    score = W_TERM * min(len(terms), MAX_TERMS)
+    if any(c in item.concepts for c in SYSTEM_CONCEPTS):
+        score += W_SYSTEM
+    if TESTING_CONCEPT in item.concepts:
+        score += W_TESTING
+    levels = [d.level for d in detections or []]
+    best = max(levels, key=lambda lv: W_LEVEL[lv]) if levels else ""
+    if best:
+        score += W_LEVEL[best]
+    score += W_PRACTICE * (bool(item.tech.has_tests) + bool(item.tech.has_ci))
+    return round(score, 2), best
+
+
+def rank_items(
+    items: list[Item], detections: list[Detection] | None = None, batch_size: int = 25
+) -> dict[str, Ranked]:
+    """Rank the whole run and assign fixed batches.
+
+    Ties are broken by item id, so the order is deterministic for a given run.
+    """
+    by_item: dict[str, list[Detection]] = {}
+    for d in detections or []:
+        by_item.setdefault(d.item_id, []).append(d)
+    scored = [(it.id, *relevance_score(it, by_item.get(it.id))) for it in items]
+    scored.sort(key=lambda row: (-row[1], row[0]))
+    size = max(batch_size, 1)
+    return {
+        item_id: Ranked(
+            item_id=item_id, rank=pos + 1, batch=pos // size + 1, score=score, evidence=best
+        )
+        for pos, (item_id, score, best) in enumerate(scored)
+    }
+
+
 TAIL_COLUMNS = ["decision", "reason", "coder", "notes"]
 
 
@@ -79,13 +145,17 @@ def export_sheet(
     path: Path,
     coder: str = "",
     extra_columns: dict[str, dict[str, str]] | None = None,
+    ranking: dict[str, Ranked] | None = None,
 ) -> int:
     """Write the screening sheet; returns the number of rows.
 
-    Items are written in the given order (see step T3 for relevance ordering)
-    and grouped in batches of `criteria.batch_size`.
+    With `ranking` (see rank_items), rows follow the ranking and carry its fixed
+    batch numbers; without it, items keep the given order in batches of
+    `criteria.batch_size`.
     """
     extra_columns = extra_columns or {}
+    if ranking is not None:
+        items = sorted(items, key=lambda it: ranking[it.id].rank)
     extra_names = sorted({k for cols in extra_columns.values() for k in cols})
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
@@ -94,9 +164,13 @@ def export_sheet(
         )
         writer.writeheader()
         for idx, item in enumerate(items):
+            ranked = ranking.get(item.id) if ranking else None
             row = {
                 "item_id": item.id,
-                "batch": idx // max(criteria.batch_size, 1) + 1,
+                "batch": ranked.batch if ranked else idx // max(criteria.batch_size, 1) + 1,
+                "rank": ranked.rank if ranked else idx + 1,
+                "score": ranked.score if ranked else "",
+                "evidence": ranked.evidence if ranked else "",
                 "source": item.source,
                 "kind": item.kind.value,
                 "url": str(item.url),

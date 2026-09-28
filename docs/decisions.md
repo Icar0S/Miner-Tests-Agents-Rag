@@ -223,3 +223,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Cross-posted questions, mirrored READMEs and reposted articles survive URL and content-hash deduplication because a single character differs, inflating counts (RF5, §11).
 - **Decision:** `msrkit dedupe` runs a third pass after URL and exact-content passes: MinHash signatures (128 permutations, word 5-shingles, blake2b with a fixed seed) and LSH (32 bands) propose candidate pairs, kept as duplicates when the estimated Jaccard similarity is ≥ `--near-threshold` (default 0.85; `0` disables). Texts with fewer than 30 tokens are skipped, since short titles collide by chance. The earliest-collected item of a group is kept. Counts per reason (url, content, near) and every removed pair with its similarity go to `dedupe_report.json`, which feeds the PRISMA flow (step T6).
 - **Calibration:** the threshold is a pilot parameter; the report's similarity values allow checking borderline pairs manually.
+
+---
+
+## ADR-027: Relevance-Ordered Screening in Fixed Batches
+
+- **Context:** §11 asks screening to start with the most informative items and proceed in fixed batches, so pilot calibration and double coding compare the same sets.
+- **Decision:** `msrkit screen export` ranks the whole run by an additive, explainable score: 1 point per distinct matched term (max 5), +2 for a system concept (`rag`/`agente`), +2 for the testing concept, +1/+3/+5 for the best evidence level detected by `msrkit extract` (N1/N2/N3), +1 each for `has_tests` and `has_ci`. Ties break by item id. Batches (`screening.batch_size`) are cut on the full ranking before filtering pending items, so an item keeps its batch across coders and re-exports; `--batch` exports selected batches and `--order collected` restores collection order. The sheet shows `rank`, `score` and `evidence`.
+- **Conservative Principle:** ranking orders the work only; no item is excluded by score.
