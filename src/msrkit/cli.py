@@ -244,9 +244,7 @@ def validate(
     bad_raw = [
         name
         for name, src in config.sources.items()
-        if src.queries
-        and name in registry
-        and not registry[name].policy.supports_raw_queries
+        if src.queries and name in registry and not registry[name].policy.supports_raw_queries
     ]
     if bad_raw:
         console.print(
@@ -261,9 +259,7 @@ def validate(
             f"({len(gaz.anchors())} anchors), {len(gaz.methods)} methods"
         )
     try:
-        n_raw = sum(
-            q.raw for name in config.enabled_sources() for q in config.build_queries(name)
-        )
+        n_raw = sum(q.raw for name in config.enabled_sources() for q in config.build_queries(name))
     except ValueError as e:
         console.print(f"[red]✗ {e}[/red]")
         raise typer.Exit(1) from None
@@ -298,15 +294,30 @@ def plan(
     source: str | None = typer.Option(
         None, "--source", "-s", help="Filter plan to a single source"
     ),
+    estimate: bool = typer.Option(
+        False,
+        "--estimate",
+        help="Query result counts and partition for real (uses search quota; §6.4, §7.4)",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Dry run: show partitions and estimated request budget per source."""
+    """Dry run: queries, partitions, predicted truncation and request budget per source.
+
+    Without --estimate no request is made and the budget is an upper bound
+    (max pages × queries). With --estimate every query is estimated and
+    partitioned as `run` would, and the budget follows the estimated totals.
+    """
     protocol = _unwrap(protocol)
     source = _unwrap(source)
+    estimate = _unwrap(estimate)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
+    import math
+
     from msrkit.config import load_protocol
+    from msrkit.governor import Governor
+    from msrkit.partition import split_by_term
 
     try:
         config = load_protocol(protocol)
@@ -332,55 +343,79 @@ def plan(
     else:
         sources_to_plan = config.enabled_sources()
 
-    table = Table(title="Collection Plan (Dry Run)", show_lines=True)
-    table.add_column("Source", style="bold")
-    table.add_column("Status")
-    table.add_column("Queries")
-    table.add_column("Max Results/Query")
-    table.add_column("Max Pages")
-    table.add_column("Est. Requests")
+    title = "Collection Plan " + ("(Estimated)" if estimate else "(Dry Run)")
+    table = Table(title=title, show_lines=True)
+    table.add_column("Source", no_wrap=True)
+    for col in ("Status", "Queries", "Partitions", "Truncated", "Est. items", "Est. requests"):
+        table.add_column(col)
 
     total_est_requests = 0
-
     for source_name in sources_to_plan:
         if source_name not in registry:
-            table.add_row(source_name, "[red]UNKNOWN[/red]", "-", "-", "-", "-")
+            table.add_row(source_name, "[red]UNKNOWN[/red]", "-", "-", "-", "-", "-")
             continue
 
         adapter_cls = registry[source_name]
-        adapter = adapter_cls()
-        avail = adapter.available()
-
-        if avail.status == "UNSUPPORTED":
-            table.add_row(
-                source_name,
-                f"[red]{avail.status}[/red]",
-                "-",
-                "-",
-                "-",
-                "0",
+        policy = adapter_cls.policy
+        governor = (
+            Governor(
+                source_name, adapter_cls.effective_rate_limit(), state_dir=DATA_DIR / "governor"
             )
+            if estimate
+            else None
+        )
+        adapter = adapter_cls(governor=governor)
+        avail = adapter.available()
+        if avail.status == "UNSUPPORTED":
+            table.add_row(source_name, f"[red]{avail.status}[/red]", "-", "-", "-", "-", "0")
             continue
 
         queries = config.build_queries(source_name)
-        policy = adapter_cls.policy
+        if not policy.supports_raw_queries:
+            queries = [q for q in queries if not q.raw]
+        max_pages = policy.max_pages or 10
 
-        max_pages = policy.max_pages or "∞"
-        max_results = policy.max_results_per_query or "∞"
+        if estimate:
+            parts = []
+            for q in queries:
+                try:
+                    parts.extend(adapter.partition(q))
+                except Exception as e:
+                    console.print(f"  [yellow]{source_name}: estimate failed ({e})[/yellow]")
+                    parts.append(q)
+            estimate_requests = adapter.request_count
+            known = [p.estimated_total for p in parts if p.estimated_total is not None]
+            est_items = sum(known) if known else None
+            fetch_requests = 0
+            for p in parts:
+                if p.estimated_total is None:
+                    fetch_requests += max_pages
+                else:
+                    capped = min(p.estimated_total, policy.max_results_per_query or 10**9)
+                    fetch_requests += min(max_pages, math.ceil(capped / policy.max_page_size))
+            est_requests = min(
+                estimate_requests + fetch_requests, config.limits.max_requests_per_source
+            )
+            n_parts = str(len(parts))
+            n_trunc = str(sum(p.truncated for p in parts))
+            items_txt = "?" if est_items is None else str(est_items)
+            adapter.close()
+        else:
+            # Each term is its own API query (adapters search term by term).
+            per_term = sum(len(split_by_term(q)) for q in queries)
+            est_requests = min(max_pages * per_term, config.limits.max_requests_per_source)
+            n_parts = f"≥{per_term}"
+            n_trunc = items_txt = "-"
 
-        # Conservative request estimate
-        est_per_query = (policy.max_pages or 10) * len(queries)
-        est_requests = min(est_per_query, config.limits.max_requests_per_source)
         total_est_requests += est_requests
-
         status_color = {"OK": "green", "DEGRADED": "yellow"}.get(avail.status, "white")
-
         table.add_row(
             source_name,
             f"[{status_color}]{avail.status}[/{status_color}]",
-            str(len(queries)),
-            str(max_results),
-            str(max_pages),
+            f"{len(queries)} ({sum(q.raw for q in queries)} literal)",
+            n_parts,
+            n_trunc,
+            items_txt,
             str(est_requests),
         )
 
@@ -389,7 +424,11 @@ def plan(
     console.print(
         f"[bold]Max requests/source limit:[/bold] {config.limits.max_requests_per_source}"
     )
-    console.print("\n[dim]This is a dry run. No data was collected.[/dim]")
+    if not estimate:
+        console.print(
+            "\n[dim]Dry run: no request made. Use --estimate for partitions and "
+            "truncation (consumes search quota).[/dim]"
+        )
 
 
 @app.command()
@@ -1121,9 +1160,7 @@ def screen_export(
     if _unwrap(pending_only) and coder:
         done = {item_id for (item_id, c) in load_decisions(DATA_DIR, run_id) if c == coder}
         items = [it for it in items if it.id not in done]
-    out = Path(
-        _unwrap(output) or DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv"
-    )
+    out = Path(_unwrap(output) or DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv")
     n = export_sheet(items, criteria, out, coder=coder)
     console.print(f"[green]✓ {n} items written to {out}[/green]")
 
@@ -1218,8 +1255,7 @@ def recall(
         table.add_row(host, str(got), str(total))
     console.print(table)
     console.print(
-        f"[bold]Collection recall:[/bold] {report.retrieved}/{report.total} "
-        f"({report.recall:.1%})"
+        f"[bold]Collection recall:[/bold] {report.retrieved}/{report.total} ({report.recall:.1%})"
     )
     if report.tools_expected:
         console.print(
@@ -1974,7 +2010,7 @@ def menu() -> None:  # pragma: no cover
                 "Desduplicar [1] Apenas a última coleta ou [2] Todas as coletas históricas?",
                 default="1",
             )
-            is_all = (which == "2")
+            is_all = which == "2"
             dedupe(run_id=None, all_runs=is_all, verbose=False)
 
             exp_prompt = Prompt.ask(
@@ -2003,12 +2039,12 @@ def menu() -> None:  # pragma: no cover
                 "Exportar [1] Apenas a última coleta ou [2] Consolidado de todas as coletas?",
                 default="1",
             )
-            is_all = (which == "2")
+            is_all = which == "2"
             kind_choice = Prompt.ask(
                 "Deseja exportar [1] Versão desduplicada (se existir) ou [2] Versão bruta?",
                 default="1",
             )
-            is_raw = (kind_choice == "2")
+            is_raw = kind_choice == "2"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             suffix_type = "brutos" if is_raw else "desduplicados"
             suffix_scope = "consolidado" if is_all else "coleta"

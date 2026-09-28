@@ -973,3 +973,31 @@ class TestLanguageStratum:
         cols = header.split(";")
         assert "matched_languages" in cols
         assert row.split(";")[cols.index("matched_languages")] == "en, pt"
+
+
+class TestPlanEstimate:
+    """`plan --estimate` partitions for real and budgets from the estimates (A4)."""
+
+    def test_estimate_reports_partitions_truncation_and_items(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from datetime import timedelta
+
+        from msrkit.adapters.hackernews import HackerNewsAdapter
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+        def fake_estimate(self: Any, q: Query) -> int:
+            self._request_count += 1
+            days = (q.until - q.since + timedelta(days=1)).days
+            return 1500 if days > 400 else 400  # every term splits once
+
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", fake_estimate)
+        result = runner.invoke(
+            app,
+            ["plan", "protocols/v0_rag_agents_testing.yaml", "-s", "hackernews", "--estimate"],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert "Collection Plan (Estimated)" in result.stdout
+        assert "hackernews" in result.stdout
+        assert "Dry run" not in result.stdout
