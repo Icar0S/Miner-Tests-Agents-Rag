@@ -73,6 +73,8 @@ class TechContext(BaseModel):
     license: str | None = None
     has_ci: bool | None = None
     contributors: int | None = None
+    has_tests: bool | None = None  # test directory or test files in the repository
+    active_months: int | None = None  # distinct months with commits inside the window
     tags: list[str] = []
 
 
@@ -129,6 +131,9 @@ class Item(BaseModel):
     engagement: Engagement = Engagement()
     tech: TechContext = TechContext()
     matched_terms: list[TermHit] = []
+    # Protocol concept groups whose lexicon matched (e.g. ["rag", "teste"]);
+    # for Study E2 the system label is concepts ∩ {rag, agente} (§3.1).
+    concepts: list[str] = []
     provenance: Provenance
 
     @model_validator(mode="after")
@@ -173,6 +178,10 @@ class Query(BaseModel):
     until: date | None = None
     extra: dict[str, Any] = {}
     limit: int | None = None
+    # True when terms[0] is a literal query in the source's own search syntax
+    # (protocol `queries:`), passed through without quoting or extra qualifiers.
+    raw: bool = False
+    label: str = ""  # protocol label of a raw query, kept in provenance
     # Set by adapter.partition(): True when the source's result cap still cuts
     # this partition after all possible splits (potential sampling bias).
     truncated: bool = False
@@ -220,6 +229,8 @@ class SourcePolicy(BaseModel):
     # False when the source only serves recent items (e.g. RSS), so any
     # historical window is necessarily incomplete.
     historical_coverage: bool = True
+    # Accepts literal queries in its own syntax (protocol `queries:`).
+    supports_raw_queries: bool = False
     redistribution: RedistributionPolicy
     tos_url: str
     docs_url: str
@@ -246,6 +257,8 @@ class QueryManifestEntry(BaseModel):
     estimated_total: int | None = None
     # Items fetched but dropped by a local filter; details in runs/<id>/discarded.jsonl
     discarded: int = 0
+    key: str = ""  # stable partition id (msrkit.partition.query_key)
+    completed: bool = False  # finished without error; skipped on --resume
     failed_partitions: list[str] = []
     response_sha256: list[str] = []
 
@@ -257,6 +270,8 @@ class SourceManifestEntry(BaseModel):
     adapter_version: str
     availability: Availability
     queries: list[QueryManifestEntry] = []
+    # Partition plan frozen at the first run, so --resume does not re-estimate.
+    planned: list[dict[str, Any]] = []
 
 
 class Manifest(BaseModel):

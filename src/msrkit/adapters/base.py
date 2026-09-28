@@ -35,6 +35,7 @@ from msrkit.models import (
     Availability,
     Item,
     Query,
+    RateLimit,
     RawItem,
     SourcePolicy,
 )
@@ -112,6 +113,11 @@ class BaseAdapter(ABC):
             self._client.close()
             self._client = None
 
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Rate limit to enforce now; override when it depends on credentials."""
+        return cls.policy.rate_limit
+
     # -------------------------------------------------------------------
     # Abstract methods (must be implemented by subclasses)
     # -------------------------------------------------------------------
@@ -138,8 +144,8 @@ class BaseAdapter(ABC):
         """
 
     @abstractmethod
-    def normalize(self, raw: RawItem) -> Item:
-        """Convert a raw API response to a canonical Item."""
+    def normalize(self, raw: RawItem, terms: list[str] | None = None) -> Item:
+        """Convert a raw API response to a canonical Item (matching `terms` if given)."""
 
     # -------------------------------------------------------------------
     # Default implementations

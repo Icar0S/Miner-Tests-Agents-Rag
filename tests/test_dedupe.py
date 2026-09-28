@@ -196,3 +196,70 @@ def _make_item(
             raw_ref="test:0",
         ),
     )
+
+
+class TestNearDuplicates:
+    """Pass 3: MinHash/LSH near-duplicates (Phase 2, T1)."""
+
+    BASE = (
+        "We evaluate our retrieval augmented generation pipeline with a golden dataset of "
+        "two hundred questions, measure faithfulness and context recall with an LLM judge, "
+        "and fail the CI build when the score drops below the threshold agreed by the team. "
+        "The retriever is tested separately with recall at k over a fixed index snapshot."
+    )
+
+    def _item(self, n: int, body: str, url: str | None = None) -> Item:
+        from datetime import UTC, datetime
+
+        from msrkit.models import ItemKind, Provenance
+
+        return Item(
+            id=f"n{n}",
+            source="devto",
+            kind=ItemKind.ARTICLE,
+            url=url or f"https://dev.to/a/{n}",
+            title="RAG testing",
+            body=body,  # type: ignore[arg-type]
+            provenance=Provenance(
+                run_id="r",
+                query_string="q",
+                partition="p",
+                adapter="devto",
+                adapter_version="1",
+                fetched_at=datetime.now(UTC),
+                response_sha256="",
+                raw_ref="",
+            ),
+        )
+
+    def test_repost_with_small_edits_is_removed_with_reason(self) -> None:
+        from msrkit.dedupe import deduplicate_report
+
+        original = self._item(1, self.BASE)
+        repost = self._item(2, self.BASE.replace("two hundred", "200") + " Originally on Medium.")
+        different = self._item(3, "Completely different text about agents " * 12)
+        report = deduplicate_report([original, repost, different], near_threshold=0.8)
+        assert [i.id for i in report.unique] == ["n1", "n3"]
+        reason = report.reasons["n2"]
+        assert reason.startswith("near:") and reason.endswith(":n1")
+        assert report.counts() == {"url": 0, "content": 0, "near": 1}
+
+    def test_disabled_and_short_texts_are_untouched(self) -> None:
+        from msrkit.dedupe import deduplicate_report, minhash_signature
+
+        a, b = self._item(1, self.BASE), self._item(2, self.BASE + " Updated.")
+        assert len(deduplicate_report([a, b], near_threshold=None).unique) == 2
+        assert minhash_signature("too short to compare") is None
+
+    def test_signatures_are_deterministic(self) -> None:
+        from msrkit.dedupe import minhash_signature
+
+        assert minhash_signature(self.BASE) == minhash_signature(self.BASE)
+
+    def test_exact_reasons_are_reported(self) -> None:
+        from msrkit.dedupe import deduplicate_report
+
+        a = self._item(1, self.BASE)
+        same_url = self._item(2, "other body", url="https://dev.to/a/1/")
+        report = deduplicate_report([a, same_url], near_threshold=None)
+        assert report.reasons == {"n2": "url"}

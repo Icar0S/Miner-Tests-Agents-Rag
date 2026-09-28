@@ -1,0 +1,21 @@
+# ==========================================================================
+# Gold set de validação do minerador — Protocolo E2 v2, §10.3 (instrumento V1)
+# ==========================================================================
+# ~50 artefatos conhecidos, curados MANUALMENTE e ANTES da coleta. Serve para
+# medir o recall do minerador: `msrkit recall protocols/gold_set.yaml`.
+#
+# - url: repositório (github.com/owner/repo — qualquer item dele conta) ou URL
+#   exata de um post, thread, artigo, card.
+# - tools: ferramentas do gazetteer (ids) que o artefato comprovadamente usa;
+#   mede também o recall do extrator.
+# - note: por que o artefato está no gold set.
+#
+# Copie para gold_set.yaml e substitua os exemplos abaixo pelos artefatos reais.
+# ==========================================================================
+version: "1"
+entries:
+  - url: https://github.com/owner/repo-com-teste-de-rag
+    tools: [ragas]
+    note: "Exemplo: repositório com testes de RAG usando Ragas em CI"
+  - url: https://stackoverflow.com/questions/00000000
+    note: "Exemplo: pergunta sobre como testar um retriever"

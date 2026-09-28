@@ -183,6 +183,16 @@ Para automação de coletas, scripts e usuários avançados, todos os comandos p
 | **`msrkit dedupe`** | Remove duplicatas por URL canônica e Hash SHA-256 | `msrkit dedupe` (ou `msrkit dedupe --all` para todo o histórico) |
 | **`msrkit stats`** | Exibe resumo de requisições, descartes e itens coletados | `msrkit stats` (ou `msrkit stats --all`) |
 | **`msrkit export`** | Exporta os dados para CSV, JSONL ou DuckDB | `msrkit export -f csv -o data/meus_dados.csv` (adicione `--raw` para brutos) |
+| **`msrkit enrich`** | Lê árvore de arquivos, workflows de CI, manifestos, contribuidores e meses com commits dos repositórios GitHub da coleta (evidência N3) | `msrkit enrich --limit 100` |
+| **`msrkit extract`** | Detecta ferramentas e métodos do gazetteer com nível de evidência N1/N2/N3 e trecho de evidência | `msrkit extract` |
+| **`msrkit screen`** | Planilha de triagem com os critérios I/E do protocolo: `export`, `import` (valida e registra por codificador) e `status` | `msrkit screen export --coder ana` |
+| **`msrkit coding`** | Formulário de extração (Anexo A) e qualidade (§9) declarados em `coding:`; sugestões automáticas em colunas `auto_*`: `export`, `import`, `status` | `msrkit coding export --coder ana` |
+| **`msrkit agreement`** | κ de Cohen por dimensão e par de codificadores (triagem e formulário); amostra de dupla codificação com `msrkit coding sample` | `msrkit agreement` |
+| **`msrkit prisma`** | Fluxo PRISMA 2020 da execução (identificação por fonte, filtros, duplicatas, triagem com motivos de exclusão, inclusão e codificação) em JSON e Markdown com diagrama Mermaid | `msrkit prisma` |
+| **`msrkit package`** | Pacote de reprodutibilidade para o Zenodo: protocolo e gazetteer, manifesto, corpus redigido conforme §17 (texto integral só onde a licença permite; autores pseudonimizados), triagem, codificação, validação, relatórios, `.zenodo.json` e `SHA256SUMS` | `msrkit package --creator "Sobrenome, Nome"` |
+| **`msrkit analyze`** | Análises A1–A6 sobre unidades (repositório ou item), a partir das detecções ou da codificação manual (consenso): `frequency` (frequência por nível e sistema, coocorrência com Jaccard e lift), `coverage` (modo de falha × ferramenta/método, por sistema), `oracles` (escada de oráculos e teste de H2), `topics` (LDA + k-means para o passe de descoberta aberta; requer `pip install -e ".[analysis]"`), `compare` (RAG × agentes e curva de saturação por lote) | `msrkit analyze frequency --basis coding` |
+| **`msrkit recall`** | Recall do minerador (coleta e extração) sobre um gold set curado antes da coleta | `msrkit recall protocols/gold_set.yaml` |
+| **`msrkit precision`** | Precisão da extração: `sample` (200 detecções estratificadas por fonte × nível) e `score` (precisão ponderada pela população do estrato, IC de Wilson) | `msrkit precision sample` |
 | **`msrkit fetch`** | Baixa o texto das páginas linkadas (HN, RSS), respeitando robots.txt; texto fica só em `data/fulltext/` e nunca é exportado | `msrkit fetch --limit 50` |
 | **`msrkit normalize`** | Reprocessa e reclassifica dados brutos sem refazer chamadas de rede | `msrkit normalize` |
 

@@ -7,13 +7,17 @@ defined in YAML files.
 from __future__ import annotations
 
 import hashlib
+import itertools
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 
+from msrkit.coding import CodingForm
+from msrkit.gazetteer import Gazetteer, load_gazetteer
 from msrkit.models import Query
+from msrkit.screening import ScreeningCriteria
 
 # ---------------------------------------------------------------------------
 # Protocol config models
@@ -39,12 +43,26 @@ class WindowConfig(BaseModel):
         return v
 
 
+class RawQueryConfig(BaseModel):
+    """A literal query in the source's own search syntax (Protocol E2 v2, §7.3)."""
+
+    q: str
+    kind: str | None = None  # e.g. repo | code | issue for GitHub
+    label: str = ""
+    evidence: Literal["N1", "N2", "N3"] | None = None  # evidence level the query targets
+    # Families of gazetteer anchors that `{anchor}` / `{repo}` expand over (None: all).
+    anchor_families: list[str] | None = None
+
+
 class SourceConfig(BaseModel):
     """Configuration for a single source in the protocol."""
 
     enabled: bool = False
     kinds: list[str] = []
     extra: dict[str, Any] = {}
+    # Literal per-source queries, run in addition to (or instead of) the lexicon.
+    queries: list[RawQueryConfig] = []
+    use_terms: bool = True  # False: run only `queries`
 
 
 class LimitsConfig(BaseModel):
@@ -68,6 +86,25 @@ class ProtocolConfig(BaseModel):
     languages: list[str] = ["en"]
     sources: dict[str, SourceConfig]
     limits: LimitsConfig = LimitsConfig()
+    # Concept groups with their own lexicons, e.g. {"rag": [...], "agente": [...],
+    # "teste": [...]}; items are labeled with every concept whose lexicon matches.
+    concepts: dict[str, list[str]] = {}
+    # Optional query terms built as the product of concept lexicons, e.g.
+    # [["rag", "teste"]] adds "<rag term> <teste term>" for every pair.
+    concept_queries: list[list[str]] = []
+    # Path to the gazetteer YAML, relative to the protocol file (§7.2).
+    gazetteer: str | None = None
+    # Eligibility criteria for the screening sheets (§8, §11).
+    screening: ScreeningCriteria = ScreeningCriteria()
+    # Extraction form (Annex A) and gray-literature quality (§9).
+    coding: CodingForm = CodingForm()
+
+    _gazetteer: Gazetteer | None = PrivateAttr(default=None)
+
+    @property
+    def gazetteer_data(self) -> Gazetteer | None:
+        """The loaded gazetteer, if the protocol names one."""
+        return self._gazetteer
 
     @model_validator(mode="after")
     def _check_term_languages(self) -> ProtocolConfig:
@@ -79,11 +116,22 @@ class ProtocolConfig(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _check_concept_queries(self) -> ProtocolConfig:
+        for combo in self.concept_queries:
+            unknown = sorted(set(combo) - set(self.concepts))
+            if unknown:
+                raise ValueError(f"concept_queries uses undefined concepts: {unknown}")
+        return self
+
     def all_terms(self) -> list[str]:
-        """Base terms plus every language lexicon, without duplicates, in order."""
+        """Base terms, language lexicons and concept combinations, deduplicated, in order."""
         seen: dict[str, None] = dict.fromkeys(self.terms)
         for lexicon in self.terms_by_language.values():
             seen.update(dict.fromkeys(lexicon))
+        for combo in self.concept_queries:
+            for parts in itertools.product(*(self.concepts[c] for c in combo)):
+                seen[" ".join(parts)] = None
         return list(seen)
 
     def term_languages(self) -> dict[str, str]:
@@ -93,6 +141,20 @@ class ProtocolConfig(BaseModel):
             for term in lexicon:
                 mapping.setdefault(term, lang)
         return mapping
+
+    def _expand_template(self, raw_q: RawQueryConfig) -> list[tuple[str, str]]:
+        """Expand `{anchor}` / `{repo}` over gazetteer anchors; plain queries pass through."""
+        if "{anchor}" not in raw_q.q and "{repo}" not in raw_q.q:
+            return [(raw_q.q, raw_q.label)]
+        if self._gazetteer is None:
+            raise ValueError(f"query '{raw_q.q}' uses a template but no gazetteer is loaded")
+        out: list[tuple[str, str]] = []
+        for tool in self._gazetteer.anchors(raw_q.anchor_families):
+            repos = tool.repos if "{repo}" in raw_q.q else [""]
+            for repo in repos:
+                text = raw_q.q.replace("{anchor}", tool.token()).replace("{repo}", repo)
+                out.append((text, f"{raw_q.label}:{tool.id}" if raw_q.label else tool.id))
+        return out
 
     def enabled_sources(self) -> list[str]:
         """Return names of all enabled sources."""
@@ -113,18 +175,35 @@ class ProtocolConfig(BaseModel):
         # Se a fonte tem kinds configurados, cria uma query por kind
         kinds = src_cfg.kinds if src_cfg.kinds else [None]
 
-        for kind in kinds:
-            queries.append(
-                Query(
-                    source=source_name,
-                    terms=self.all_terms(),
-                    kind=kind,
-                    since=since,
-                    until=until,
-                    extra=src_cfg.extra,
-                    limit=self.limits.max_items_per_source,
+        if src_cfg.use_terms:
+            for kind in kinds:
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=self.all_terms(),
+                        kind=kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
+                    )
                 )
-            )
+
+        for raw_q in src_cfg.queries:
+            for text, label in self._expand_template(raw_q):
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=[text],
+                        kind=raw_q.kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
+                        raw=True,
+                        label=label,
+                    )
+                )
 
         return queries
 
@@ -157,7 +236,10 @@ def load_protocol(path: str | Path) -> ProtocolConfig:
     if not isinstance(data, dict):
         raise ValueError(f"Protocol file must contain a YAML mapping, got {type(data).__name__}")
 
-    return ProtocolConfig.model_validate(data)
+    config = ProtocolConfig.model_validate(data)
+    if config.gazetteer:
+        config._gazetteer = load_gazetteer(p.parent / config.gazetteer)
+    return config
 
 
 def protocol_sha256(path: str | Path) -> str:

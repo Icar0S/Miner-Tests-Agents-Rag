@@ -11,7 +11,7 @@ import gzip
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -161,6 +161,18 @@ class ItemStorage:
                     items.append(Item.model_validate_json(line))
         return items
 
+    def rewrite_items(self, items: list[Item], run_id: str, deduped: bool = False) -> Path:
+        """Atomically replace a run's item file (items.jsonl or items_deduped.jsonl)."""
+        items_dir = self.data_dir / "items" / run_id
+        items_dir.mkdir(parents=True, exist_ok=True)
+        file_path = items_dir / ("items_deduped.jsonl" if deduped else "items.jsonl")
+        tmp_path = file_path.with_suffix(".jsonl.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            for item in items:
+                f.write(item.model_dump_json() + "\n")
+        tmp_path.replace(file_path)
+        return file_path
+
     def list_runs(self) -> list[str]:
         """List all run IDs that contain saved items."""
         items_dir = self.data_dir / "items"
@@ -193,9 +205,9 @@ class DuckDBStorage:
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
-        self._con: object | None = None
+        self._con: Any = None
 
-    def _connect(self) -> object:
+    def _connect(self) -> Any:
         """Lazy connection to DuckDB."""
         if self._con is None:
             import duckdb
@@ -203,13 +215,13 @@ class DuckDBStorage:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._con = duckdb.connect(str(self.db_path))
             self._ensure_schema()
-        return self._con  # type: ignore[return-value]
+        return self._con
 
     def _ensure_schema(self) -> None:
         """Create tables if they don't exist."""
         con = self._con
         assert con is not None
-        con.execute("""  -- type: ignore[union-attr]
+        con.execute("""
             CREATE TABLE IF NOT EXISTS items (
                 id VARCHAR PRIMARY KEY,
                 source VARCHAR NOT NULL,
@@ -240,7 +252,7 @@ class DuckDBStorage:
             Number of items inserted.
         """
         con = self._connect()
-        count_before = con.execute("SELECT count(*) FROM items").fetchone()[0]  # type: ignore[union-attr]
+        count_before = con.execute("SELECT count(*) FROM items").fetchone()[0]
         for item in items:
             try:
                 data = item.model_dump(mode="json")
@@ -249,7 +261,7 @@ class DuckDBStorage:
                 data_json = json.dumps(data, ensure_ascii=False)
                 body_val = item.body if include_body else None
 
-                con.execute(  # type: ignore[union-attr]
+                con.execute(
                     """INSERT OR IGNORE INTO items
                     (id, source, kind, url, title, body, body_hash,
                      author_handle, created_at, updated_at,
@@ -275,7 +287,7 @@ class DuckDBStorage:
                 )
             except Exception as e:
                 logger.warning("Failed to insert item %s: %s", item.id, e)
-        count_after = con.execute("SELECT count(*) FROM items").fetchone()[0]  # type: ignore[union-attr]
+        count_after = con.execute("SELECT count(*) FROM items").fetchone()[0]
         return int(count_after - count_before)
 
     def stats(self, run_id: str | None = None) -> dict[str, int]:
@@ -293,7 +305,7 @@ class DuckDBStorage:
         if run_id:
             where = "WHERE run_id = ?"
             params = [run_id]
-        result = con.execute(  # type: ignore[union-attr]
+        result = con.execute(
             f"SELECT source, COUNT(*) as cnt FROM items {where} GROUP BY source",
             params,
         ).fetchall()
@@ -302,5 +314,5 @@ class DuckDBStorage:
     def close(self) -> None:
         """Close the DuckDB connection."""
         if self._con is not None:
-            self._con.close()  # type: ignore[union-attr]
+            self._con.close()
             self._con = None

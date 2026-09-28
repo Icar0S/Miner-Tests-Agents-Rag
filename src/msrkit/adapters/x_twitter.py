@@ -24,6 +24,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     SourceUnsupportedError,
 )
@@ -51,7 +52,7 @@ class XTwitterAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=True,
         supports_date_filter=True,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://developer.x.com/en/developer-terms/agreement-and-policy",
         docs_url="https://developer.x.com/en/docs/twitter-api",
         notes=(

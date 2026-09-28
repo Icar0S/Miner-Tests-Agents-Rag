@@ -268,3 +268,75 @@ class TestLanguageLexicons:
         assert "pt" in cfg.languages
         assert cfg.terms_by_language["pt"]
         assert "pt.stackoverflow" in cfg.sources["stackexchange"].extra["sites"]
+
+
+class TestConcepts:
+    """Concept groups label items and can generate combined query terms (A2)."""
+
+    def _config(self, **overrides):
+        from msrkit.config import ProtocolConfig
+
+        data = {
+            "version": 0,
+            "name": "t",
+            "description": "d",
+            "window": {"since": "2023-01-01", "until": "2023-12-31"},
+            "terms": ["base"],
+            "concepts": {"rag": ["RAG", "retriever"], "agente": ["agent"], "teste": ["test"]},
+            "sources": {"hackernews": {"enabled": True}},
+        }
+        data.update(overrides)
+        return ProtocolConfig.model_validate(data)
+
+    def test_concept_queries_add_product_terms(self) -> None:
+        cfg = self._config(concept_queries=[["rag", "teste"]])
+        assert cfg.all_terms() == ["base", "RAG test", "retriever test"]
+
+    def test_undefined_concept_in_queries_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="undefined concepts"):
+            self._config(concept_queries=[["rag", "nope"]])
+
+    def test_items_get_every_matching_concept(self) -> None:
+        from datetime import UTC, datetime
+
+        from msrkit.cli import _tag_concepts
+        from msrkit.models import Item, ItemKind, Provenance
+
+        cfg = self._config()
+        prov = Provenance(
+            run_id="r",
+            query_string="q",
+            partition="p",
+            adapter="a",
+            adapter_version="1",
+            fetched_at=datetime.now(UTC),
+            response_sha256="",
+            raw_ref="",
+        )
+
+        def item(title: str) -> Item:
+            return Item(
+                id=title,
+                source="hackernews",
+                kind=ItemKind.THREAD,
+                url="https://x.example/" + title.replace(" ", "-"),
+                title=title,
+                provenance=prov,
+            )
+
+        hybrid = item("Testing agents that use a retriever")
+        rag_only = item("RAG pipelines in production")
+        none = item("Cooking with cast iron")
+        for it in (hybrid, rag_only, none):
+            _tag_concepts(it, cfg.concepts)
+        assert hybrid.concepts == ["rag", "agente", "teste"]
+        assert rag_only.concepts == ["rag"]
+        assert none.concepts == []
+
+    def test_sample_protocol_defines_e2_concepts(self) -> None:
+        from msrkit.config import load_protocol
+
+        cfg = load_protocol("protocols/v0_rag_agents_testing.yaml")
+        assert set(cfg.concepts) == {"rag", "agente", "teste"}

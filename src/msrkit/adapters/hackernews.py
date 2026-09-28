@@ -29,6 +29,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -59,7 +60,8 @@ class HackerNewsAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=True,
         supports_date_filter=True,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
+        supports_raw_queries=True,
         tos_url="https://hn.algolia.com/api",
         docs_url="https://hn.algolia.com/api",
         notes=(
@@ -82,7 +84,8 @@ class HackerNewsAdapter(BaseAdapter):
             resp = self._governed_get(f"{_BASE_URL}/search", params=params)
             if resp.status_code != 200:
                 return None
-            return resp.json().get("nbHits")
+            hits = resp.json().get("nbHits")
+            return int(hits) if hits is not None else None
 
         total = 0
         for term in q.terms:

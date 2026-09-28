@@ -24,6 +24,10 @@ dependencies = [
 msrkit = "msrkit.cli:app"
 
 [project.optional-dependencies]
+# Open discovery pass (msrkit analyze topics): LDA and k-means.
+analysis = [
+    "scikit-learn>=1.4,<2",
+]
 dev = [
     "pytest>=8,<9",
     "pytest-recording>=0.13,<1",
@@ -31,6 +35,7 @@ dev = [
     "freezegun>=1.4,<2",
     "ruff>=0.5,<1",
     "mypy>=1.10,<2",
+    "types-PyYAML>=6,<7",
     "pytest-cov>=5,<6",
 ]
 
@@ -62,13 +67,17 @@ ignore = ["A003"]
 "tests/*.py" = ["TCH003"]
 
 [tool.mypy]
-python_version = "3.11"
+# No python_version pin: each CI job checks against its own interpreter (3.11, 3.12).
+# Pinning 3.11 broke 3.12, where dependency stubs (numpy 2.5) use 3.12-only syntax.
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
 packages = ["msrkit"]
 
+[[tool.mypy.overrides]]
+module = ["feedparser", "duckdb", "duckdb.*", "sklearn", "sklearn.*"]
+ignore_missing_imports = true
 [tool.coverage.run]
 source = ["msrkit"]
 branch = true

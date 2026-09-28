@@ -31,6 +31,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -58,7 +59,7 @@ class RedditAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=True,
         supports_date_filter=False,  # Busca do Reddit não tem filtro de data nativo robusto
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://www.redditinc.com/policies/developer-terms",
         docs_url="https://www.reddit.com/dev/api/",
         notes=(

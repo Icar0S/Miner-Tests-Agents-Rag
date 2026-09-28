@@ -129,16 +129,17 @@ class FullTextFetcher:
         """Parsed robots.txt, an allow-all parser for 4xx, or None when unreadable."""
         if host in self._robots:
             return self._robots[host]
-        parser: urllib.robotparser.RobotFileParser | None = urllib.robotparser.RobotFileParser()
+        robots = urllib.robotparser.RobotFileParser()
+        parser: urllib.robotparser.RobotFileParser | None = robots
         try:
             self._wait_for_host(host)
             resp = self._client.get(f"{scheme}://{host}/robots.txt")
             if resp.status_code >= 500:
                 parser = None
             elif resp.status_code >= 400:
-                parser.parse([])  # no robots.txt: everything allowed
+                robots.parse([])  # no robots.txt: everything allowed
             else:
-                parser.parse(resp.text.splitlines())
+                robots.parse(resp.text.splitlines())
         except httpx.HTTPError:
             parser = None
         self._robots[host] = parser

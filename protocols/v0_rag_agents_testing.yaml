@@ -55,6 +55,123 @@ terms_by_language:
     - "teste de alucinação"
     - "regressão de prompt"
 
+# ---- Grupos de conceito (§3.1, RQ5) ----
+# Cada item recebe os conceitos cujo léxico casou. Rótulo de sistema do E2:
+# conceitos ∩ {rag, agente}; híbrido recebe os dois. É pré-rotulagem automática;
+# a codificação manual (Anexo A) é a referência.
+concepts:
+  rag:
+    - "RAG"
+    - "retrieval augmented"
+    - "retriever"
+    - "reranker"
+    - "vector store"
+    - "vector database"
+    - "chunking"
+    - "knowledge base"
+    - "geração aumentada por recuperação"
+  agente:
+    - "agent"
+    - "agentic"
+    - "multi-agent"
+    - "tool calling"
+    - "function calling"
+    - "tool use"
+    - "agente"
+  teste:
+    - "test"
+    - "eval"
+    - "evaluation"
+    - "benchmark"
+    - "assertion"
+    - "oracle"
+    - "judge"
+    - "red teaming"
+    - "guardrail"
+    - "teste"
+    - "avaliação"
+
+# ---- Gazetteer (§7.2) ----
+# Ferramentas e métodos conhecidos; caminho relativo a este arquivo.
+gazetteer: gazetteer.yaml
+
+# ---- Critérios de elegibilidade (§8) para as planilhas de triagem ----
+screening:
+  batch_size: 25
+  inclusion:
+    I1: "Trata de teste, avaliação com veredito, verificação ou validação de sistema RAG ou agêntico"
+    I2: "Publicado ou com última atividade dentro da janela temporal"
+    I3: "Conteúdo público, acessível sem autenticação de terceiro"
+    I4: "Inglês ou português"
+    I5: "Artefato de código com elemento de teste identificável"
+  exclusion:
+    E1: "Usa LLM como ferramenta para testar outro software"
+    E2: "Trata apenas do modelo isolado, sem recuperação nem ação"
+    E3: "Conteúdo promocional sem detalhe técnico verificável"
+    E4: "Duplicata ou espelho"
+    E5: "Tutorial genérico sem critério de aprovação, oráculo ou modo de falha"
+    E6: "Repositório-exemplo sem sinais de manutenção (quando o objetivo é N3)"
+
+# ---- Formulário de extração (Anexo A) e qualidade da literatura cinza (§9) ----
+# Campos da planilha de codificação (msrkit coding export/import).
+# Tipos: enum (um valor) · multi (vários, separados por vírgula) · text · bool.
+# vocabulary: tools/methods (gazetteer) ou failure_modes (catálogo abaixo).
+# prefill: coluna auto_* copiada para o campo só com --prefill.
+coding:
+  # §15: dupla codificação independente em ≥20% dos elegíveis; κ por dimensão.
+  double_coding_rate: 0.2
+  agreement: [sistema, nivel_evidencia, modos_falha, tipo_oraculo]
+  failure_modes:
+    FP1: "Conteúdo ausente na base"
+    FP2: "Documento relevante fora do top-k"
+    FP3: "Documento recuperado fora do contexto consolidado"
+    FP4: "Resposta não extraída do contexto"
+    FP5: "Formato incorreto"
+    FP6: "Especificidade incorreta"
+    FP7: "Resposta incompleta"
+    FP8: "Injeção indireta via documento recuperado"
+    FP9: "Envenenamento de corpus"
+    FP10: "Vazamento entre inquilinos"
+    FP11: "Falha de custo, latência ou energia"
+    FP12: "Deriva temporal do índice"
+    FP13: "Falha de fluxo de controle adaptativo"
+    AF1: "Seleção incorreta de ferramenta"
+    AF2: "Argumentos inválidos ou ferramenta inexistente"
+    AF3: "Falha de planejamento ou decomposição"
+    AF4: "Não-terminação ou laço"
+    AF5: "Efeito colateral indesejado ou irreversível"
+    AF6: "Corrupção de estado ou memória entre passos"
+    AF7: "Divergência trajetória × resultado"
+    AF8: "Escalação de privilégio ou violação de escopo"
+    AF9: "Estouro de custo, latência ou orçamento de passos"
+    AF10: "Falha na recuperação de erro"
+    AF11: "Injeção indireta via saída de ferramenta ou documento"
+    AF12: "Falha de coordenação multiagente"
+  fields:
+    # Anexo A
+    - {name: sistema, type: multi, values: [rag, agente], required: true, prefill: auto_sistema}
+    - {name: nivel_evidencia, type: enum, values: [N1, N2, N3], required: true, prefill: auto_nivel}
+    - {name: nivel_lg, type: enum, values: ["1", "2", "3"], help: "controle de saída (§9); vazio para artefatos de código"}
+    - {name: ferramentas, type: multi, vocabulary: tools, prefill: auto_ferramentas}
+    - {name: metodos, type: multi, vocabulary: methods, prefill: auto_metodos}
+    - {name: modos_falha, type: multi, vocabulary: failure_modes}
+    - {name: tipo_oraculo, type: enum, values: [especificado, derivado, referencia, pseudo-automatico, humano]}
+    - {name: agregacao, type: enum, values: [atomico, agregado, nao-identificado]}
+    - {name: evidencia_textual, type: text, required: true, max_length: 300, prefill: auto_evidencia}
+    - {name: criterio_aprovacao_declarado, type: text}
+    - {name: modo_falha_relatado, type: text, help: "aberto, para a codificação indutiva (§5.2)"}
+    - {name: declara_o_que_nao_cobre, type: bool}
+    - {name: confianca, type: enum, values: [alta, media, baixa], required: true}
+    # §9 — fontes discursivas (Garousi, Felderer & Mäntylä, 2019)
+    - {name: q_autoridade, type: bool, help: "autor identificável; vínculo institucional ou repositório"}
+    - {name: q_metodologia, type: bool, help: "declara como chegou às conclusões"}
+    - {name: q_objetividade, type: enum, values: [sem-vinculo, vinculo-declarado, vinculo-detectado]}
+    - {name: q_data, type: bool, help: "dentro da janela; última atualização registrada"}
+    - {name: q_novidade, type: bool, help: "acrescenta ferramenta, método ou modo de falha não catalogado"}
+    - {name: q_impacto, type: enum, values: [alto, medio, baixo], help: "ver auto_engajamento"}
+    # §9 — artefatos de código
+    - {name: q_doc_teste, type: bool, help: "documenta o procedimento de teste; ver auto_manutencao"}
+
 # Idiomas alvo
 languages:
   - en
@@ -75,6 +192,25 @@ sources:
         - Python
         - TypeScript
       min_stars: 3
+    # Consultas literais da §7.3 do Protocolo E2 v2, na sintaxe de busca do GitHub.
+    # Rodam além dos termos. `evidence` indica o nível de evidência que a consulta
+    # busca (N2: uso declarado; N3: invocação em CI).
+    queries:
+      - kind: repo
+        label: repos-rag
+        q: '("RAG" OR "retrieval augmented") (eval OR test OR testing) in:name,description,readme stars:>5'
+      - kind: repo
+        label: repos-agentes
+        q: '("agent" OR "agentic") (eval OR test OR testing) in:name,description,readme stars:>5'
+      - {kind: code, label: ragas-import, evidence: N2, q: '"from ragas import" language:Python'}
+      - {kind: code, label: deepeval-import, evidence: N2, q: '"import deepeval" language:Python'}
+      - {kind: code, label: promptfoo-config, evidence: N2, q: 'filename:promptfooconfig.yaml'}
+      - {kind: code, label: rag-metricas-teste, evidence: N2, q: '"faithfulness" "context_recall" language:Python path:tests'}
+      - {kind: code, label: golden-dataset, evidence: N2, q: '"golden" "dataset" path:evals'}
+      - {kind: code, label: tool-call-assert, evidence: N2, q: '"tool_call" "assert" language:Python path:tests'}
+      # Templates: {anchor} e {repo} expandem sobre as âncoras do gazetteer.
+      - {kind: code, label: ci, evidence: N3, q: '{anchor} path:.github/workflows language:YAML'}
+      - {kind: issue, label: issues-ancora, q: 'repo:{repo} is:issue label:bug'}
 
   stackexchange:
     enabled: true

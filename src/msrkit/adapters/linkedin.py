@@ -27,6 +27,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     SourceUnsupportedError,
 )
@@ -52,7 +53,7 @@ class LinkedInAdapter(BaseAdapter):
         max_pages=0,
         supports_full_text_search=False,
         supports_date_filter=False,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://www.linkedin.com/legal/user-agreement",
         docs_url="https://learn.microsoft.com/en-us/linkedin/",
         notes=(

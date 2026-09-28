@@ -31,6 +31,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -62,7 +63,8 @@ class StackExchangeAdapter(BaseAdapter):
         max_pages=25,  # Sem chave, limitado à página 25
         supports_full_text_search=True,
         supports_date_filter=True,
-        redistribution="full_text_with_attribution",
+        redistribution=RedistributionPolicy.FULL_TEXT_WITH_ATTRIBUTION,
+        supports_raw_queries=True,
         tos_url="https://stackoverflow.com/legal/terms-of-service",
         docs_url="https://api.stackexchange.com/docs",
         notes=(
@@ -115,7 +117,8 @@ class StackExchangeAdapter(BaseAdapter):
 
         data = resp.json()
         self._handle_backoff(data)
-        return data.get("total")
+        total = data.get("total")
+        return int(total) if total is not None else None
 
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search across configured Stack Exchange sites."""
@@ -191,6 +194,14 @@ class StackExchangeAdapter(BaseAdapter):
                     if not data.get("has_more", False):
                         break
                     page += 1
+
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Daily quota is 300 requests without a key and 10,000 with one."""
+        base = cls.policy.rate_limit
+        if cls._env("STACKEXCHANGE_KEY"):
+            return base.model_copy(update={"daily_cap": 10_000})
+        return base
 
     def _fetch_answers(self, site: str, question_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Fetch answers (with body) for up to 100 questions per request.
@@ -271,7 +282,7 @@ class StackExchangeAdapter(BaseAdapter):
             id=Item.make_id(self.name, native_key),
             source=self.name,
             kind=ItemKind.THREAD,
-            url=url,  # type: ignore[arg-type]
+            url=url,
             title=p.get("title"),
             body=body,
             author_handle=(p.get("owner") or {}).get("display_name"),

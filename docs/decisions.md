@@ -119,7 +119,7 @@ This document records architectural, design, and technical decisions made during
 ## ADR-013: Windows Console UTF-8 Stream Reconfiguration
 
 - **Context:** On Windows PowerShell and Command Prompt environments using legacy codepages (e.g. `cp1252`), Rich terminal formatting using Unicode symbols (such as checkmarks `✓` and crosses `✗`) triggers `UnicodeEncodeError`.
-- **Decision:** In `cli.py`, `sys.stdout` and `sys.stderr` are reconfigured to UTF-8 with `errors="replace"` if running on `win32`.
+- **Decision:** In `msrkit/cli/__init__.py`, `sys.stdout` and `sys.stderr` are reconfigured to UTF-8 with `errors="replace"` if running on `win32`.
 - **Conservative Principle:** Ensures rock-solid CLI execution on any developer workstation without requiring external shell adjustments.
 
 ---
@@ -169,3 +169,205 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Hacker News and RSS items carry only a link and, at most, a summary, but extraction (Protocol E2 v2, §12) codes oracle types and failure modes from the article text. The linked pages are ordinary public web pages, not APIs.
 - **Decision:** A separate, opt-in command `msrkit fetch` downloads the linked page for items of a run (by default only items with matched terms, from `hackernews` and `rss`). It honors robots.txt for the msrkit user agent, treats an unreadable robots.txt (5xx or network error) as disallowed, keeps a minimum per-host interval (5 s by default), processes only HTML up to 2 MB, and extracts visible text with the standard library. Results, including refusals, go to `data/fulltext/<run_id>.jsonl`; the command resumes without refetching. **Full text is never exported**: `export` does not read this directory.
 - **Conservative Principle:** Collection through official APIs is unchanged; reading linked pages is explicit, rate-limited, robots-aware, local-only and auditable (every refusal is recorded with its reason).
+
+---
+
+## ADR-020: Literal Per-Source Queries (`queries:`)
+
+- **Context:** Protocol E2 v2 §7.3 specifies source-specific searches that a global term list cannot express: GitHub code search for imports and config files (N2), workflow files (N3), issues of anchor tools.
+- **Decision:** Each source in `protocol.yaml` may declare `queries:` — literal strings in the source's own search syntax, with optional `kind`, `label` and target `evidence` level — run in addition to the terms (or alone, with `use_terms: false`). Adapters declare `supports_raw_queries`; `validate` rejects `queries:` on sources without a search syntax (dev.to, RSS). GitHub keeps the literal string untouched except for the `created:` window used by partitioning (not added to code search or when the query sets its own `created:`).
+- **Conservative Principle:** The exact string sent to the API is the one written in the protocol, so it is recorded verbatim in the manifest and reproducible.
+
+---
+
+## ADR-021: Versioned Gazetteer
+
+- **Context:** Protocol E2 v2 anchors search and extraction in a gazetteer of known tools and methods (§7.2), with aliases and disambiguation rules (§12.2), kept outside the protocol document because it changes faster.
+- **Decision:** `protocols/gazetteer.yaml`, named by `gazetteer:` in the protocol and versioned with it. Tools carry canonical id, aliases, family (Annex A), target system (`rag`/`agente`), and the structural signals used for N2/N3 (Python imports, dependency names, config files, CLI commands) plus their own repositories. Methods carry aliases and their usual rung on the oracle ladder. Ids and aliases must be unique across entries. Tools marked `ambiguous` only count with lexicon context or a structural signal; frameworks of the system under test are listed with `anchor: false`. Query templates `{anchor}` and `{repo}` expand over anchor tools (optionally by family).
+- **Note:** repositories and package names in the seed must be checked during the pilot; the open discovery pass (§7.6) exists because any gazetteer biases what is found.
+
+---
+
+## ADR-022: Concept Groups and System Label
+
+- **Context:** RQ5 compares RAG and agentic systems, and §3.1 lets a hybrid item carry both labels. Items carried no system label.
+- **Decision:** The protocol declares `concepts:` — named lexicons (here `rag`, `agente`, `teste`). After normalization every item gets `concepts`, the list of groups whose lexicon matches (flexible matching, ADR-016), exported as a CSV column. The E2 system label is `concepts ∩ {rag, agente}`. Optional `concept_queries` adds query terms built as the product of concept lexicons (e.g. system × testing). The mechanism is domain-agnostic: another study defines other groups.
+- **Conservative Principle:** The label is an automatic pre-classification by lexicon, reproducible and auditable; manual coding (Annex A) remains the reference.
+
+---
+
+## ADR-023: Evidence-Level Extraction Rules
+
+- **Context:** §3.4 separates mention (N1), declared use (N2) and sustained adoption (N3), and every reported count must state its level.
+- **Decision:** `msrkit extract` applies the gazetteer. N1: tool or method name in title, body or tags (tool names in exact mode, methods in flexible mode). N2: a code search hit whose literal query is an import of the tool, a tool config file, or a tool package in a root dependency manifest. N3: the tool invoked in a CI workflow **and** the repository has commits in ≥2 distinct months of the window **and** ≥2 contributors; a CI invocation without both thresholds counts as N2. Methods are N1 only. Summaries count each unit (a repository, or an item outside GitHub) once per entry at its highest level, so N1/N2/N3 counts are disjoint. Every detection keeps its signal, location and an evidence excerpt of at most 300 characters.
+- **Limit:** a code search hit is trusted to contain its query string; precision is measured on a stratified sample (§12.3, step V2).
+
+---
+
+## ADR-024: Screening Sheets with Per-Coder Decisions
+
+- **Context:** Screening (§8, §11) is manual and must be auditable per item, with independent double coding (§15).
+- **Decision:** Eligibility criteria live in the protocol (`screening.inclusion`/`exclusion`, `batch_size`), so the workflow is study-agnostic. `msrkit screen export` writes a CSV sheet (`;`, UTF-8 BOM) in batches with one column per criterion, `decision`, `reason`, `coder`, `notes`, skipping items the coder already decided. `msrkit screen import` validates the whole sheet before recording anything (unknown item, invalid decision, missing coder, *include* with an exclusion criterion marked, *exclude* without criterion or reason) and appends one record per (item, coder) with the sheet's SHA-256 to `data/screening/<run>/decisions.jsonl`. The latest decision per coder wins; the final decision per item is the agreed one, or `uncertain` when coders disagree (to be resolved by a third coder).
+
+---
+
+## ADR-025: Per-Partition Checkpoint and Exact Resume
+
+- **Context:** The manifest was written only when a run finished, so an interrupted run could not be resumed at all, and resume skipped whole sources. RNF3 requires resuming without loss or duplication.
+- **Decision:** Each partition has a stable key (`query_key`: source, kind, literal flag, label, terms, window, extra — not position or limit), used as the raw-storage partition name and item `provenance.partition`. The partition plan is frozen in the manifest (`SourceManifestEntry.planned`) before collecting, and the manifest is saved after every partition with `key` and `completed`. `--resume` reuses the frozen plan (no re-estimation), skips completed partitions, and first deletes the raw file, items and manifest entries of incomplete ones, which are then collected from scratch.
+
+---
+
+## ADR-026: Near-Duplicate Pass (MinHash/LSH)
+
+- **Context:** Cross-posted questions, mirrored READMEs and reposted articles survive URL and content-hash deduplication because a single character differs, inflating counts (RF5, §11).
+- **Decision:** `msrkit dedupe` runs a third pass after URL and exact-content passes: MinHash signatures (128 permutations, word 5-shingles, blake2b with a fixed seed) and LSH (32 bands) propose candidate pairs, kept as duplicates when the estimated Jaccard similarity is ≥ `--near-threshold` (default 0.85; `0` disables). Texts with fewer than 30 tokens are skipped, since short titles collide by chance. The earliest-collected item of a group is kept. Counts per reason (url, content, near) and every removed pair with its similarity go to `dedupe_report.json`, which feeds the PRISMA flow (step T6).
+- **Calibration:** the threshold is a pilot parameter; the report's similarity values allow checking borderline pairs manually.
+
+---
+
+## ADR-027: Relevance-Ordered Screening in Fixed Batches
+
+- **Context:** §11 asks screening to start with the most informative items and proceed in fixed batches, so pilot calibration and double coding compare the same sets.
+- **Decision:** `msrkit screen export` ranks the whole run by an additive, explainable score: 1 point per distinct matched term (max 5), +2 for a system concept (`rag`/`agente`), +2 for the testing concept, +1/+3/+5 for the best evidence level detected by `msrkit extract` (N1/N2/N3), +1 each for `has_tests` and `has_ci`. Ties break by item id. Batches (`screening.batch_size`) are cut on the full ranking before filtering pending items, so an item keeps its batch across coders and re-exports; `--batch` exports selected batches and `--order collected` restores collection order. The sheet shows `rank`, `score` and `evidence`.
+- **Conservative Principle:** ranking orders the work only; no item is excluded by score.
+
+---
+
+## ADR-028: Declarative Extraction Form with Separate Suggestions
+
+- **Context:** Annex A defines the per-item extraction form and §9 the gray-literature quality checklist. Both are coded manually, double-coded on a sample (§15), and must use the same identifiers as extraction and analysis.
+- **Decision:** The protocol declares the form in `coding.fields` (types `enum`, `multi`, `text`, `bool`; `required`; `max_length`) and the failure-mode catalog in `coding.failure_modes` (FP1–FP13, AF1–AF12). A field's allowed values may come from the gazetteer (`vocabulary: tools|methods`) or the catalog (`failure_modes`). `msrkit coding export` writes the included items (by final screening decision) with read-only `auto_*` columns — system label, best evidence level, detected tools and methods, evidence excerpt, engagement and maintenance signals. `msrkit coding import` validates the whole sheet (unknown value, length, required field, yes/no) before appending one record per (item, coder) to `data/coding/<run>/codings.jsonl`. Values are matched case- and accent-insensitively and stored in their canonical form.
+- **Conservative Principle:** suggestions are copied into the form only with `--prefill`. The default keeps coders independent, so agreement (step T5) measures the coders, not the extractor. Emergent failure modes go in the open field `modo_falha_relatado` (§5.2), not in the closed catalog.
+
+---
+
+## ADR-029: Cohen's κ per Dimension over a Stratified Double-Coding Sample
+
+- **Context:** §15 requires independent double coding of ≥20% of eligible items and Cohen's κ per dimension (system, evidence level, failure mode, oracle type), with disagreements resolved by a third coder.
+- **Decision:** `msrkit coding sample` draws ⌈rate·n⌉ included items per source (at least one), with a recorded seed, into `double_sample.json`; `coding export --double-sample` restricts the sheet to it. `msrkit agreement` computes κ for every coder pair over the items both coded: the screening decision plus the fields listed in `coding.agreement` (or every categorical field with `--all-fields`). A blank `enum`/`bool` is its own category. For `multi` fields, each (item, value) is a binary decision over the values either coder used; κ is pooled over them and also reported per value. Text fields have no κ. Results go to `agreement.json`, with Landis & Koch bands, and `disagreements.csv` lists one row per item and dimension for the third coder.
+- **Limit:** κ is undefined (reported as "—") when both coders used a single identical category; the percent agreement is still reported.
+
+---
+
+## ADR-030: PRISMA Flow Derived Only from Run Records
+
+- **Context:** RF8 requires a PRISMA flow. Hand-counted flows drift from the data and cannot be audited.
+- **Decision:** `msrkit prisma` derives every number from files the run already produces:
+  - identification per source: items plus manifest `discarded`;
+  - an estimate of records not retrieved: `estimated_total` minus what was obtained, over queries truncated by a source cap;
+  - local-filter removals by reason, from `discarded.jsonl`; the manifest total is authoritative, and any gap is reported as "unspecified";
+  - duplicates by pass, from `dedupe_report.json`;
+  - screening outcomes, from the final decisions over the screening pool, with exclusion reasons being the E-criteria marked by the excluding coders;
+  - included items per source and coded items.
+
+  The output is `data/reports/<run>/prisma.json` and `prisma.md`, which has a Mermaid diagram.
+- **Conservative Principle:** a stage without input (dedupe not run) is shown as "n/a", never as zero. Records not retrieved are labelled as an estimate.
+
+---
+
+## ADR-031: Precision on a Stratified Detection Sample
+
+- **Context:** §12.3 requires the extractor's precision to be measured. Detections are dominated by N1 text mentions, so a simple random sample would barely see N2/N3 or the smaller sources.
+- **Decision:** `msrkit precision sample` stratifies detections by source × evidence level. It allocates the sample (default 200) proportionally, with at least one per stratum and largest remainders for the rest, and draws it with a recorded seed. The sheet shows each detection's stable key, stratum, evidence and item, plus a `correct` column. `msrkit precision score` reads the judged sheet. It reports precision per stratum and overall, and within each level. Both estimates weight strata by their population size (Σ Wₕ·pₕ), so over-sampled small strata do not bias them. A Wilson 95% interval on the sample is also reported.
+- **Limit:** the Wilson interval ignores the stratified design (it is conservative when strata are homogeneous). Judges should record doubtful cases in `note`.
+
+---
+
+## ADR-032: Offline Contract Tests on Recorded Cassettes
+
+- **Context:** §10.2 asks for contract tests that catch API changes. Unit tests use hand-written mocks, which drift from the real APIs silently.
+- **Decision:** `tests/test_cassettes.py` replays vcrpy cassettes from `tests/cassettes/` with record mode `none`. Any request not in the cassette fails, so changes in how an adapter calls its API are caught. For each search adapter (GitHub, Stack Exchange, Hacker News, dev.to, Hugging Face), every recorded result must keep the payload keys its normalizer uses, normalize into a valid Item, and yield the same id twice. A separate case covers `msrkit enrich` on this project's own repository. Recording happens only with `MSRKIT_RECORD=1` (mode `once`). Auth headers, key/token parameters and cookies are filtered, and `test_no_secrets_in_cassettes` scans every cassette for tokens. Missing cassettes are skipped with the recording command.
+- **Status:** the enrichment cassette is recorded. The search cassettes must be recorded on a machine with open network access, because the development environment only reaches this repository.
+
+---
+
+## ADR-033: CLI Split into a Package by Study Stage
+
+- **Context:** `cli.py` had grown past 2,600 lines with 15 commands and 3 command groups, which made review and navigation slow.
+- **Decision:** `msrkit.cli` is a package: `collect`, `evidence`, `review`, `validation`, `corpus` and `menu` hold the commands, and `_common` holds the shared helpers. `app`, `DATA_DIR` and `DEFAULT_PROTOCOL` stay in `msrkit.cli`, and command modules read them at call time (`_cli.DATA_DIR`), so the entry point (`msrkit.cli:app`) and every override (tests monkeypatch `msrkit.cli.DATA_DIR`) keep working. Registration order, and so the `--help` order, is fixed explicitly. Behavior is unchanged: the split was done mechanically from the syntax tree, and the full test suite passes unchanged.
+
+---
+
+## ADR-034: Strict Typing and Formatting Enforced in CI
+
+- **Context:** mypy was configured as strict but never ran in CI. The code had accumulated errors: untyped registries, `str` literals where enums were expected, stale `type: ignore` comments, and a CLI import cycle that hid the type of `app`. Formatting was not checked.
+- **Decision:** CI runs `ruff format --check src/ tests/` and `mypy src/` (strict) before the tests. Fixes made:
+  - adapter policies use `RedistributionPolicy`;
+  - the registry is typed `type[BaseAdapter]`;
+  - `BaseAdapter.normalize` declares `terms`;
+  - the DuckDB connection is `Any`, since the library is untyped;
+  - `app` and `DEFAULT_PROTOCOL` moved to `msrkit.cli._common` to break the import cycle;
+  - stale ignores were removed;
+  - `types-PyYAML` added to dev dependencies, and `feedparser`/`duckdb` declared as untyped imports.
+
+  Tests are linted and formatted but not type-checked.
+
+---
+
+## ADR-035: Analyses over Units, with an Explicit Basis
+
+- **Context:** A1–A6 (§14) count tools, methods and failure modes. The same repository appears in many items (repo, code hits, issues), and the data comes either from automatic extraction or from manual coding.
+- **Decision:** Analyses count *units*: a GitHub repository with all its items merged, or a single item elsewhere. Every analysis takes `--basis detections|coding`, and the basis is part of each output file name. On the coding basis, several coders are combined by consensus. An `enum` value counts only when all coders agree, and a `multi` field keeps the intersection. Disputed values stay out until a third coder resolves them, so the reported numbers are conservative. A1/A2 (`msrkit analyze frequency`) reports units per tool and method. For tools the counts are broken down by best evidence level (disjoint N1/N2/N3); for tools and methods they are also given per system label, where a hybrid unit counts in both, and per source. Co-occurrence within units is reported with Jaccard and lift.
+
+---
+
+## ADR-036: Failure-Mode Coverage Reports Absence
+
+- **Context:** A3 asks which failure modes (FP1–FP13, AF1–AF12) the tools and methods address, for RAG and for agents. §5.2 treats the agent model as a seed, where a mode with no occurrences is a finding.
+- **Decision:** `msrkit analyze coverage` runs on the coding basis only, because failure modes are coded manually. It writes:
+  - a long table (mode × entry × system, in units);
+  - one wide matrix per system (`rag`, `agente`, all), with columns ordered by total;
+  - a per-mode summary in catalog order: units, rag/agente units, distinct tools and methods, and the most frequent entries.
+
+  Catalog modes nobody addresses are listed as not covered. Coded modes outside the catalog are appended as "(not in catalog)", so emergent categories stay visible. Units without a system label are kept as "unlabelled".
+
+---
+
+## ADR-037: Oracle Ladder Distribution and an Explicit Test of H2
+
+- **Context:** A4 places methods on the oracle ladder (§5.3) and tests H2: the large majority of oracles are atomic, even for stochastic systems.
+- **Decision:** `msrkit analyze oracles` counts units per rung for all units, RAG and agents, with each rung's share among the units that have one. On the coding basis the rung is the coded `tipo_oraculo`. On the detections basis each detected method contributes its typical rung from the gazetteer, which is an approximation. H2 needs coded `agregacao`. Among units coded `atomico` or `agregado`, it reports:
+  - the share of atomic oracles, with a Wilson 95% CI;
+  - a one-sided exact binomial p-value for "share > threshold" (default 0.5, `--threshold` to demand a stronger majority).
+
+  H2 is "supported" when p < 0.05. Units coded `nao-identificado`, or not coded, are counted and reported, never dropped silently.
+
+---
+
+## ADR-038: Discovery Pass with LDA and k-means as an Optional Extra
+
+- **Context:** A gazetteer-anchored miner mostly finds what it already knows. §7.6 requires an open discovery pass, and the report must state which fraction of the catalog came from it.
+- **Decision:** `msrkit analyze topics` runs over the text of the included items (`--status all` for every item). Fenced code is removed and bodies are truncated to 5,000 characters. It fits two models:
+  - LDA on term counts;
+  - k-means on TF-IDF.
+
+  Both use unigrams and bigrams, English plus Portuguese stop words, `min_df` and a recorded seed. Top terms of topics and clusters that share no token with any gazetteer name, alias, id or package, or with the protocol lexicon, are flagged as candidates. Candidates are then inspected manually. Accepted ones enter the gazetteer with `origin: discovery`, and the command reports the catalog fraction by origin. Outputs: `topics.csv`, `clusters.csv` (with the items closest to each centroid), `topic_assignments.csv` and `discovery.json`. scikit-learn is an optional extra (`analysis`), installed in CI. The core miner does not depend on it.
+
+---
+
+## ADR-039: RAG × Agents Comparison and Saturation per Screening Batch
+
+- **Context:** RQ5 asks what transfers from RAG to agents and what is new; A6 answers it. §11 asks to stop coding when new batches stop adding codes (saturation).
+- **Decision:** `msrkit analyze compare` classifies every tool, method, failure mode and oracle rung by the systems of the units where it appears:
+  - `transfers`: found in both RAG and agent units;
+  - `rag-only`;
+  - `agent-only`: new for agents.
+
+  Hybrid units are counted in both systems and reported separately. Per kind it reports the Jaccard similarity of the RAG and agent catalogs and the *agent transfer rate*: the share of agent entries also seen in RAG units. Saturation uses the fixed screening batches (ADR-027), recomputed deterministically. A unit belongs to the earliest batch of its items, and each batch records the codes (tools, methods, failure modes) it adds. The run is saturated when the last `--window` batches each add at most `--tolerance` new codes. The curve goes to `saturation_<basis>.csv`.
+
+---
+
+## ADR-040: Zenodo Package with Redaction by Source Policy
+
+- **Context:** §18.2 plans the protocol (D1), corpus (D3), gold set (D4) and catalog (D5) for Zenodo. §17 limits redistribution: full text only where the license allows it, no personal data beyond the public author handle (and that only when needed), and the code in each repository stays under that repository's license.
+- **Decision:** `msrkit package` writes one zip containing:
+  - `protocol/`, with the gazetteer;
+  - `run/`: the manifest and discards;
+  - `corpus/`: redacted items and the dedupe report;
+  - `evidence/`: repository signals with file *paths* only, plus detections;
+  - `review/`: decisions, codings, the double-coding sample and agreement results;
+  - `validation/`: the gold set and precision/recall records;
+  - `reports/`.
+
+  It also adds a generated README, `.zenodo.json` (dataset, CC BY 4.0 for the package's own data, creators from `--creator`), `package_manifest.json` (version, git commit, Python, protocol SHA-256, per-file hashes) and `SHA256SUMS`. Redaction follows each adapter's `redistribution` policy. `metadata_only` items lose `body` and the match contexts but keep `body_hash`. Author handles are replaced by salted pseudonyms, whose salt is not published, unless `--keep-authors` is given. Raw API responses are never packaged. Zip entries carry a fixed timestamp.

@@ -31,6 +31,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -60,7 +61,7 @@ class DevToAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=False,
         supports_date_filter=False,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://dev.to/terms",
         docs_url="https://developers.forem.com/api/v1",
         notes=(
@@ -204,7 +205,7 @@ class DevToAdapter(BaseAdapter):
             id=Item.make_id(self.name, str(p.get("id", ""))),
             source=self.name,
             kind=ItemKind.ARTICLE,
-            url=p.get("url", ""),  # type: ignore[arg-type]
+            url=p.get("url", ""),
             title=p.get("title"),
             body=body,
             author_handle=(p.get("user") or {}).get("username"),

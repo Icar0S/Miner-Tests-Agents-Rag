@@ -32,6 +32,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -61,7 +62,8 @@ class HuggingFaceAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=True,
         supports_date_filter=False,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
+        supports_raw_queries=True,
         tos_url="https://huggingface.co/terms-of-service",
         docs_url="https://huggingface.co/docs/hub/api",
         notes="Search across models, datasets, and spaces. Auth optional but increases limits.",

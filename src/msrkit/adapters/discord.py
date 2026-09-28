@@ -26,6 +26,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     SourceUnsupportedError,
 )
@@ -56,7 +57,7 @@ class DiscordAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=False,
         supports_date_filter=False,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://discord.com/developers/docs/policies-and-agreements/terms-of-service",
         docs_url="https://discord.com/developers/docs/intro",
         notes=(

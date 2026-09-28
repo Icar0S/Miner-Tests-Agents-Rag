@@ -29,6 +29,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -57,7 +58,7 @@ class RSSAdapter(BaseAdapter):
         supports_full_text_search=False,
         supports_date_filter=False,
         historical_coverage=False,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="",
         docs_url="",
         notes=(
