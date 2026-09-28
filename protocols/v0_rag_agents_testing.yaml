@@ -85,7 +85,9 @@ sources:
         - testing
 
   reddit:
-    enabled: true
+    # Desabilitado no Estudo E2: credenciais novas exigem aprovação manual
+    # prévia do Reddit desde nov/2025 (ADR-014, docs/sources.md).
+    enabled: false
     extra:
       subreddits:
         - LocalLLaMA

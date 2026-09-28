@@ -13,6 +13,8 @@ Ele foi construído especialmente para apoiar pesquisas acadêmicas (MSR/SLR) qu
 
 > 📖 **Documentação Aprofundada:** Para arquitetura interna detalhada, diagramas de fluxo de dados, especificações de modelos e guias de extensão, consulte o [**Manual Técnico Completo (docs/manual.md)**](docs/manual.md).
 
+> 🗺️ **Andamento:** o plano de implementação das condições exigidas pelo Protocolo E2 v2 e o status de cada etapa estão em [docs/PLANO.md](docs/PLANO.md).
+
 ---
 
 ## 📑 Sumário
@@ -261,9 +263,9 @@ E preencha as variáveis correspondentes no arquivo `.env`:
 | **GitHub** | `GITHUB_TOKEN` | Token pessoal gratuito no [github.com/settings/tokens](https://github.com/settings/tokens) | Eleva limite de 60 para **5.000 req/hora** |
 | **Stack Exchange** | `STACKEXCHANGE_KEY` | Chave de app gratuita no Stack Apps | Eleva cota de 300 para **10.000 req/dia** |
 | **Hugging Face** | `HF_TOKEN` | Token gratuito no perfil do Hugging Face | Maior taxa de requisições em models/papers |
-| **Reddit** | `REDDIT_CLIENT_ID`<br>`REDDIT_CLIENT_SECRET`<br>`REDDIT_USER_AGENT` | App OAuth no Reddit Developer Portal | Permite minerar subreddits específicos |
+| **Reddit** | `REDDIT_CLIENT_ID`<br>`REDDIT_CLIENT_SECRET`<br>`REDDIT_USER_AGENT` | Credencial OAuth **com aprovação manual prévia** do Reddit (Responsible Builder Policy, desde nov/2025) | Desabilitado no protocolo do Estudo E2 (ADR-014) |
 | **Bluesky** | `BLUESKY_HANDLE`<br>`BLUESKY_APP_PASSWORD` | Senha de aplicativo na conta Bluesky | Mineração na rede social AT Protocol |
-| **X / Twitter** | `X_BEARER_TOKEN` | Portal de Desenvolvedores do X | Requer plano pago oficial da API |
+| **X / Twitter** | `X_BEARER_TOKEN` | Portal de Desenvolvedores do X | Leitura só paga (pague-por-uso); adaptador é stub e não coleta |
 | **Discord** | `DISCORD_BOT_TOKEN`<br>`DISCORD_GUILD_IDS` | Bot no Discord Developer Portal | Requer autorização prévia de admins de servidores |
 
 ---
@@ -290,7 +292,7 @@ data/
 
 1. **Apenas APIs Oficiais:** Não realizamos scraping nem violação de termos de uso de nenhuma plataforma.
 2. **Respeito aos Limites de Taxa (Rate Limits):** O MSR-Kit implementa um algoritmo *Token Bucket Governor* que controla o fluxo de requisições de forma determinística, evitando sobrecarga nos servidores das fontes.
-3. **Plataformas Fechadas:** O LinkedIn é permanentemente não suportado devido à ausência de API pública de pesquisa para literatura cinza.
+3. **Plataformas Fechadas ou Pagas:** LinkedIn, Discord, X/Twitter, Google Custom Search e Bing não são mineráveis nas condições atuais. A tabela de viabilidade de todas as fontes (verificada em set/2026) está em [docs/sources.md](docs/sources.md).
 4. **Anonimização e Ética:** Não coletamos dados pessoais sensíveis, preservando apenas handles públicos de autores e links de conteúdo aberto.
 
 ---

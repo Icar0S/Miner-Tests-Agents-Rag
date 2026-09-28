@@ -121,3 +121,19 @@ This document records architectural, design, and technical decisions made during
 - **Context:** On Windows PowerShell and Command Prompt environments using legacy codepages (e.g. `cp1252`), Rich terminal formatting using Unicode symbols (such as checkmarks `✓` and crosses `✗`) triggers `UnicodeEncodeError`.
 - **Decision:** In `cli.py`, `sys.stdout` and `sys.stderr` are reconfigured to UTF-8 with `errors="replace"` if running on `win32`.
 - **Conservative Principle:** Ensures rock-solid CLI execution on any developer workstation without requiring external shell adjustments.
+
+---
+
+## ADR-014: Reddit Excluded from Study E2 (Responsible Builder Policy)
+
+- **Context:** Since November 2025, Reddit closed self-service creation of OAuth apps. Under the Responsible Builder Policy every new credential requires manual prior approval, with no deadline or guarantee; researchers are routed to the Reddit for Researchers program. Pushshift remains restricted to moderators.
+- **Decision:** Reddit is disabled in `protocols/v0_rag_agents_testing.yaml` and excluded from Study E2 (Protocol v2, §6.1). The adapter is kept unchanged so it can be reactivated if an approved credential is obtained before collection, and for reuse in other studies. Third-party dumps (Academic Torrents) are not used because their terms status is uncertain.
+- **Conservative Principle:** Never depend on an access path that the platform does not grant through its official process.
+
+---
+
+## ADR-015: Source Feasibility Tracked Against Protocol E2 v2
+
+- **Context:** Access conditions change faster than the code (X moved to pay-per-use, Google Custom Search closes on 2027-01-01, Bing Web Search was retired on 2025-08-11).
+- **Decision:** `docs/sources.md` holds the feasibility table (viable / conditional / infeasible) with the verification date and official links. It must be re-verified before each collection run. Execution conditions required by the protocol are tracked in `docs/PLANO.md`.
+- **Conservative Principle:** A source's status is a dated claim backed by official documentation, not an assumption baked into code.
