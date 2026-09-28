@@ -271,3 +271,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** §12.3 requires the extractor's precision to be measured. Detections are dominated by N1 text mentions, so a simple random sample would barely see N2/N3 or the smaller sources.
 - **Decision:** `msrkit precision sample` stratifies detections by source × evidence level. It allocates the sample (default 200) proportionally, with at least one per stratum and largest remainders for the rest, and draws it with a recorded seed. The sheet shows each detection's stable key, stratum, evidence and item, plus a `correct` column. `msrkit precision score` reads the judged sheet. It reports precision per stratum and overall, and within each level. Both estimates weight strata by their population size (Σ Wₕ·pₕ), so over-sampled small strata do not bias them. A Wilson 95% interval on the sample is also reported.
 - **Limit:** the Wilson interval ignores the stratified design (it is conservative when strata are homogeneous). Judges should record doubtful cases in `note`.
+
+---
+
+## ADR-032: Offline Contract Tests on Recorded Cassettes
+
+- **Context:** §10.2 asks for contract tests that catch API changes. Unit tests use hand-written mocks, which drift from the real APIs silently.
+- **Decision:** `tests/test_cassettes.py` replays vcrpy cassettes from `tests/cassettes/` with record mode `none`. Any request not in the cassette fails, so changes in how an adapter calls its API are caught. For each search adapter (GitHub, Stack Exchange, Hacker News, dev.to, Hugging Face), every recorded result must keep the payload keys its normalizer uses, normalize into a valid Item, and yield the same id twice. A separate case covers `msrkit enrich` on this project's own repository. Recording happens only with `MSRKIT_RECORD=1` (mode `once`). Auth headers, key/token parameters and cookies are filtered, and `test_no_secrets_in_cassettes` scans every cassette for tokens. Missing cassettes are skipped with the recording command.
+- **Status:** the enrichment cassette is recorded. The search cassettes must be recorded on a machine with open network access, because the development environment only reaches this repository.

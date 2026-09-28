@@ -1,3 +1,3 @@
-# Test cassettes directory
-# VCR cassettes for adapter tests go here.
-# Ensure no tokens or credentials leak into cassette files.
+# VCR cassettes replayed offline by tests/test_cassettes.py (record mode "none").
+# Record: MSRKIT_RECORD=1 pytest tests/test_cassettes.py -k <case>
+# Auth headers, key/token parameters and cookies are filtered; a test checks for leaks.
