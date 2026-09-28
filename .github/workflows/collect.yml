@@ -1,0 +1,112 @@
+name: Coleta
+
+# Coleta sob demanda num runner com internet aberta: roda o fluxo inicial do
+# estudo (coleta, deduplicação, extração, planilha de triagem, PRISMA) e publica
+# um dataset de teste como artefato. Termos e janela vêm do protocolo versionado;
+# credenciais opcionais vêm dos secrets do repositório (nunca de um .env).
+
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Fontes públicas a coletar (vírgula). Não precisam de credencial."
+        default: "hackernews,devto,stackexchange,huggingface,rss"
+      manual_sources:
+        description: "Fontes com credencial (vírgula), coletadas se o secret existir: github, bluesky."
+        default: ""
+      per_query_limit:
+        description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
+        default: "10"
+      limit:
+        description: "Máximo de itens por fonte. Vazio = limite do protocolo."
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Coletar e gerar dataset
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PROTOCOL: protocols/v0_rag_agents_testing.yaml
+      MSRKIT_SOURCES_PUBLIC: ${{ inputs.sources }}
+      MSRKIT_SOURCES_MANUAL: ${{ inputs.manual_sources }}
+      MSRKIT_SOURCES_PAID: x_twitter
+      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord
+      # Opcionais: sem o secret, a variável fica vazia e a fonte segue sem ela
+      # (ou é pulada, se a credencial for obrigatória).
+      GITHUB_TOKEN: ${{ secrets.MSRKIT_GITHUB_TOKEN }}
+      STACKEXCHANGE_KEY: ${{ secrets.STACKEXCHANGE_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install MSR-Kit
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Validate protocol and credentials
+        run: msrkit validate "$PROTOCOL"
+
+      - name: Collect
+        env:
+          PER_QUERY: ${{ inputs.per_query_limit }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          args=()
+          [ -n "$PER_QUERY" ] && args+=(--per-query-limit "$PER_QUERY")
+          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          msrkit run "$PROTOCOL" "${args[@]}"
+
+      - name: Deduplicate, extract, screening sheet, PRISMA
+        run: |
+          msrkit dedupe
+          msrkit extract -p "$PROTOCOL"
+          msrkit screen export -p "$PROTOCOL"
+          msrkit prisma
+          msrkit export -f csv -o data/exports/itens.csv
+          msrkit package -p "$PROTOCOL"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Coleta"
+            echo '```'
+            msrkit stats 2>&1 | tail -n 60 || true
+            echo '```'
+            cat data/reports/*/prisma.md 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          msrkit stats || true
+
+      # Só arquivos redistribuíveis (protocolo §17): metadados, URLs, campos
+      # extraídos e o pacote redigido. Respostas brutas e itens com corpo ficam fora.
+      - name: Upload dataset
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msrkit-dataset-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            data/exports/itens.csv
+            data/runs/*/manifest.json
+            data/runs/*/discarded.jsonl
+            data/items/*/dedupe_report.json
+            data/extract/*/detections.csv
+            data/screening/*/sheet_*.csv
+            data/reports/
+            data/packages/
