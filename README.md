@@ -1,333 +1,162 @@
 # MSR-Kit
 
-[![CI](https://github.com/MatheusLimaZz/Miner-Tests-Agents-Rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MatheusLimaZz/Miner-Tests-Agents-Rag/actions/workflows/ci.yml)
+[![CI](https://github.com/Icar0S/Miner-Tests-Agents-Rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Icar0S/Miner-Tests-Agents-Rag/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
-![Docker](https://img.shields.io/badge/docker-Ubuntu%2024.04%20LTS-2496ED?logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
-> **Mining grey literature through official APIs** for empirical software engineering research.
+**Minerador de literatura cinza por APIs oficiais**, para pesquisa empírica em engenharia de software.
 
-O **MSR-Kit** é uma ferramenta de linha de comando científica que coleta, normaliza, desduplica e exporta dados de múltiplas plataformas (Hacker News, Dev.to, Feeds RSS, GitHub, Stack Overflow, Hugging Face, Reddit, etc.) utilizando **exclusivamente APIs oficiais e feeds públicos**, sem web scraping.
+O MSR-Kit coleta publicações e repositórios de GitHub, Stack Exchange, Hugging Face, Hacker News, dev.to e feeds RSS, sempre por API oficial ou feed público, sem scraping. Depois disso, conduz o estudo até o fim: evidência de uso, triagem e extração manual com dupla codificação, validação do próprio instrumento, análises e o pacote para o Zenodo. Tudo é declarado num protocolo YAML, então o mesmo minerador serve a outros estudos.
 
-Ele foi construído especialmente para apoiar pesquisas acadêmicas (MSR/SLR) que catalogam **ferramentas e métodos de teste** para **sistemas LLM com RAG** e **sistemas baseados em agentes**.
+O primeiro estudo que ele apoia é o **Estudo E2** de uma revisão multivocal sobre **teste de sistemas LLM com RAG e de sistemas baseados em agentes**.
 
-> 📖 **Documentação Aprofundada:** Para arquitetura interna detalhada, diagramas de fluxo de dados, especificações de modelos e guias de extensão, consulte o [**Manual Técnico Completo (docs/manual.md)**](docs/manual.md).
+## O que o minerador responde
 
-> 🗺️ **Andamento:** o plano de implementação das condições exigidas pelo Protocolo E2 v2 e o status de cada etapa estão em [docs/PLANO.md](docs/PLANO.md).
+| Questão de pesquisa | Como o MSR-Kit chega lá |
+|---|---|
+| **RQ1** Ferramentas usadas para testar RAG, com nível de evidência | `extract` classifica cada detecção em N1 (menção), N2 (import, config ou dependência) ou N3 (uso em CI sustentado); `analyze frequency` conta por nível e sistema |
+| **RQ2** Métodos de teste de RAG e o tipo de oráculo | `analyze frequency` para métodos; `analyze oracles` para a escada de oráculos e o teste de H2 |
+| **RQ3** Ferramentas usadas para testar agentes | as mesmas análises da RQ1, filtradas pelo rótulo `agente` |
+| **RQ4** Métodos de teste de agentes e os modos de falha que cobrem | `analyze coverage`: matriz modo de falha (FP1–FP13, AF1–AF12) × ferramenta/método |
+| **RQ5** O que transfere de RAG para agentes e o que é novo | `analyze compare`: entradas compartilhadas, só de RAG e só de agentes, mais a curva de saturação |
 
----
+## Início rápido
 
-## 📑 Sumário
-
-1. [🧭 Escolha a Melhor Forma de Executar](#-escolha-a-melhor-forma-de-executar)
-2. [🐳 Opção A: Executar com Docker (Recomendado - 100% Isolado)](#-opção-a-executar-com-docker-recomendado---100-isolado)
-3. [🐍 Opção B: Executar com Python Nativo (Host)](#-opção-b-executar-com-python-nativo-host)
-4. [📱 O Menu Interativo no Terminal (`menu`)](#-o-menu-interativo-no-terminal-menu)
-5. [💻 Referência Detalhada de Comandos CLI](#-referência-detalhada-de-comandos-cli)
-6. [🔬 Como Configurar a sua Pesquisa (Protocolo YAML)](#-como-configurar-a-sua-pesquisa-protocolo-yaml)
-7. [🔑 Configuração de Credenciais e Tokens (Opcional)](#-configuração-de-credenciais-e-tokens-opcional)
-8. [📁 Onde Ficam os Dados Coletados (`data/`)](#-onde-ficam-os-dados-coletados-data)
-9. [🛡️ Princípios Éticos e Rigor Científico](#️-princípios-éticos-e-rigor-científico)
-10. [🧪 Testes e Qualidade de Código](#-testes-e-qualidade-de-código)
-
----
-
-## 🧭 Escolha a Melhor Forma de Executar
-
-| Seu Perfil / Objetivo | Melhor Escolha | O que você precisa ter instalado |
-| :--- | :--- | :--- |
-| **Quer apenas testar ou coletar dados sem mexer no Windows** | [🐳 **Docker**](#-opção-a-executar-com-docker-recomendado---100-isolado) | Apenas o **Docker Desktop** ou **Podman** |
-| **Prefere opções visuais sem decorar comandos ou flags** | [📱 **Menu Interativo**](#-o-menu-interativo-no-terminal-menu) | Docker ou Python |
-| **Quer desenvolver, alterar código-fonte ou rodar testes unitários** | [🐍 **Python Nativo**](#-opção-b-executar-com-python-nativo-host) | **Python 3.11+** e Git |
-| **Quer automatizar coletas em scripts ou pipelines CI/CD** | [💻 **CLI Direta**](#-referência-detalhada-de-comandos-cli) | Docker ou Python |
-
----
-
-## 🐳 Opção A: Executar com Docker (Recomendado - 100% Isolado)
-
-Esta é a opção mais limpa e moderna. O MSR-Kit roda dentro de um container Linux isolado baseado em **Ubuntu 24.04 LTS**.
-- ✅ **Zero poluição no seu computador:** Não altera o `PATH`, não precisa de arquivos `.bat` e não instala Python ou bibliotecas no seu Windows.
-- ✅ **Persistência automática:** Todas as planilhas CSV e dados coletados aparecem diretamente na pasta `data/` do seu computador.
-
----
-
-### 📦 Preparação Inicial (Apenas na 1ª vez)
-
-Certifique-se de que o **Docker Desktop** está aberto. No terminal da pasta do projeto, execute os 2 passos:
+Requer Python 3.11 ou 3.12.
 
 ```bash
-# 1. Construir a imagem local:
-docker compose build
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"            # acrescente ,analysis para LDA/k-means
+cp .env.example .env               # opcional: tokens (ver "Fontes e credenciais")
 
-# 2. Criar o container fixo:
-docker compose create msrkit
+msrkit validate protocols/v0_rag_agents_testing.yaml
+msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 20
+msrkit stats
 ```
-> **O que faz:** Cria o container fixo `msrkit` mapeando as pastas `./data`, `./protocols` e `./src`. O container fica salvo no Docker Desktop e **nunca é excluído** ao fechar.
 
----
-
-### 🚀 Executando o Container Fixo
-
-Sempre que você quiser usar o MSR-Kit, execute no terminal:
+Prefere não instalar nada no sistema? Use o Docker:
 
 ```bash
-docker start -ai msrkit
+docker compose build && docker compose create msrkit   # só na primeira vez
+docker start -ai msrkit                                # abre um shell com o msrkit pronto
 ```
 
-- **Início instantâneo (< 0.5s):** O container "acorda" imediatamente e abre direto na linha de comando do Linux (`root@...:/app# `).
-- **Sem tela forçada:** Ele não abre direto no menu, permitindo que você rode o comando que preferir:
-  ```bash
-  # Abrir o assistente interativo visual:
-  msrkit menu
+O container monta `./data`, `./protocols` e `./src`: os resultados aparecem na sua pasta `data/` e mudanças no código valem sem rebuild. Para navegar por opções numeradas em vez de comandos, use `msrkit menu`.
 
-  # Ou executar comandos pontuais:
-  msrkit sources
-  msrkit plan protocols/v0_rag_agents_testing.yaml --source hackernews
-  msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 10
-  msrkit stats
-  ```
-- **Sempre Atualizado ao Vivo:** Como o volume `./src:/app/src` está montado, qualquer alteração ou melhoria feita no código-fonte no seu computador reflete **instantaneamente** dentro do container, sem precisar rodar `build` novamente.
-- **Para desligar o container:** Basta digitar `exit`. O container apenas pausa (fica dormindo no Docker Desktop), preservando todo o ambiente.
+## Fluxo do estudo
 
----
-
-## 🐍 Opção B: Executar com Python Nativo (Host)
-
-Se você é desenvolvedor e prefere rodar o código diretamente no seu sistema operacional (Windows, Linux ou macOS):
-
-### Passo 1: Pré-requisitos
-- **Python 3.11** ou **Python 3.12** instalado ([python.org](https://www.python.org/downloads/)).
-- *(No Windows, lembre-se de marcar a caixa "Add Python to PATH" durante a instalação).*
-
-### Passo 2: Criar ambiente virtual e instalar dependências
-Abra o terminal na pasta do projeto e execute:
-
-```bash
-# 1. Criar o ambiente virtual isolado:
-python -m venv .venv
-
-# 2. Ativar o ambiente:
-.venv\Scripts\activate      # No Windows (PowerShell / CMD)
-source .venv/bin/activate    # No Linux / macOS
-
-# 3. Instalar o MSR-Kit em modo de desenvolvimento:
-pip install -e ".[dev]"
-# (Ou se tiver uv instalado: uv pip install -e ".[dev]")
-```
-
-### Passo 3: Usar o comando `msrkit`
-Após instalar, o comando `msrkit` estará disponível no terminal:
-```bash
-# Abrir o menu interativo:
-msrkit menu
-
-# Ou ver a tela de ajuda com todos os comandos:
-msrkit --help
-```
-
----
-
-## 📱 O Menu Interativo no Terminal (`menu`)
-
-Para quem não quer decorar sintaxe de terminal, o MSR-Kit oferece um menu visual interativo.
-
-Para abrir:
-- **No Docker (container fixo):** Digite `msrkit menu` dentro do container (após `docker start -ai msrkit`).
-- **No Python Nativo:** Digite `msrkit menu`.
+Cada etapa grava em `data/` e pode ser refeita sem repetir as anteriores.
 
 ```text
-╭────────────────────────────────────────────────────────╮
-│ MSR-Kit v0.1.0                                         │
-│ Mining grey literature through official APIs           │
-╰────────────────────────────────────────────────────────╯
-
-Escolha uma ação:
-  1 - 🎯 Iniciar Mineração (escolher fonte e quantidade flexível)
-  2 - ⚙️  Gerenciar Fontes (ativar/desativar com base na disponibilidade)
-  3 - Status detalhado das fontes e políticas (sources)
-  4 - Simulação de planejamento / Dry-Run (plan)
-  5 - Desduplicar última coleta (dedupe)
-  6 - Exportar última coleta em CSV (export -f csv)
-  7 - Estatísticas da última coleta (stats)
-  8 - Validar arquivo de protocolo (validate)
-  0 - Sair
-
-Digite o número da opção [0]:
+coleta ──► evidência ──► triagem ──► extração ──► validação ──► análise ──► publicação
 ```
 
-### O que cada opção faz:
-- **`1` - 🎯 Iniciar Mineração:** Coleta guiada onde você escolhe a fonte (ou todas) e define a quantidade máxima de itens. Gera imediatamente a planilha de achados brutos com timestamp (`data/resultados_YYYYMMDD_HHMMSS_brutos.csv`) e oferece em seguida a opção opcional de desduplicar para comparar o antes e depois.
-- **`2` - ⚙️ Gerenciar Fontes:** Ativa ou desativa fontes no arquivo de protocolo YAML de acordo com as credenciais disponíveis.
-- **`3` - Status detalhado das fontes:** Exibe a tabela com o status de cada API (OK, DEGRADED, UNSUPPORTED), variáveis de autenticação e limites de taxa (rate limits).
-- **`4` - Dry-Run (Simulação):** Calcula as partições temporais e estimativa de requisições sem gastar cota de rede.
-- **`5` - Desduplicação:** Detecta e remove duplicatas por URL canônica (Passo 1) e Hash de Conteúdo SHA-256 (Passo 2), com proteção para que arquivos de código e posts sem corpo nunca colidam indevidamente. Suporta desduplicar a última coleta ou todo o histórico consolidado.
-- **`6` - Exportar em CSV:** Exporta os dados minerados para planilha CSV, permitindo escolher entre a **versão desduplicada** ou a **versão bruta** (com salvamento histórico em `data/resultados_YYYYMMDD_HHMMSS_...csv`).
-- **`7` - Estatísticas:** Apresenta resumo de requisições, descartes e itens coletados no último run ou corpus consolidado.
-- **`8` - Validar protocolo:** Checa a integridade e sintaxe do arquivo de protocolo de pesquisa sem chamadas de rede.
-- **`0` - Sair:** Encerra a aplicação.
+| Etapa | Comandos | O que produz |
+|---|---|---|
+| **1. Coleta** | `validate` → `plan --estimate` → `run` (retomável com `--resume`) → `dedupe` | itens normalizados, manifesto com hashes de cada resposta, duplicatas removidas por URL, conteúdo e quase-duplicata |
+| **2. Evidência** | `enrich` → `extract` | sinais de repositório (CI, dependências, commits, contribuidores) e detecções N1/N2/N3 com trecho de evidência |
+| **3. Triagem** | `screen export` → preencher → `screen import` | decisões por codificador, em lotes fixos ordenados por relevância |
+| **4. Extração** | `coding sample` → `coding export` → preencher → `coding import` → `agreement` | formulário do Anexo A e qualidade (§9); κ de Cohen por dimensão na dupla codificação |
+| **5. Validação** | `recall gold.yaml`, `precision sample` → julgar → `precision score` | recall sobre gold set e precisão ponderada por estrato |
+| **6. Análise** | `analyze frequency`, `coverage`, `oracles`, `topics`, `compare` | CSVs em `data/reports/<run>/analysis/` |
+| **7. Publicação** | `prisma`, `package` | fluxo PRISMA e pacote Zenodo com checksums |
 
----
+As análises aceitam `--basis detections` (automática) ou `--basis coding` (manual, por consenso entre codificadores). O passo a passo com exemplos está no [manual](docs/manual.md#16-fluxo-completo-do-estudo-da-coleta-ao-pacote).
 
-## 💻 Referência Detalhada de Comandos CLI
+## Comandos
 
-Para automação de coletas, scripts e usuários avançados, todos os comandos podem ser invocados diretamente via CLI:
+| Grupo | Comando | Para quê |
+|---|---|---|
+| Coleta | `sources` | adaptadores, disponibilidade e políticas (`--md` para Markdown) |
+| | `validate` | valida protocolo, gazetteer e credenciais, sem rede |
+| | `plan` | partições e orçamento de requisições; `--estimate` consulta os totais reais |
+| | `run` | coleta (`-s` fonte, `-l` limite, `--resume <run_id>`) |
+| | `normalize` | reprocessa os dados brutos sem rede |
+| | `fetch` | texto das páginas linkadas (opt-in, respeita robots.txt, fica só local) |
+| Corpus | `dedupe` | três passadas; `--near-threshold` (0,85; `0` desativa) |
+| | `stats`, `export` | resumo da coleta; exporta CSV, JSONL ou DuckDB |
+| Evidência | `enrich`, `extract` | sinais de repositório; detecções com nível de evidência |
+| Revisão | `screen`, `coding`, `agreement` | triagem, formulário de extração, concordância |
+| Validação | `recall`, `precision` | recall sobre gold set; amostra e cálculo de precisão |
+| Análise | `analyze` | `frequency`, `coverage`, `oracles`, `topics`, `compare` |
+| Publicação | `prisma`, `package` | fluxo PRISMA; pacote Zenodo |
 
-| Comando | Descrição | Exemplo de Uso |
-| :--- | :--- | :--- |
-| **`msrkit`** | Exibe a ajuda geral e comandos disponíveis | `msrkit` ou `msrkit --help` |
-| **`msrkit menu`** | Abre o assistente interativo por opções numéricas | `msrkit menu` |
-| **`msrkit sources`** | Lista todos os adaptadores, políticas e status das APIs | `msrkit sources` (ou `msrkit sources --md` para Markdown) |
-| **`msrkit validate`** | Valida a sintaxe do protocolo e credenciais (sem rede) | `msrkit validate protocols/v0_rag_agents_testing.yaml` |
-| **`msrkit plan`** | Simulação (Dry Run): calcula partições e estimativa de requisições | `msrkit plan protocols/v0_rag_agents_testing.yaml -s hackernews` |
-| **`msrkit run`** | Executa a mineração real dos dados | `msrkit run protocols/v0_rag_agents_testing.yaml -s hackernews -l 50` |
-| **`msrkit dedupe`** | Remove duplicatas por URL canônica e Hash SHA-256 | `msrkit dedupe` (ou `msrkit dedupe --all` para todo o histórico) |
-| **`msrkit stats`** | Exibe resumo de requisições, descartes e itens coletados | `msrkit stats` (ou `msrkit stats --all`) |
-| **`msrkit export`** | Exporta os dados para CSV, JSONL ou DuckDB | `msrkit export -f csv -o data/meus_dados.csv` (adicione `--raw` para brutos) |
-| **`msrkit enrich`** | Lê árvore de arquivos, workflows de CI, manifestos, contribuidores e meses com commits dos repositórios GitHub da coleta (evidência N3) | `msrkit enrich --limit 100` |
-| **`msrkit extract`** | Detecta ferramentas e métodos do gazetteer com nível de evidência N1/N2/N3 e trecho de evidência | `msrkit extract` |
-| **`msrkit screen`** | Planilha de triagem com os critérios I/E do protocolo: `export`, `import` (valida e registra por codificador) e `status` | `msrkit screen export --coder ana` |
-| **`msrkit coding`** | Formulário de extração (Anexo A) e qualidade (§9) declarados em `coding:`; sugestões automáticas em colunas `auto_*`: `export`, `import`, `status` | `msrkit coding export --coder ana` |
-| **`msrkit agreement`** | κ de Cohen por dimensão e par de codificadores (triagem e formulário); amostra de dupla codificação com `msrkit coding sample` | `msrkit agreement` |
-| **`msrkit prisma`** | Fluxo PRISMA 2020 da execução (identificação por fonte, filtros, duplicatas, triagem com motivos de exclusão, inclusão e codificação) em JSON e Markdown com diagrama Mermaid | `msrkit prisma` |
-| **`msrkit package`** | Pacote de reprodutibilidade para o Zenodo: protocolo e gazetteer, manifesto, corpus redigido conforme §17 (texto integral só onde a licença permite; autores pseudonimizados), triagem, codificação, validação, relatórios, `.zenodo.json` e `SHA256SUMS` | `msrkit package --creator "Sobrenome, Nome"` |
-| **`msrkit analyze`** | Análises A1–A6 sobre unidades (repositório ou item), a partir das detecções ou da codificação manual (consenso): `frequency` (frequência por nível e sistema, coocorrência com Jaccard e lift), `coverage` (modo de falha × ferramenta/método, por sistema), `oracles` (escada de oráculos e teste de H2), `topics` (LDA + k-means para o passe de descoberta aberta; requer `pip install -e ".[analysis]"`), `compare` (RAG × agentes e curva de saturação por lote) | `msrkit analyze frequency --basis coding` |
-| **`msrkit recall`** | Recall do minerador (coleta e extração) sobre um gold set curado antes da coleta | `msrkit recall protocols/gold_set.yaml` |
-| **`msrkit precision`** | Precisão da extração: `sample` (200 detecções estratificadas por fonte × nível) e `score` (precisão ponderada pela população do estrato, IC de Wilson) | `msrkit precision sample` |
-| **`msrkit fetch`** | Baixa o texto das páginas linkadas (HN, RSS), respeitando robots.txt; texto fica só em `data/fulltext/` e nunca é exportado | `msrkit fetch --limit 50` |
-| **`msrkit normalize`** | Reprocessa e reclassifica dados brutos sem refazer chamadas de rede | `msrkit normalize` |
+`msrkit <comando> --help` lista todas as opções. As flags mais usadas: `--run <id>` escolhe a execução (padrão: a mais recente), `-a/--all` consolida todas as execuções, `-f/--format` e `-o/--output` controlam a exportação.
 
-### Parâmetros e Flags Mais Utilizados:
-- `-s, --source <nome>`: Executa a ação apenas para uma fonte específica (ex: `hackernews`, `devto`, `rss`, `github`).
-- `-l, --limit <número>`: Limita a quantidade máxima de itens a serem coletados (ótimo para testes rápidos).
-- `-f, --format <formato>`: Formato de exportação (`csv`, `jsonl` ou `duckdb`).
-- `-o, --output <arquivo>`: Caminho de saída do arquivo exportado.
-- `-d, --delimiter <sep>`: Delimitador do CSV (padrão `;` para compatibilidade com Excel em português, ou `,`).
-- `--raw`: Exporta os achados brutos completos (sem aplicar desduplicação).
-- `-a, --all`: Processa ou exporta o conjunto consolidado de todas as coletas históricas.
-- `--resume <run_id>`: Retoma uma coleta que foi interrompida sem recomeçar do zero.
+## Protocolo
 
----
+O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_testing.yaml)) é o contrato do estudo. O que o minerador faz vem dele, não do código:
 
-## 🔬 Como Configurar a sua Pesquisa (Protocolo YAML)
+| Seção | Define |
+|---|---|
+| `window`, `terms`, `terms_by_language`, `languages` | janela temporal e léxico, com estrato por idioma |
+| `sources` | fontes ativas, tipos de item e consultas literais por fonte (`queries`, com modelos `{anchor}`/`{repo}`) |
+| `concepts`, `concept_queries` | grupos de léxico que rotulam cada item (`rag`, `agente`, `teste`) |
+| `gazetteer` | catálogo de ferramentas e métodos ([`protocols/gazetteer.yaml`](protocols/gazetteer.yaml)) |
+| `screening` | critérios de inclusão e exclusão e tamanho do lote |
+| `coding` | campos do formulário, catálogo de modos de falha e parâmetros da dupla codificação |
+| `limits` | tetos de itens e de requisições por fonte e o que fazer quando a cota diária esgota |
 
-O arquivo de protocolo em [protocols/v0_rag_agents_testing.yaml](protocols/v0_rag_agents_testing.yaml) é o contrato científico da sua pesquisa. Você pode editá-lo para definir o escopo exato do seu estudo:
+`msrkit validate` confere tudo isso antes de qualquer requisição.
 
-```yaml
-version: 0
-name: v0_rag_agents_testing
-description: >
-  Coleta exploratória sobre ferramentas e métodos de teste para sistemas
-  LLM com RAG e sistemas baseados em agentes.
+## Fontes e credenciais
 
-# 1. Janela temporal da busca
-window:
-  since: "2023-01-01"
-  until: "2026-08-31"
+Nenhuma chave é necessária para começar: Hacker News, dev.to e RSS são públicos. As demais melhoram com um token no `.env`:
 
-# 2. Palavras-chave / Termos de busca da sua pesquisa
-terms:
-  - "RAG testing"
-  - "RAG evaluation"
-  - "test RAG"
-  - "evaluate RAG"
-  - "LLM testing"
-  - "LLM evaluation"
-  - "agent testing"
-  - "agent evaluation"
-  - "hallucination test"
-  - "eval harness"
+| Fonte | Variável | Efeito |
+|---|---|---|
+| GitHub | `GITHUB_TOKEN` | 5.000 req/h e busca de código (necessária para `enrich` e N2/N3) |
+| Stack Exchange | `STACKEXCHANGE_KEY` | cota de 300 para 10.000 req/dia |
+| Hugging Face | `HF_TOKEN` | limites maiores |
+| Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` | busca de posts |
+| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` | exige aprovação prévia do Reddit; desativado no Estudo E2 |
 
-# 3. Léxico adicional por idioma (estrato de idioma nas exportações)
-terms_by_language:
-  pt:
-    - "teste de RAG"
-    - "avaliação de agentes"
+X/Twitter, LinkedIn, Discord, Google Custom Search e Bing não são mineráveis nas condições atuais (custo, termos de uso ou API descontinuada). A viabilidade de cada plataforma, verificada em set/2026, está em [`docs/sources.md`](docs/sources.md).
 
-# 4. Idiomas desejados
-languages:
-  - en
-  - pt
-
-# 5. Habilitar ou desabilitar fontes de acordo com a sua necessidade
-sources:
-  hackernews:
-    enabled: true
-  devto:
-    enabled: true
-  rss:
-    enabled: true
-  github:
-    enabled: true
-```
-
----
-
-## 🔑 Configuração de Credenciais e Tokens (Opcional)
-
-**Você não precisa de nenhuma chave de API para começar a testar.** Fontes como **Hacker News**, **Dev.to** e **RSS** funcionam publicamente sem autenticação.
-
-Para minerar fontes com limites maiores (como o GitHub ou Stack Overflow), copie o arquivo de exemplo:
-```bash
-cp .env.example .env
-```
-E preencha as variáveis correspondentes no arquivo `.env`:
-
-| Fonte | Variável no `.env` | Como Obter / Requisitos | Benefício |
-| :--- | :--- | :--- | :--- |
-| **Hacker News** | *(Nenhuma)* | Nenhuma chave necessária (Público) | Pronto para uso |
-| **Dev.to** | *(Nenhuma)* | Nenhuma chave necessária (Público) | Pronto para uso |
-| **Feeds RSS** | *(Nenhuma)* | Nenhuma chave necessária (Público) | Pronto para uso |
-| **GitHub** | `GITHUB_TOKEN` | Token pessoal gratuito no [github.com/settings/tokens](https://github.com/settings/tokens) | Eleva limite de 60 para **5.000 req/hora** |
-| **Stack Exchange** | `STACKEXCHANGE_KEY` | Chave de app gratuita no Stack Apps | Eleva cota de 300 para **10.000 req/dia** |
-| **Hugging Face** | `HF_TOKEN` | Token gratuito no perfil do Hugging Face | Maior taxa de requisições em models/papers |
-| **Reddit** | `REDDIT_CLIENT_ID`<br>`REDDIT_CLIENT_SECRET`<br>`REDDIT_USER_AGENT` | Credencial OAuth **com aprovação manual prévia** do Reddit (Responsible Builder Policy, desde nov/2025) | Desabilitado no protocolo do Estudo E2 (ADR-014) |
-| **Bluesky** | `BLUESKY_HANDLE`<br>`BLUESKY_APP_PASSWORD` | Senha de aplicativo na conta Bluesky | Mineração na rede social AT Protocol |
-| **X / Twitter** | `X_BEARER_TOKEN` | Portal de Desenvolvedores do X | Leitura só paga (pague-por-uso); adaptador é stub e não coleta |
-| **Discord** | `DISCORD_BOT_TOKEN`<br>`DISCORD_GUILD_IDS` | Bot no Discord Developer Portal | Requer autorização prévia de admins de servidores |
-
----
-
-## 📁 Onde Ficam os Dados Coletados (`data/`)
-
-Todos os dados minerados ficam organizados na pasta `data/` seguindo padrões normativos de reprodutibilidade científica:
+## Dados
 
 ```text
 data/
-├── raw/{source}/{run_id}/       # Respostas originais das APIs em JSONL comprimido (.gz)
-├── items/{run_id}/items.jsonl   # Dados normalizados com schema unificado
-├── items/{run_id}/items_deduped.jsonl # Dados após desduplicação (URLs únicas)
-├── runs/{run_id}/manifest.json  # Manifesto científico com hash SHA-256 e timestamps
-└── msrkit.duckdb                # Banco DuckDB local para consultas SQL ultra-rápidas
+├── raw/{fonte}/{run}/        respostas originais das APIs (jsonl.gz, imutáveis)
+├── items/{run}/              itens normalizados, deduplicados e dedupe_report.json
+├── runs/{run}/               manifest.json (consultas, partições, hashes) e descartes
+├── enrich/ extract/          sinais de repositório e detecções
+├── screening/ coding/        planilhas, decisões, codificações e concordância
+├── validation/ reports/      precisão, PRISMA e análises
+└── packages/                 pacotes para o Zenodo
 ```
 
-- **Rastreabilidade total:** Cada item possui um identificador de proveniência (`provenance`) registrando a query exata, timestamp em UTC e hash da requisição original.
-- **Segurança de redistribuição:** O exportador respeita os termos de serviço das plataformas, exportando metadados de forma segura para citação e publicação acadêmica.
+Cada item carrega sua proveniência: consulta, partição, versão do adaptador, horário e SHA-256 da resposta bruta.
 
----
+## Ética e redistribuição
 
-## 🛡️ Princípios Éticos e Rigor Científico
+- Coleta só de conteúdo público, por API oficial ou feed público, com limites de taxa aplicados antes de cada requisição e cotas diárias persistidas em disco.
+- O texto integral só é redistribuído onde a licença permite (Stack Exchange, CC BY-SA). As demais fontes saem com metadados, URL e campos extraídos. `export --include-body` recusa fontes `metadata_only`.
+- O pacote do Zenodo pseudonimiza os identificadores de autor e nunca inclui respostas brutas nem o conteúdo de arquivos de repositório.
 
-1. **Apenas APIs Oficiais na Coleta:** A mineração usa só APIs oficiais e feeds públicos, sem violar termos de uso. A leitura do texto das páginas linkadas é um passo separado e opcional (`msrkit fetch`), que respeita robots.txt, limita a taxa por host e mantém o texto apenas localmente (ADR-019).
-2. **Respeito aos Limites de Taxa (Rate Limits):** O MSR-Kit implementa um algoritmo *Token Bucket Governor* que controla o fluxo de requisições de forma determinística, evitando sobrecarga nos servidores das fontes.
-3. **Plataformas Fechadas ou Pagas:** LinkedIn, Discord, X/Twitter, Google Custom Search e Bing não são mineráveis nas condições atuais. A tabela de viabilidade de todas as fontes (verificada em set/2026) está em [docs/sources.md](docs/sources.md).
-4. **Anonimização e Ética:** Não coletamos dados pessoais sensíveis, preservando apenas handles públicos de autores e links de conteúdo aberto.
+## Desenvolvimento
 
----
-
-## 🧪 Testes e Qualidade de Código
-
-Para executar os testes automatizados e o linter (no ambiente de desenvolvimento):
+O CI roda exatamente estes passos, em Python 3.11 e 3.12:
 
 ```bash
-# Executar a suíte completa de testes (200+ testes unitários e de integração):
-pytest
-
-# Verificar conformidade com o linter:
+pip install -e ".[dev,analysis]"
 ruff check src/ tests/
+ruff format --check src/ tests/
+mypy src/                        # strict
+pytest --cov=src/msrkit tests/   # cobertura mínima de 80%
 ```
 
----
+Os testes de contrato reproduzem respostas reais gravadas em `tests/cassettes/`, sem rede. Para gravar um caso novo, rode `MSRKIT_RECORD=1 pytest tests/test_cassettes.py -k <caso>`. Para acrescentar uma fonte, veja o [guia de adaptadores](docs/manual.md#11-guia-de-desenvolvimento-testes-e-extensão).
 
-## 📄 Licença
+## Documentação
 
-Este projeto está licenciado sob a **Apache License 2.0**. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
+| Documento | Conteúdo |
+|---|---|
+| [`docs/manual.md`](docs/manual.md) | arquitetura, referência completa dos comandos, esquema dos dados |
+| [`docs/PLANO.md`](docs/PLANO.md) | plano de implementação, status de cada etapa e pendências da pesquisa |
+| [`docs/decisions.md`](docs/decisions.md) | registro de decisões (ADRs) com contexto e justificativa |
+| [`docs/sources.md`](docs/sources.md) | viabilidade e limites de cada plataforma |
+
+## Licença
+
+[Apache License 2.0](LICENSE).
