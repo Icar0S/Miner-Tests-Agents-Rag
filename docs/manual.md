@@ -508,12 +508,21 @@ O MSR-Kit implementa adaptadores dedicados para 11 fontes de literatura cinza.
 | **Discord** | `discord` | `DISCORD_BOT_TOKEN` + Guild IDs | 5 req / 1s | ✗ *(leitura de canais)* | ✗ | `metadata_only` | `UNSUPPORTED` |
 | **LinkedIn** | `linkedin` | — *(Sem API pública)* | — | — | — | — | `UNSUPPORTED` *(Permanente)* |
 
-### Como Configurar as Credenciais:
-Copie o arquivo de exemplo [.env.example](file:///c:/Users/joaom/Documents/projetos/Miner-Tests-Agents-Rag/.env.example) para `.env`:
+### Como Configurar as Credenciais e os Parâmetros da Busca:
+Copie o arquivo de exemplo [.env.example](../.env.example) para `.env`:
 ```bash
 cp .env.example .env
 ```
-Preencha apenas as fontes que for utilizar. Fontes sem token que operam publicamente (Hacker News, Dev.to, RSS) funcionam de imediato.
+O `msrkit` carrega `./.env` antes de cada comando; variáveis já definidas no shell ou no CI têm precedência (`MSRKIT_NO_DOTENV=1` desliga a leitura). O arquivo tem quatro seções (ADR-041):
+
+1. **Parâmetros da busca** — `MSRKIT_WINDOW_SINCE`, `MSRKIT_WINDOW_UNTIL`, `MSRKIT_TERMS` e `MSRKIT_TERMS_<IDIOMA>` (termos separados por `;`). Sobrepõem o protocolo; variável vazia mantém o valor do protocolo. O manifesto registra `effective_protocol` (valores em vigor) e `env_overrides` (variáveis aplicadas), e `msrkit validate` avisa quando o `.env` diverge do arquivo versionado.
+2. **Fontes prontas** — `MSRKIT_SOURCES_PUBLIC`, mais as chaves opcionais `STACKEXCHANGE_KEY` e `HF_TOKEN`.
+3. **Fontes com configuração manual** — `MSRKIT_SOURCES_MANUAL` e as credenciais de GitHub e Bluesky; o Reddit tem variáveis, mas fica fora dos grupos no E2.
+4. **Pagas ou inviáveis** — `MSRKIT_SOURCES_PAID` e `MSRKIT_SOURCES_UNAVAILABLE`, nunca coletadas.
+
+Quando algum grupo está definido, exatamente as fontes dos grupos pública e manual são habilitadas; uma fonte precisa estar declarada no protocolo e em um único grupo.
+
+Para uma amostra de teste espalhada por todos os termos, use `msrkit run --per-query-limit 10`: cada consulta (termo ou partição) traz no máximo 10 itens, e o teto fica registrado no manifesto (`run_options` e motivo `item_limit`). Sem rede local, o workflow **Coleta** do GitHub Actions faz o mesmo num runner e publica o dataset como artefato.
 
 ---
 

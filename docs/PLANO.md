@@ -113,6 +113,16 @@ de pesquisa:
   Exchange, decidir a inclusão do Hacker News e revisar os pesos da ordenação (ADR-027).
 - **Zenodo (V4):** informar os criadores (`--creator`) e confirmar a licença do pacote.
 
+## Fase 3 — Primeira coleta de teste
+
+Datasets de teste para o piloto (semana 5), antes da coleta oficial.
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| R1 | **`.env` com parâmetros da busca e grupos de fontes:** janela e léxico (§7.1, §7.5) sobrepondo o protocolo, fontes separadas em prontas, com configuração manual, pagas e inviáveis; valores efetivos no manifesto (ADR-041) | ✅ |
+| R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | 🔄 |
+| R3 | **Primeiros datasets de teste** das fontes públicas, com amostra espalhada pelo léxico | ⏳ |
+
 ## Registro
 
 Cada etapa é entregue num commit próprio, cujo título começa com o identificador da etapa

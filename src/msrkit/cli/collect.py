@@ -148,7 +148,29 @@ def validate(
     console.print(f"[green]✓[/green] Protocol '{config.name}' v{config.version} is valid")
     console.print(f"  Window: {config.window.since} → {config.window.until}")
     console.print(f"  Terms: {len(config.terms)}")
+    for lang, lexicon in config.terms_by_language.items():
+        console.print(f"  Terms ({lang}): {len(lexicon)}")
     console.print(f"  Enabled sources: {', '.join(config.enabled_sources())}")
+    if config.env_overrides:
+        console.print(f"  From .env: {', '.join(config.env_overrides)}")
+        groups: dict[str, list[str]] = {}
+        for name, group in config.source_groups.items():
+            groups.setdefault(group, []).append(name)
+        labels = {
+            "public": "public (collected, no setup)",
+            "manual": "manual setup (collected when credentials are set)",
+            "paid": "paid (never collected)",
+            "unavailable": "unavailable (never collected)",
+        }
+        for group in ("public", "manual", "paid", "unavailable"):
+            if group in groups:
+                console.print(f"    {labels[group]}: {', '.join(sorted(groups[group]))}")
+        differs = config.differs_from_file()
+        if differs:
+            console.print(
+                f"  [yellow]⚠ .env changes the protocol file ({', '.join(differs)}); "
+                "the run manifest records the values in force.[/yellow]"
+            )
 
     registry = _get_registry()
 
@@ -391,6 +413,11 @@ def run(
     limit: int | None = typer.Option(
         None, "--limit", "-l", help="Override max items to collect for this run"
     ),
+    per_query_limit: int | None = typer.Option(
+        None,
+        "--per-query-limit",
+        help="Cap items per query (spreads a test sample over every term and partition)",
+    ),
     resume: str | None = typer.Option(None, "--resume", help="Resume a previous run by ID"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -398,6 +425,7 @@ def run(
     protocol = _unwrap(protocol)
     source = _unwrap(source)
     limit = _unwrap(limit)
+    per_query_limit = _unwrap(per_query_limit)
     resume = _unwrap(resume)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
@@ -461,7 +489,20 @@ def run(
             protocol_path=protocol,
             protocol_sha256=proto_hash,
             started_at=datetime.now(UTC),
+            effective_protocol=config.effective(),
+            env_overrides=config.env_overrides,
+            run_options={
+                k: v
+                for k, v in (
+                    ("source", source),
+                    ("limit", limit),
+                    ("per_query_limit", per_query_limit),
+                )
+                if v is not None
+            },
         )
+    if config.env_overrides:
+        console.print(f"[bold].env:[/bold] {', '.join(config.env_overrides)}")
 
     if source:
         if source not in config.sources:
@@ -549,6 +590,9 @@ def run(
         if limit is not None:
             for q in queries:
                 q.limit = limit
+        if per_query_limit is not None:
+            for q in queries:
+                q.limit = min(q.limit or per_query_limit, per_query_limit)
 
         done = {e.key: e for e in source_entry.queries if e.completed and e.key}
         if resume:
@@ -647,6 +691,8 @@ def run(
 
                     if total_source_items >= config.limits.max_items_per_source:
                         break
+                    if query.limit is not None and raw_items_count >= query.limit:
+                        break  # per-query cap, whether or not the adapter enforces it
 
             except SourceUnsupportedError as e:
                 failed = True

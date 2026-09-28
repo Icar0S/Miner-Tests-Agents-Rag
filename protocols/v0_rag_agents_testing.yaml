@@ -12,36 +12,51 @@ description: >
   Coleta exploratória sobre ferramentas e métodos de teste para sistemas
   LLM com RAG e sistemas baseados em agentes.
 
-# ---- Recorte temporal (EDITAR) ----
-# Define a janela de tempo para a busca.
-# Formato: YYYY-MM-DD
+# ---- Recorte temporal (§7.5) ----
+# 01/01/2023 até o data-cutoff: RAG como prática de engenharia e frameworks de
+# agentes se consolidam depois de dez/2022. O cutoff é o último dia do mês anterior
+# à coleta, fixo, para que re-execuções vejam a mesma janela.
+# Sobreposto por MSRKIT_WINDOW_SINCE / MSRKIT_WINDOW_UNTIL no .env.
 window:
   since: "2023-01-01"
   until: "2026-08-31"
 
-# ---- Termos de busca (EDITAR) ----
-# v0 usa termos simples e amplos, de propósito. Serão refinados depois.
-# Cada termo é buscado como frase exata ou palavras combinadas,
-# dependendo da fonte.
+# ---- Léxico de busca (§7.1, léxico controlado duplo) ----
+# Cada termo combina o sistema (RAG, LLM, agente) com teste/avaliação e cobre os
+# dois vocabulários: o de prática (eval, judge, golden dataset, red teaming,
+# trajectory) e o acadêmico (metamorphic testing, test oracle), para medir H1.
+# Nomes de ferramenta ficam no gazetteer, não aqui (passe de descoberta, §7.6).
+# Sobreposto por MSRKIT_TERMS no .env (termos separados por ";").
 terms:
-  - "RAG testing"
+  # RAG
   - "RAG evaluation"
-  - "test RAG"
-  - "evaluate RAG"
-  - "LLM testing"
+  - "RAG testing"
+  - "retrieval augmented generation evaluation"
+  # LLM em geral: oráculo, conjunto de referência, regressão, falhas
   - "LLM evaluation"
+  - "LLM testing"
   - "LLM as a judge"
-  - "agent testing"
-  - "agent evaluation"
-  - "agentic evaluation"
-  - "golden dataset"
-  - "hallucination test"
-  - "prompt regression"
   - "eval harness"
+  - "golden dataset"
+  - "hallucination detection"
+  - "prompt regression"
+  - "red teaming LLM"
+  - "guardrails evaluation"
+  # Vocabulário acadêmico (H1)
+  - "metamorphic testing LLM"
+  - "LLM test oracle"
+  # Agentes
+  - "agent evaluation"
+  - "agent testing"
+  - "agentic evaluation"
+  - "trajectory evaluation"
+  - "tool calling evaluation"
+  - "multi-agent testing"
 
 # ---- Léxico em português (estrato exploratório, critério I4) ----
 # Buscado junto com `terms`; cada ocorrência registra o idioma do termo
 # (campo `lang` em matched_terms e coluna matched_languages no CSV).
+# Sobreposto por MSRKIT_TERMS_PT no .env.
 terms_by_language:
   pt:
     - "teste de RAG"
@@ -281,7 +296,9 @@ sources:
       note: "RSS entrega apenas itens recentes; sem cobertura histórica."
 
   bluesky:
-    enabled: false  # habilitar após configurar credenciais
+    # Coletada quando BLUESKY_HANDLE e BLUESKY_APP_PASSWORD estiverem no .env;
+    # sem credencial, a execução pula a fonte e registra o motivo.
+    enabled: true
 
   x_twitter:
     enabled: false  # requer plano pago

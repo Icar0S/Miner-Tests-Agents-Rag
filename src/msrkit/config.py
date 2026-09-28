@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import os
+import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
@@ -18,6 +20,9 @@ from msrkit.coding import CodingForm
 from msrkit.gazetteer import Gazetteer, load_gazetteer
 from msrkit.models import Query
 from msrkit.screening import ScreeningCriteria
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # ---------------------------------------------------------------------------
 # Protocol config models
@@ -41,6 +46,12 @@ class WindowConfig(BaseModel):
         except ValueError as e:
             raise ValueError(f"Invalid date format '{v}', expected YYYY-MM-DD") from e
         return v
+
+    @model_validator(mode="after")
+    def _check_order(self) -> WindowConfig:
+        if self.since > self.until:
+            raise ValueError(f"window.since ({self.since}) is after window.until ({self.until})")
+        return self
 
 
 class RawQueryConfig(BaseModel):
@@ -100,11 +111,43 @@ class ProtocolConfig(BaseModel):
     coding: CodingForm = CodingForm()
 
     _gazetteer: Gazetteer | None = PrivateAttr(default=None)
+    # Set by apply_env_overrides: variables applied, source -> access group, and the
+    # values the protocol file had before the overrides.
+    _env_overrides: list[str] = PrivateAttr(default_factory=list)
+    _source_groups: dict[str, str] = PrivateAttr(default_factory=dict)
+    _file_values: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     @property
     def gazetteer_data(self) -> Gazetteer | None:
         """The loaded gazetteer, if the protocol names one."""
         return self._gazetteer
+
+    @property
+    def env_overrides(self) -> list[str]:
+        """Names of the MSRKIT_* variables that changed this protocol (see .env)."""
+        return list(self._env_overrides)
+
+    @property
+    def source_groups(self) -> dict[str, str]:
+        """Source -> access group (public, manual, paid, unavailable) declared in .env."""
+        return dict(self._source_groups)
+
+    def effective(self) -> dict[str, Any]:
+        """Search parameters actually in force, for the run manifest."""
+        return {
+            "window": self.window.model_dump(),
+            "terms": list(self.terms),
+            "terms_by_language": {k: list(v) for k, v in self.terms_by_language.items()},
+            "enabled_sources": self.enabled_sources(),
+            "source_groups": self.source_groups,
+        }
+
+    def differs_from_file(self) -> list[str]:
+        """Parameters whose value in force differs from the protocol file."""
+        if not self._file_values:
+            return []
+        now = self.effective()
+        return [k for k, v in self._file_values.items() if k != "source_groups" and now.get(k) != v]
 
     @model_validator(mode="after")
     def _check_term_languages(self) -> ProtocolConfig:
@@ -209,15 +252,105 @@ class ProtocolConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Environment overrides (.env)
+# ---------------------------------------------------------------------------
+
+ENV_SINCE = "MSRKIT_WINDOW_SINCE"
+ENV_UNTIL = "MSRKIT_WINDOW_UNTIL"
+ENV_TERMS = "MSRKIT_TERMS"
+ENV_TERMS_LANG_PREFIX = "MSRKIT_TERMS_"  # + language code, e.g. MSRKIT_TERMS_PT
+# Access groups of the sources. Public and manual sources are collected; paid and
+# unavailable ones never are, whatever the protocol file says.
+SOURCE_GROUP_VARS = {
+    "MSRKIT_SOURCES_PUBLIC": "public",
+    "MSRKIT_SOURCES_MANUAL": "manual",
+    "MSRKIT_SOURCES_PAID": "paid",
+    "MSRKIT_SOURCES_UNAVAILABLE": "unavailable",
+}
+COLLECTED_GROUPS = {"public", "manual"}
+
+
+def _split(value: str, separators: str) -> list[str]:
+    parts = re.split(f"[{re.escape(separators)}]", value)
+    return list(dict.fromkeys(p.strip() for p in parts if p.strip()))
+
+
+def apply_env_overrides(config: ProtocolConfig, environ: Mapping[str, str]) -> list[str]:
+    """Apply MSRKIT_* search parameters and source groups from the environment.
+
+    - `MSRKIT_WINDOW_SINCE` / `MSRKIT_WINDOW_UNTIL`: temporal window (YYYY-MM-DD);
+    - `MSRKIT_TERMS`: base lexicon, terms separated by `;`;
+    - `MSRKIT_TERMS_<LANG>` (e.g. `MSRKIT_TERMS_PT`): lexicon of a declared language;
+    - `MSRKIT_SOURCES_PUBLIC|MANUAL|PAID|UNAVAILABLE`: source names by access group,
+      separated by `,`. When any group is set, exactly the public and manual sources
+      are enabled; a source must be declared in the protocol and in one group only.
+
+    Empty variables are ignored. Returns the names of the variables applied.
+    """
+    config._file_values = config.effective()
+    applied: list[str] = []
+
+    since = environ.get(ENV_SINCE, "").strip()
+    until = environ.get(ENV_UNTIL, "").strip()
+    if since or until:
+        try:
+            config.window = WindowConfig(
+                since=since or config.window.since, until=until or config.window.until
+            )
+        except ValueError as e:
+            raise ValueError(f"{ENV_SINCE}/{ENV_UNTIL} in .env: {e}") from None
+        applied += [name for name, val in ((ENV_SINCE, since), (ENV_UNTIL, until)) if val]
+
+    terms = _split(environ.get(ENV_TERMS, ""), ";")
+    if terms:
+        config.terms = terms
+        applied.append(ENV_TERMS)
+    for key in sorted(environ):
+        if not key.startswith(ENV_TERMS_LANG_PREFIX) or key == ENV_TERMS:
+            continue
+        lang = key[len(ENV_TERMS_LANG_PREFIX) :].lower()
+        lexicon = _split(environ[key], ";")
+        if not lexicon:
+            continue
+        if lang not in config.languages:
+            raise ValueError(f"{key} in .env: language '{lang}' is not in the protocol's languages")
+        config.terms_by_language[lang] = lexicon
+        applied.append(key)
+
+    groups: dict[str, str] = {}
+    problems: list[str] = []
+    for var, group in SOURCE_GROUP_VARS.items():
+        names = _split(environ.get(var, ""), ",; \t")
+        if names:
+            applied.append(var)
+        for name in names:
+            if name not in config.sources:
+                problems.append(f"{var}: '{name}' is not a source declared in the protocol")
+            elif groups.get(name, group) != group:
+                problems.append(f"'{name}' is in more than one group ({groups[name]}, {group})")
+            groups[name] = group
+    if problems:
+        raise ValueError("source groups in .env: " + "; ".join(problems))
+    if groups:
+        for name, cfg in config.sources.items():
+            cfg.enabled = groups.get(name) in COLLECTED_GROUPS
+        config._source_groups = groups
+
+    config._env_overrides = applied
+    return applied
+
+
+# ---------------------------------------------------------------------------
 # Loader
 # ---------------------------------------------------------------------------
 
 
-def load_protocol(path: str | Path) -> ProtocolConfig:
-    """Load and validate a protocol YAML file.
+def load_protocol(path: str | Path, environ: Mapping[str, str] | None = None) -> ProtocolConfig:
+    """Load and validate a protocol YAML file, then apply the .env overrides.
 
     Args:
         path: Path to the YAML protocol file.
+        environ: Environment to read MSRKIT_* overrides from (default: os.environ).
 
     Returns:
         Validated ProtocolConfig instance.
@@ -239,6 +372,7 @@ def load_protocol(path: str | Path) -> ProtocolConfig:
     config = ProtocolConfig.model_validate(data)
     if config.gazetteer:
         config._gazetteer = load_gazetteer(p.parent / config.gazetteer)
+    apply_env_overrides(config, os.environ if environ is None else environ)
     return config
 
 

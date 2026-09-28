@@ -27,7 +27,7 @@ Requer Python 3.11 ou 3.12.
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"            # acrescente ,analysis para LDA/k-means
-cp .env.example .env               # opcional: tokens (ver "Fontes e credenciais")
+cp .env.example .env               # termos, janela e fontes (ver "Parâmetros da busca e fontes")
 
 msrkit validate protocols/v0_rag_agents_testing.yaml
 msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 20
@@ -99,19 +99,32 @@ O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_te
 
 `msrkit validate` confere tudo isso antes de qualquer requisição.
 
-## Fontes e credenciais
+## Parâmetros da busca e fontes (`.env`)
 
-Nenhuma chave é necessária para começar: Hacker News, dev.to e RSS são públicos. As demais melhoram com um token no `.env`:
+`cp .env.example .env` e ajuste. O `msrkit` carrega o `.env` antes de cada comando; variável já definida no shell ou no CI tem precedência. O arquivo tem quatro seções:
 
-| Fonte | Variável | Efeito |
-|---|---|---|
-| GitHub | `GITHUB_TOKEN` | 5.000 req/h e busca de código (necessária para `enrich` e N2/N3) |
-| Stack Exchange | `STACKEXCHANGE_KEY` | cota de 300 para 10.000 req/dia |
-| Hugging Face | `HF_TOKEN` | limites maiores |
-| Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` | busca de posts |
-| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` | exige aprovação prévia do Reddit; desativado no Estudo E2 |
+**1. Parâmetros da busca.** Sobrepõem o protocolo, e o `.env.example` traz os valores definidos para o Estudo E2, iguais aos do protocolo. O manifesto de cada execução registra os valores efetivos e quais vieram do `.env`; `msrkit validate` avisa se divergem do protocolo versionado.
 
-X/Twitter, LinkedIn, Discord, Google Custom Search e Bing não são mineráveis nas condições atuais (custo, termos de uso ou API descontinuada). A viabilidade de cada plataforma, verificada em set/2026, está em [`docs/sources.md`](docs/sources.md).
+| Variável | Valor no E2 |
+|---|---|
+| `MSRKIT_WINDOW_SINCE`, `MSRKIT_WINDOW_UNTIL` | `2023-01-01` a `2026-08-31` (§7.5: RAG e agentes como prática de engenharia, até o data-cutoff) |
+| `MSRKIT_TERMS` | 20 termos em inglês, separados por `;`: RAG, LLM em geral (juiz, golden dataset, regressão, red teaming), vocabulário acadêmico (metamorphic testing, test oracle) e agentes (trajectory, tool calling, multi-agent) |
+| `MSRKIT_TERMS_PT` | 10 termos em português (estrato I4) |
+
+**2–4. Fontes por condição de acesso.** Só as fontes listadas nos grupos pública e manual são coletadas; as pagas e inviáveis ficam desligadas mesmo que o protocolo as habilite.
+
+| Grupo | Variável | Fontes | Credenciais |
+|---|---|---|---|
+| Prontas, sem configuração | `MSRKIT_SOURCES_PUBLIC` | hackernews, devto, stackexchange, huggingface, rss | opcionais: `STACKEXCHANGE_KEY` (300 → 10.000 req/dia), `HF_TOKEN` |
+| Precisam da sua configuração | `MSRKIT_SOURCES_MANUAL` | github, bluesky | `GITHUB_TOKEN` (5.000 req/h e busca de código; necessária para N2/N3), `BLUESKY_HANDLE` + `BLUESKY_APP_PASSWORD`; sem credencial a fonte é pulada e o motivo vai para o manifesto |
+| Pagas | `MSRKIT_SOURCES_PAID` | x_twitter | cobra por post lido; adaptador é stub |
+| Inviáveis | `MSRKIT_SOURCES_UNAVAILABLE` | linkedin, discord | sem API de busca ou sem acesso sem autorização de administradores |
+
+O Reddit tem variáveis na seção 3, mas fica fora dos grupos: credencial nova exige aprovação prévia do Reddit e foi desativado no E2 (ADR-014). Google Custom Search e Bing não têm adaptador (fechada a novos clientes e aposentada). Viabilidade de cada plataforma, verificada em set/2026: [`docs/sources.md`](docs/sources.md).
+
+### Coleta no GitHub Actions
+
+O workflow **Coleta** (`.github/workflows/collect.yml`, disparo manual) roda o fluxo inicial num runner com internet aberta e publica um dataset de teste como artefato: CSV dos itens, manifesto, detecções, planilha de triagem em branco, PRISMA e pacote redigido. Os termos e a janela vêm do protocolo versionado; credenciais opcionais vêm dos secrets `MSRKIT_GITHUB_TOKEN`, `STACKEXCHANGE_KEY`, `HF_TOKEN`, `BLUESKY_HANDLE` e `BLUESKY_APP_PASSWORD`. Por padrão coleta as fontes públicas com no máximo 10 itens por consulta, uma amostra espalhada pelo léxico (`msrkit run --per-query-limit`).
 
 ## Dados
 

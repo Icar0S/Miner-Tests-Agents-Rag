@@ -371,3 +371,17 @@ This document records architectural, design, and technical decisions made during
   - `reports/`.
 
   It also adds a generated README, `.zenodo.json` (dataset, CC BY 4.0 for the package's own data, creators from `--creator`), `package_manifest.json` (version, git commit, Python, protocol SHA-256, per-file hashes) and `SHA256SUMS`. Redaction follows each adapter's `redistribution` policy. `metadata_only` items lose `body` and the match contexts but keep `body_hash`. Author handles are replaced by salted pseudonyms, whose salt is not published, unless `--keep-authors` is given. Raw API responses are never packaged. Zip entries carry a fixed timestamp.
+
+---
+
+## ADR-041: Search Parameters and Source Access Groups in `.env`
+
+- **Context:** The researchers want to set the lexicon, the temporal window and the sources in one place, with the sources separated by how they can be accessed: ready to use, needing a manual credential, paid. `.env` was read only by Docker (`env_file`), never by native runs.
+- **Decision:**
+  - The CLI loads `./.env` before every command. Variables already in the environment win, so CI secrets and shell exports are never overwritten.
+  - `MSRKIT_WINDOW_SINCE`/`UNTIL`, `MSRKIT_TERMS` and `MSRKIT_TERMS_<LANG>` (`;`-separated) override the protocol. Empty variables leave the protocol's values.
+  - Four variables classify the sources: `MSRKIT_SOURCES_PUBLIC`, `MSRKIT_SOURCES_MANUAL`, `MSRKIT_SOURCES_PAID` and `MSRKIT_SOURCES_UNAVAILABLE`. When any of them is set, exactly the public and manual sources are enabled. A source must be declared in the protocol and belong to a single group, and paid and unavailable sources never run.
+  - Each run manifest records `effective_protocol` (window, terms, enabled sources, groups), `env_overrides` (variables applied) and `run_options`. `msrkit validate` warns when `.env` diverges from the protocol file.
+  - `.env.example` carries the E2 values, equal to the protocol, and a test keeps them equal.
+- **Conservative Principle:** the versioned protocol stays the reference for the registered study. `.env` is a convenience for running and exploring, and nothing it changes goes unrecorded.
+- **Related:** `msrkit run --per-query-limit N` caps every query (term or partition), so a test sample spreads over the whole lexicon instead of exhausting the source limit on the first query. The cap is recorded as the truncation reason `item_limit`.

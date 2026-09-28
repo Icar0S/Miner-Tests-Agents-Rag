@@ -284,6 +284,12 @@ class Manifest(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     sources: list[SourceManifestEntry] = []
+    # Search parameters in force (protocol file + .env overrides: window, terms,
+    # enabled sources, source groups) and the MSRKIT_* variables that changed them.
+    effective_protocol: dict[str, Any] = {}
+    env_overrides: list[str] = []
+    # Command-line options that shape the sample (e.g. limit, per_query_limit).
+    run_options: dict[str, Any] = {}
 
 
 # ---------------------------------------------------------------------------
