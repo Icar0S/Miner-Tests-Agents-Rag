@@ -14,6 +14,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 
+from msrkit.coding import CodingForm
 from msrkit.gazetteer import Gazetteer, load_gazetteer
 from msrkit.models import Query
 from msrkit.screening import ScreeningCriteria
@@ -95,6 +96,8 @@ class ProtocolConfig(BaseModel):
     gazetteer: str | None = None
     # Eligibility criteria for the screening sheets (§8, §11).
     screening: ScreeningCriteria = ScreeningCriteria()
+    # Extraction form (Annex A) and gray-literature quality (§9).
+    coding: CodingForm = CodingForm()
 
     _gazetteer: Gazetteer | None = PrivateAttr(default=None)
 

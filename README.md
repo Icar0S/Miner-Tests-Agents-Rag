@@ -186,6 +186,7 @@ Para automação de coletas, scripts e usuários avançados, todos os comandos p
 | **`msrkit enrich`** | Lê árvore de arquivos, workflows de CI, manifestos, contribuidores e meses com commits dos repositórios GitHub da coleta (evidência N3) | `msrkit enrich --limit 100` |
 | **`msrkit extract`** | Detecta ferramentas e métodos do gazetteer com nível de evidência N1/N2/N3 e trecho de evidência | `msrkit extract` |
 | **`msrkit screen`** | Planilha de triagem com os critérios I/E do protocolo: `export`, `import` (valida e registra por codificador) e `status` | `msrkit screen export --coder ana` |
+| **`msrkit coding`** | Formulário de extração (Anexo A) e qualidade (§9) declarados em `coding:`; sugestões automáticas em colunas `auto_*`: `export`, `import`, `status` | `msrkit coding export --coder ana` |
 | **`msrkit recall`** | Recall do minerador (coleta e extração) sobre um gold set curado antes da coleta | `msrkit recall protocols/gold_set.yaml` |
 | **`msrkit fetch`** | Baixa o texto das páginas linkadas (HN, RSS), respeitando robots.txt; texto fica só em `data/fulltext/` e nunca é exportado | `msrkit fetch --limit 50` |
 | **`msrkit normalize`** | Reprocessa e reclassifica dados brutos sem refazer chamadas de rede | `msrkit normalize` |

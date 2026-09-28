@@ -258,6 +258,15 @@ def validate(
             f"  Gazetteer: v{gaz.version} — {len(gaz.tools)} tools "
             f"({len(gaz.anchors())} anchors), {len(gaz.methods)} methods"
         )
+    form = config.coding
+    if form.fields:
+        needs_gaz = [f.name for f in form.fields if f.vocabulary in ("tools", "methods")]
+        if needs_gaz and gaz is None:
+            console.print(f"[red]✗ Coding fields {needs_gaz} need a gazetteer.[/red]")
+            raise typer.Exit(1)
+        console.print(
+            f"  Coding form: {len(form.fields)} fields, {len(form.failure_modes)} failure modes"
+        )
     try:
         n_raw = sum(q.raw for name in config.enabled_sources() for q in config.build_queries(name))
     except ValueError as e:
@@ -1319,6 +1328,120 @@ def screen_status(
     )
     console.print(table)
     console.print(f"Pending (no decision): {total - len(final)}")
+
+
+coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
+app.add_typer(coding_app, name="coding")
+
+
+@coding_app.command("export")
+def coding_export(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", help="Pre-fill the coder column"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Sheet path (.csv)"),
+    status: str = typer.Option(
+        "include", "--status", help="Items by final screening decision: include, uncertain, all"
+    ),
+    prefill: bool = typer.Option(
+        False, "--prefill", help="Copy auto_* suggestions into the form fields that declare it"
+    ),
+    pending_only: bool = typer.Option(
+        True, "--pending-only/--recode", help="Skip items this coder already coded"
+    ),
+) -> None:
+    """Write the extraction sheet: one column per form field, plus auto_* suggestions.
+
+    By default only items included in screening are exported; suggestions come from
+    item concepts, `msrkit extract` detections and `msrkit enrich` signals.
+    """
+    from msrkit.coding import export_form, load_codings, suggestions
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder = _unwrap(coder)
+    status = _unwrap(status)
+    if status not in ("include", "uncertain", "all"):
+        console.print("[red]✗ --status must be include, uncertain or all.[/red]")
+        raise typer.Exit(1)
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    if proto is None or not proto.coding.fields:
+        console.print("[red]✗ The protocol has no extraction form (set `coding.fields`).[/red]")
+        raise typer.Exit(1)
+    items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if status != "all":
+        final = final_decisions(load_decisions(DATA_DIR, run_id))
+        if not final:
+            console.print(
+                "[red]✗ No screening decisions for this run; import them first "
+                "(`msrkit screen import`) or pass --status all.[/red]"
+            )
+            raise typer.Exit(1)
+        items = [it for it in items if final.get(it.id) == status]
+    if _unwrap(pending_only) and coder:
+        done = {item_id for (item_id, c) in load_codings(DATA_DIR, run_id) if c == coder}
+        items = [it for it in items if it.id not in done]
+    systems = tuple(c for c in ("rag", "agente") if c in proto.concepts)
+    auto = suggestions(items, _load_detections(run_id), systems)
+    out = Path(_unwrap(output) or DATA_DIR / "coding" / run_id / f"form_{coder or 'blank'}.csv")
+    n = export_form(items, proto.coding, out, auto=auto, coder=coder, prefill=_unwrap(prefill))
+    console.print(f"[green]✓ {n} items written to {out}[/green]")
+
+
+@coding_app.command("import")
+def coding_import(
+    sheet: str = typer.Argument(..., help="Filled extraction sheet (.csv)"),
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", help="Coder for rows with an empty coder column"),
+) -> None:
+    """Validate a filled extraction sheet and record it (nothing is imported on error)."""
+    from msrkit.coding import append_codings, import_form
+    from msrkit.screening import SheetError
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    if proto is None or not proto.coding.fields:
+        console.print("[red]✗ The protocol has no extraction form (set `coding.fields`).[/red]")
+        raise typer.Exit(1)
+    known = {it.id for it in ItemStorage(DATA_DIR).read_items(run_id)}
+    try:
+        records = import_form(
+            Path(sheet), proto.coding, known, proto.gazetteer_data, default_coder=_unwrap(coder)
+        )
+    except SheetError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        for problem in e.problems[:50]:
+            console.print(f"  - {problem}")
+        raise typer.Exit(1) from None
+    path = append_codings(DATA_DIR, run_id, records)
+    console.print(f"[green]✓ {len(records)} coded items recorded in {path}[/green]")
+
+
+@coding_app.command("status")
+def coding_status(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+) -> None:
+    """Coded items per coder and how many items have two or more coders."""
+    from msrkit.coding import load_codings
+
+    run_id = _resolve_run(_unwrap(run_id))
+    latest = load_codings(DATA_DIR, run_id)
+    per_coder: dict[str, int] = {}
+    coders_by_item: dict[str, set[str]] = {}
+    for item_id, coder in latest:
+        per_coder[coder] = per_coder.get(coder, 0) + 1
+        coders_by_item.setdefault(item_id, set()).add(coder)
+    table = Table(title=f"Coding — {run_id}")
+    table.add_column("Coder")
+    table.add_column("Items")
+    for coder, n in sorted(per_coder.items()):
+        table.add_row(coder, str(n))
+    console.print(table)
+    double = sum(len(c) >= 2 for c in coders_by_item.values())
+    console.print(f"Coded items: {len(coders_by_item)} · double-coded: {double}")
 
 
 @app.command()
