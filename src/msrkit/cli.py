@@ -86,6 +86,21 @@ def _get_registry() -> dict[str, type]:
     return all_adapters()
 
 
+def _tag_concepts(item: Any, concepts: dict[str, list[str]]) -> None:
+    """Label the item with every concept group whose lexicon matches its text."""
+    if not concepts:
+        return
+    from msrkit.keywords import match_terms
+
+    item.concepts = [
+        name
+        for name, lexicon in concepts.items()
+        if match_terms(
+            lexicon, title=item.title, body=item.body, tags=item.tech.tags, path=item.tech.path
+        )
+    ]
+
+
 def _tag_term_languages(item: Any, term_langs: dict[str, str]) -> None:
     """Label each term hit with the language of its lexicon (language stratum)."""
     for hit in item.matched_terms:
@@ -610,6 +625,7 @@ def run(
                             )
 
                         _tag_term_languages(item, term_langs)
+                        _tag_concepts(item, config.concepts)
                         item_storage.save_items([item], run_id)
                         items_collected += 1
                         total_source_items += 1
@@ -710,6 +726,7 @@ def normalize(
     # Load protocol terms if available
     terms: list[str] = []
     term_langs: dict[str, str] = {}
+    concepts: dict[str, list[str]] = {}
     protocol_path = protocol or manifest.protocol_path
     if protocol_path and Path(protocol_path).exists():
         try:
@@ -718,6 +735,7 @@ def normalize(
             proto = load_protocol(protocol_path)
             terms = proto.all_terms()
             term_langs = proto.term_languages()
+            concepts = proto.concepts
         except Exception as e:
             logging.getLogger(__name__).warning("Could not load protocol for terms: %s", e)
 
@@ -768,6 +786,7 @@ def normalize(
                             path=item.tech.path,
                         )
                     _tag_term_languages(item, term_langs)
+                    _tag_concepts(item, concepts)
                     normalized.append(item)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Normalization error: %s", e)
@@ -1205,6 +1224,7 @@ def export(
                 "updated_at",
                 "matched_terms",
                 "matched_languages",
+                "concepts",
                 "stars",
                 "votes",
                 "tags",
@@ -1229,6 +1249,7 @@ def export(
                     row["matched_languages"] = ", ".join(
                         sorted({hit.lang for hit in item.matched_terms if hit.lang})
                     )
+                    row["concepts"] = ", ".join(item.concepts)
                     row["stars"] = (
                         item.engagement.stars
                         if (item.engagement and item.engagement.stars is not None)

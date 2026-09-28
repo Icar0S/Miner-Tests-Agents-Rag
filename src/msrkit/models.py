@@ -129,6 +129,9 @@ class Item(BaseModel):
     engagement: Engagement = Engagement()
     tech: TechContext = TechContext()
     matched_terms: list[TermHit] = []
+    # Protocol concept groups whose lexicon matched (e.g. ["rag", "teste"]);
+    # for Study E2 the system label is concepts ∩ {rag, agente} (§3.1).
+    concepts: list[str] = []
     provenance: Provenance
 
     @model_validator(mode="after")

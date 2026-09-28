@@ -7,6 +7,7 @@ defined in YAML files.
 from __future__ import annotations
 
 import hashlib
+import itertools
 from pathlib import Path
 from typing import Any, Literal
 
@@ -83,6 +84,12 @@ class ProtocolConfig(BaseModel):
     languages: list[str] = ["en"]
     sources: dict[str, SourceConfig]
     limits: LimitsConfig = LimitsConfig()
+    # Concept groups with their own lexicons, e.g. {"rag": [...], "agente": [...],
+    # "teste": [...]}; items are labeled with every concept whose lexicon matches.
+    concepts: dict[str, list[str]] = {}
+    # Optional query terms built as the product of concept lexicons, e.g.
+    # [["rag", "teste"]] adds "<rag term> <teste term>" for every pair.
+    concept_queries: list[list[str]] = []
     # Path to the gazetteer YAML, relative to the protocol file (§7.2).
     gazetteer: str | None = None
 
@@ -103,11 +110,22 @@ class ProtocolConfig(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _check_concept_queries(self) -> ProtocolConfig:
+        for combo in self.concept_queries:
+            unknown = sorted(set(combo) - set(self.concepts))
+            if unknown:
+                raise ValueError(f"concept_queries uses undefined concepts: {unknown}")
+        return self
+
     def all_terms(self) -> list[str]:
-        """Base terms plus every language lexicon, without duplicates, in order."""
+        """Base terms, language lexicons and concept combinations, deduplicated, in order."""
         seen: dict[str, None] = dict.fromkeys(self.terms)
         for lexicon in self.terms_by_language.values():
             seen.update(dict.fromkeys(lexicon))
+        for combo in self.concept_queries:
+            for parts in itertools.product(*(self.concepts[c] for c in combo)):
+                seen[" ".join(parts)] = None
         return list(seen)
 
     def term_languages(self) -> dict[str, str]:

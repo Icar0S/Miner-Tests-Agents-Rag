@@ -55,6 +55,42 @@ terms_by_language:
     - "teste de alucinação"
     - "regressão de prompt"
 
+# ---- Grupos de conceito (§3.1, RQ5) ----
+# Cada item recebe os conceitos cujo léxico casou. Rótulo de sistema do E2:
+# conceitos ∩ {rag, agente}; híbrido recebe os dois. É pré-rotulagem automática;
+# a codificação manual (Anexo A) é a referência.
+concepts:
+  rag:
+    - "RAG"
+    - "retrieval augmented"
+    - "retriever"
+    - "reranker"
+    - "vector store"
+    - "vector database"
+    - "chunking"
+    - "knowledge base"
+    - "geração aumentada por recuperação"
+  agente:
+    - "agent"
+    - "agentic"
+    - "multi-agent"
+    - "tool calling"
+    - "function calling"
+    - "tool use"
+    - "agente"
+  teste:
+    - "test"
+    - "eval"
+    - "evaluation"
+    - "benchmark"
+    - "assertion"
+    - "oracle"
+    - "judge"
+    - "red teaming"
+    - "guardrail"
+    - "teste"
+    - "avaliação"
+
 # ---- Gazetteer (§7.2) ----
 # Ferramentas e métodos conhecidos; caminho relativo a este arquivo.
 gazetteer: gazetteer.yaml

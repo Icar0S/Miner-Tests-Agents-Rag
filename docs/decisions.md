@@ -185,3 +185,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Protocol E2 v2 anchors search and extraction in a gazetteer of known tools and methods (§7.2), with aliases and disambiguation rules (§12.2), kept outside the protocol document because it changes faster.
 - **Decision:** `protocols/gazetteer.yaml`, named by `gazetteer:` in the protocol and versioned with it. Tools carry canonical id, aliases, family (Annex A), target system (`rag`/`agente`), and the structural signals used for N2/N3 (Python imports, dependency names, config files, CLI commands) plus their own repositories. Methods carry aliases and their usual rung on the oracle ladder. Ids and aliases must be unique across entries. Tools marked `ambiguous` only count with lexicon context or a structural signal; frameworks of the system under test are listed with `anchor: false`. Query templates `{anchor}` and `{repo}` expand over anchor tools (optionally by family).
 - **Note:** repositories and package names in the seed must be checked during the pilot; the open discovery pass (§7.6) exists because any gazetteer biases what is found.
+
+---
+
+## ADR-022: Concept Groups and System Label
+
+- **Context:** RQ5 compares RAG and agentic systems, and §3.1 lets a hybrid item carry both labels. Items carried no system label.
+- **Decision:** The protocol declares `concepts:` — named lexicons (here `rag`, `agente`, `teste`). After normalization every item gets `concepts`, the list of groups whose lexicon matches (flexible matching, ADR-016), exported as a CSV column. The E2 system label is `concepts ∩ {rag, agente}`. Optional `concept_queries` adds query terms built as the product of concept lexicons (e.g. system × testing). The mechanism is domain-agnostic: another study defines other groups.
+- **Conservative Principle:** The label is an automatic pre-classification by lexicon, reproducible and auditable; manual coding (Annex A) remains the reference.
