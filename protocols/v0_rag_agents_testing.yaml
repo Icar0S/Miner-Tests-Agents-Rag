@@ -39,6 +39,22 @@ terms:
   - "prompt regression"
   - "eval harness"
 
+# ---- Léxico em português (estrato exploratório, critério I4) ----
+# Buscado junto com `terms`; cada ocorrência registra o idioma do termo
+# (campo `lang` em matched_terms e coluna matched_languages no CSV).
+terms_by_language:
+  pt:
+    - "teste de RAG"
+    - "avaliação de RAG"
+    - "teste de LLM"
+    - "avaliação de LLM"
+    - "LLM como juiz"
+    - "teste de agentes"
+    - "avaliação de agentes"
+    - "dataset de referência"
+    - "teste de alucinação"
+    - "regressão de prompt"
+
 # Idiomas alvo
 languages:
   - en
@@ -69,6 +85,7 @@ sources:
         - sqa
         - datascience
         - ai
+        - pt.stackoverflow   # estrato em português
       # `tagged` tem semântica OU na API (/search/advanced: "at least one will
       # be present"). Cada termo é buscado com a lista completa de tags (ADR-017).
       tagged:

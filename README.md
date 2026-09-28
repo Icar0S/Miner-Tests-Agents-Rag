@@ -226,12 +226,18 @@ terms:
   - "hallucination test"
   - "eval harness"
 
-# 3. Idiomas desejados
+# 3. Léxico adicional por idioma (estrato de idioma nas exportações)
+terms_by_language:
+  pt:
+    - "teste de RAG"
+    - "avaliação de agentes"
+
+# 4. Idiomas desejados
 languages:
   - en
   - pt
 
-# 4. Habilitar ou desabilitar fontes de acordo com a sua necessidade
+# 5. Habilitar ou desabilitar fontes de acordo com a sua necessidade
 sources:
   hackernews:
     enabled: true

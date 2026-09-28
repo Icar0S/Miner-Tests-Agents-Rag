@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from msrkit.models import Query
 
@@ -62,10 +62,37 @@ class ProtocolConfig(BaseModel):
     name: str
     description: str
     window: WindowConfig
-    terms: list[str]
+    terms: list[str]  # base lexicon, in English
+    # Additional lexicons per language, e.g. {"pt": ["teste de RAG", ...]}.
+    terms_by_language: dict[str, list[str]] = {}
     languages: list[str] = ["en"]
     sources: dict[str, SourceConfig]
     limits: LimitsConfig = LimitsConfig()
+
+    @model_validator(mode="after")
+    def _check_term_languages(self) -> ProtocolConfig:
+        """Every extra lexicon must belong to a language declared in `languages`."""
+        undeclared = sorted(set(self.terms_by_language) - set(self.languages))
+        if undeclared:
+            raise ValueError(
+                f"terms_by_language has languages not listed in `languages`: {undeclared}"
+            )
+        return self
+
+    def all_terms(self) -> list[str]:
+        """Base terms plus every language lexicon, without duplicates, in order."""
+        seen: dict[str, None] = dict.fromkeys(self.terms)
+        for lexicon in self.terms_by_language.values():
+            seen.update(dict.fromkeys(lexicon))
+        return list(seen)
+
+    def term_languages(self) -> dict[str, str]:
+        """Map each term to the language of the lexicon it came from."""
+        mapping = dict.fromkeys(self.terms, "en")
+        for lang, lexicon in self.terms_by_language.items():
+            for term in lexicon:
+                mapping.setdefault(term, lang)
+        return mapping
 
     def enabled_sources(self) -> list[str]:
         """Return names of all enabled sources."""
@@ -90,7 +117,7 @@ class ProtocolConfig(BaseModel):
             queries.append(
                 Query(
                     source=source_name,
-                    terms=self.terms,
+                    terms=self.all_terms(),
                     kind=kind,
                     since=since,
                     until=until,

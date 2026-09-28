@@ -217,3 +217,54 @@ def _make_item(
     if body_hash is not None:
         kwargs["body_hash"] = body_hash
     return Item(**kwargs)
+
+
+class TestLanguageLexicons:
+    """Protocol lexicons per language and the language stratum (C5)."""
+
+    def _config(self, **overrides):
+        from msrkit.config import ProtocolConfig
+
+        data = {
+            "version": 0,
+            "name": "t",
+            "description": "d",
+            "window": {"since": "2023-01-01", "until": "2023-12-31"},
+            "terms": ["RAG testing", "shared term"],
+            "terms_by_language": {"pt": ["teste de RAG", "shared term"]},
+            "languages": ["en", "pt"],
+            "sources": {"hackernews": {"enabled": True}},
+        }
+        data.update(overrides)
+        return ProtocolConfig.model_validate(data)
+
+    def test_all_terms_merges_lexicons_without_duplicates(self) -> None:
+        cfg = self._config()
+        assert cfg.all_terms() == ["RAG testing", "shared term", "teste de RAG"]
+        assert cfg.build_queries("hackernews")[0].terms == cfg.all_terms()
+
+    def test_term_languages(self) -> None:
+        langs = self._config().term_languages()
+        assert langs == {"RAG testing": "en", "shared term": "en", "teste de RAG": "pt"}
+
+    def test_undeclared_language_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="not listed"):
+            self._config(languages=["en"])
+
+    def test_portuguese_inflections_match(self) -> None:
+        from msrkit.keywords import match_terms
+
+        assert match_terms(["avaliação de RAG"], title="Avaliações de RAG em produção")
+        assert match_terms(["teste de agentes"], title="Testes de agente com LangSmith")
+        assert match_terms(["LLM como juiz"], title="Usando LLMs como juízes")
+        assert not match_terms(["teste de RAG"], title="Receita de bolo")
+
+    def test_sample_protocol_has_portuguese_lexicon(self) -> None:
+        from msrkit.config import load_protocol
+
+        cfg = load_protocol("protocols/v0_rag_agents_testing.yaml")
+        assert "pt" in cfg.languages
+        assert cfg.terms_by_language["pt"]
+        assert "pt.stackoverflow" in cfg.sources["stackexchange"].extra["sites"]

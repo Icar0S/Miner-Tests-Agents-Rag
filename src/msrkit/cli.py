@@ -86,6 +86,12 @@ def _get_registry() -> dict[str, type]:
     return all_adapters()
 
 
+def _tag_term_languages(item: Any, term_langs: dict[str, str]) -> None:
+    """Label each term hit with the language of its lexicon (language stratum)."""
+    for hit in item.matched_terms:
+        hit.lang = term_langs.get(hit.term, hit.lang)
+
+
 def _unwrap(val: object) -> Any:
     """Unwrap Typer default parameter if called directly from Python code."""
     from typer.models import ArgumentInfo, OptionInfo
@@ -382,6 +388,9 @@ def run(
         else:
             target_manifest.sources.append(entry)
 
+    all_terms = config.all_terms()
+    term_langs = config.term_languages()
+
     registry = _get_registry()
     run_id = resume or generate_run_id()
     proto_hash = protocol_sha256(protocol)
@@ -539,7 +548,7 @@ def run(
 
                     # Normalize
                     try:
-                        item = adapter.normalize(raw_item, terms=config.terms)
+                        item = adapter.normalize(raw_item, terms=all_terms)
                         # Update provenance
                         item.provenance.run_id = run_id
                         item.provenance.query_string = query_display
@@ -550,17 +559,18 @@ def run(
                         )
 
                         # Post-normalization term matching
-                        if not item.matched_terms and config.terms:
+                        if not item.matched_terms and all_terms:
                             from msrkit.keywords import match_terms
 
                             item.matched_terms = match_terms(
-                                config.terms,
+                                all_terms,
                                 title=item.title,
                                 body=item.body,
                                 tags=item.tech.tags,
                                 path=item.tech.path,
                             )
 
+                        _tag_term_languages(item, term_langs)
                         item_storage.save_items([item], run_id)
                         items_collected += 1
                         total_source_items += 1
@@ -660,13 +670,15 @@ def normalize(
 
     # Load protocol terms if available
     terms: list[str] = []
+    term_langs: dict[str, str] = {}
     protocol_path = protocol or manifest.protocol_path
     if protocol_path and Path(protocol_path).exists():
         try:
             from msrkit.config import load_protocol
 
             proto = load_protocol(protocol_path)
-            terms = proto.terms
+            terms = proto.all_terms()
+            term_langs = proto.term_languages()
         except Exception as e:
             logging.getLogger(__name__).warning("Could not load protocol for terms: %s", e)
 
@@ -716,6 +728,7 @@ def normalize(
                             tags=item.tech.tags,
                             path=item.tech.path,
                         )
+                    _tag_term_languages(item, term_langs)
                     normalized.append(item)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Normalization error: %s", e)
@@ -1075,6 +1088,7 @@ def export(
                 "created_at",
                 "updated_at",
                 "matched_terms",
+                "matched_languages",
                 "stars",
                 "votes",
                 "tags",
@@ -1095,6 +1109,9 @@ def export(
                         ", ".join(sorted(set(hit.term for hit in item.matched_terms)))
                         if item.matched_terms
                         else ""
+                    )
+                    row["matched_languages"] = ", ".join(
+                        sorted({hit.lang for hit in item.matched_terms if hit.lang})
                     )
                     row["stars"] = (
                         item.engagement.stars

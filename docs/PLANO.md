@@ -13,8 +13,8 @@ Legenda: ✅ concluído · 🔄 em andamento · ⏳ pendente
 | C2 | **Truncamento registrado** — manifesto registra `truncated=true` em consultas cortadas e em fontes sem cobertura histórica (RSS) | ✅ |
 | C3 | **Filtro local sem perda** — casamento de termos tolera flexões e hífens; descartes de dev.to/RSS são registrados no manifesto | ✅ |
 | C6 | **Filtro de tags do Stack Exchange** — `tagged` com semântica OU, como documentado pela API | ✅ |
-| C5 | **Léxico em português** — termos em pt no protocolo, com estrato identificável | 🔄 |
-| C4 | **Conteúdo integral** — respostas das threads do Stack Exchange e texto do artigo apontado (HN, RSS, dev.to) | ⏳ |
+| C5 | **Léxico em português** — termos em pt no protocolo, com estrato identificável | ✅ |
+| C4 | **Conteúdo integral** — respostas das threads do Stack Exchange e texto do artigo apontado (HN, RSS, dev.to) | 🔄 |
 
 ## Registro
 

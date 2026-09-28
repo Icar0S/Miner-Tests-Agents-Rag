@@ -105,6 +105,7 @@ class TermHit(BaseModel):
     term: str
     field: Literal["title", "body", "tags", "path"]
     context: str  # ±40 tokens around the occurrence
+    lang: str | None = None  # language of the lexicon the term belongs to
 
 
 # ---------------------------------------------------------------------------

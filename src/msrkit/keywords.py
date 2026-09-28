@@ -16,6 +16,7 @@ Terms containing symbols (C++, .NET, C#) always use exact matching.
 from __future__ import annotations
 
 import re
+import unicodedata
 from functools import lru_cache
 from typing import Literal
 
@@ -24,10 +25,22 @@ from msrkit.models import TermHit
 MatchMode = Literal["flexible", "exact"]
 
 # Checked in order; the first suffix that leaves a stem of MIN_STEM chars wins.
-_SUFFIXES = ("ations", "ation", "ings", "ing", "ers", "er", "ed", "es", "s", "e")
+_SUFFIXES = (
+    # English
+    "ations", "ation", "ings", "ing", "ers", "er", "ed",
+    # Portuguese, accent-folded (avaliação/avaliações -> avali-, testes -> test-)
+    "acoes", "acao", "coes", "cao",
+    # shared
+    "es", "s", "e",
+)  # fmt: skip
 MIN_STEM = 4
 _WORD_SEP = re.compile(r"[\s\-_/]+")
 _SEP_PATTERN = r"[\s\-_/]+"
+
+
+def _fold(text: str) -> str:
+    """Strip accents one character at a time, so string positions are preserved."""
+    return "".join(unicodedata.normalize("NFD", ch)[0] for ch in text)
 
 
 def _stem(word: str) -> str:
@@ -56,9 +69,11 @@ def _exact_pattern(term: str) -> re.Pattern[str]:
 @lru_cache(maxsize=1024)
 def _build_pattern(term: str, mode: MatchMode = "flexible") -> re.Pattern[str]:
     """Build the regex for a term in the given matching mode."""
-    words = [w for w in _WORD_SEP.split(term.strip()) if w]
-    if mode == "exact" or not words or any(re.search(r"\W", w) for w in words):
+    words = [w for w in _WORD_SEP.split(_fold(term.strip())) if w]
+    if mode == "exact":
         return _exact_pattern(term)
+    if not words or any(re.search(r"\W", w) for w in words):
+        return _exact_pattern(_fold(term))
     body = _SEP_PATTERN.join(_word_pattern(w) for w in words)
     return re.compile(rf"\b{body}", re.IGNORECASE)
 
@@ -137,7 +152,10 @@ def match_terms(
             if field_value is None:
                 continue
 
-            for match in pattern.finditer(field_value):
+            # Flexible mode matches on accent-folded text; _fold keeps positions,
+            # so the context window is cut from the original text.
+            searchable = _fold(field_value) if mode == "flexible" else field_value
+            for match in pattern.finditer(searchable):
                 context = _extract_context(
                     field_value,
                     match.start(),

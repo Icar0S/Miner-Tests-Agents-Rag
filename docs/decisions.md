@@ -153,3 +153,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** The adapter assumed that `;` in `tagged` meant AND and therefore never sent tags together with search terms. The official documentation of `/search/advanced` states the opposite: `tagged` is "a semicolon delimited list of tags, of which at least one will be present on all returned questions".
 - **Decision:** Each (site, term) request carries the full tag list joined by `;` (OR), as in Protocol E2 v2 §7.3. The `tagged_mode: and` option was removed, since the endpoint does not offer AND. Sites follow the protocol: stackoverflow, softwareengineering, sqa, datascience, ai.
 - **Verification:** the pilot compares, for one term, the result count with the tag list against the union of single-tag requests; a mismatch reopens this ADR.
+
+---
+
+## ADR-018: Per-Language Lexicons and Language Stratum
+
+- **Context:** Protocol E2 accepts English and Portuguese items (criterion I4) and reports a Portuguese exploratory stratum, but the protocol had only English terms and the `languages` field was unused.
+- **Decision:** `terms_by_language` adds lexicons per language next to the base `terms` (English); every key must be declared in `languages`. Queries search all lexicons; each `TermHit` carries the `lang` of its lexicon, and the CSV export adds `matched_languages`. Flexible matching folds accents (positions preserved, so context windows keep the original text) and strips Portuguese `-ção/-ções` suffixes. `pt.stackoverflow` is added to the Stack Exchange sites.
+- **Conservative Principle:** The stratum is derived from which lexicon matched — a reproducible rule — rather than from automatic language detection.

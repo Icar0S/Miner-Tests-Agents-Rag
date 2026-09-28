@@ -943,3 +943,33 @@ class TestTruncationManifest:
         assert entry.queries
         assert all(q.truncated for q in entry.queries)
         assert all("no_historical_coverage" in q.truncation_reasons for q in entry.queries)
+
+
+class TestLanguageStratum:
+    """Term hits carry their lexicon language, exported as matched_languages (C5)."""
+
+    def test_csv_exports_matched_languages(
+        self, tmp_path: Path, sample_items: list[Item], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.cli import _tag_term_languages
+        from msrkit.models import TermHit
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        item = sample_items[0]
+        item.matched_terms = [
+            TermHit(term="RAG testing", field="title", context="c"),
+            TermHit(term="teste de RAG", field="body", context="c"),
+        ]
+        _tag_term_languages(item, {"RAG testing": "en", "teste de RAG": "pt"})
+        assert [h.lang for h in item.matched_terms] == ["en", "pt"]
+
+        ItemStorage(tmp_path).save_items([item], "run-lang")
+        out = tmp_path / "out.csv"
+        result = runner.invoke(
+            app, ["export", "--run", "run-lang", "--format", "csv", "-o", str(out)]
+        )
+        assert result.exit_code == 0, result.stdout
+        header, row = out.read_text(encoding="utf-8-sig").splitlines()[:2]
+        cols = header.split(";")
+        assert "matched_languages" in cols
+        assert row.split(";")[cols.index("matched_languages")] == "en, pt"
