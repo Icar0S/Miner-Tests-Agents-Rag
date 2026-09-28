@@ -16,6 +16,7 @@ from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 
 from msrkit.gazetteer import Gazetteer, load_gazetteer
 from msrkit.models import Query
+from msrkit.screening import ScreeningCriteria
 
 # ---------------------------------------------------------------------------
 # Protocol config models
@@ -92,6 +93,8 @@ class ProtocolConfig(BaseModel):
     concept_queries: list[list[str]] = []
     # Path to the gazetteer YAML, relative to the protocol file (§7.2).
     gazetteer: str | None = None
+    # Eligibility criteria for the screening sheets (§8, §11).
+    screening: ScreeningCriteria = ScreeningCriteria()
 
     _gazetteer: Gazetteer | None = PrivateAttr(default=None)
 

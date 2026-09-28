@@ -95,6 +95,23 @@ concepts:
 # Ferramentas e métodos conhecidos; caminho relativo a este arquivo.
 gazetteer: gazetteer.yaml
 
+# ---- Critérios de elegibilidade (§8) para as planilhas de triagem ----
+screening:
+  batch_size: 25
+  inclusion:
+    I1: "Trata de teste, avaliação com veredito, verificação ou validação de sistema RAG ou agêntico"
+    I2: "Publicado ou com última atividade dentro da janela temporal"
+    I3: "Conteúdo público, acessível sem autenticação de terceiro"
+    I4: "Inglês ou português"
+    I5: "Artefato de código com elemento de teste identificável"
+  exclusion:
+    E1: "Usa LLM como ferramenta para testar outro software"
+    E2: "Trata apenas do modelo isolado, sem recuperação nem ação"
+    E3: "Conteúdo promocional sem detalhe técnico verificável"
+    E4: "Duplicata ou espelho"
+    E5: "Tutorial genérico sem critério de aprovação, oráculo ou modo de falha"
+    E6: "Repositório-exemplo sem sinais de manutenção (quando o objetivo é N3)"
+
 # Idiomas alvo
 languages:
   - en

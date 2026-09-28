@@ -1081,6 +1081,107 @@ def extract(
     )
 
 
+screen_app = typer.Typer(help="Screening sheets: export, import decisions, status (§8, §11).")
+app.add_typer(screen_app, name="screen")
+
+
+def _resolve_run(run_id: str | None) -> str:
+    run_id = run_id or _get_latest_run_id()
+    if not run_id:
+        console.print("[red]✗ No runs found in data directory.[/red]")
+        raise typer.Exit(1)
+    return run_id
+
+
+def _screening_criteria(run_id: str, protocol: str | None) -> Any:
+    from msrkit.screening import ScreeningCriteria
+
+    proto = _load_run_protocol(run_id, protocol)
+    return proto.screening if proto is not None else ScreeningCriteria()
+
+
+@screen_app.command("export")
+def screen_export(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", help="Pre-fill the coder column"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Sheet path (.csv)"),
+    pending_only: bool = typer.Option(
+        True, "--pending-only/--all", help="Skip items this coder already decided"
+    ),
+) -> None:
+    """Write a screening sheet (CSV) with one column per eligibility criterion."""
+    from msrkit.screening import export_sheet, load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder = _unwrap(coder)
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if _unwrap(pending_only) and coder:
+        done = {item_id for (item_id, c) in load_decisions(DATA_DIR, run_id) if c == coder}
+        items = [it for it in items if it.id not in done]
+    out = Path(
+        _unwrap(output) or DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv"
+    )
+    n = export_sheet(items, criteria, out, coder=coder)
+    console.print(f"[green]✓ {n} items written to {out}[/green]")
+
+
+@screen_app.command("import")
+def screen_import(
+    sheet: str = typer.Argument(..., help="Filled screening sheet (.csv)"),
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", help="Coder for rows with an empty coder column"),
+) -> None:
+    """Validate a filled sheet and record its decisions (nothing is imported on error)."""
+    from msrkit.screening import SheetError, append_decisions, import_sheet
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    known = {it.id for it in ItemStorage(DATA_DIR).read_items(run_id)}
+    try:
+        decisions = import_sheet(Path(sheet), criteria, known, default_coder=_unwrap(coder))
+    except SheetError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        for problem in e.problems[:50]:
+            console.print(f"  - {problem}")
+        raise typer.Exit(1) from None
+    path = append_decisions(DATA_DIR, run_id, decisions)
+    console.print(f"[green]✓ {len(decisions)} decisions recorded in {path}[/green]")
+
+
+@screen_app.command("status")
+def screen_status(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+) -> None:
+    """Decisions per coder and the resulting include/exclude/uncertain counts."""
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    latest = load_decisions(DATA_DIR, run_id)
+    total = len(ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True))
+    table = Table(title=f"Screening — {run_id} ({total} items)")
+    for col in ("Coder", "include", "exclude", "uncertain"):
+        table.add_column(col)
+    per_coder: dict[str, dict[str, int]] = {}
+    for (_item, coder), d in latest.items():
+        row = per_coder.setdefault(coder, {"include": 0, "exclude": 0, "uncertain": 0})
+        row[d.decision] += 1
+    for coder, row in sorted(per_coder.items()):
+        table.add_row(coder, str(row["include"]), str(row["exclude"]), str(row["uncertain"]))
+    final = final_decisions(latest)
+    table.add_row(
+        "[bold]final[/bold]",
+        *(str(sum(v == k for v in final.values())) for k in ("include", "exclude", "uncertain")),
+    )
+    console.print(table)
+    console.print(f"Pending (no decision): {total - len(final)}")
+
+
 @app.command(name="dedupe")
 def dedupe(
     run_id: str | None = typer.Option(
