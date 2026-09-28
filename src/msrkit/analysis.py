@@ -252,3 +252,101 @@ def write_csv(rows: Sequence[BaseModel], path: Path) -> Path:
                 }
             )
     return path
+
+
+# -- A3: failure-mode coverage ------------------------------------------------
+
+
+class CoverageCell(BaseModel):
+    failure_mode: str
+    entry: str
+    kind: Literal["tool", "method"]
+    system: str  # rag, agente or "unlabelled"
+    units: int
+
+
+class FailureModeSummary(BaseModel):
+    failure_mode: str
+    label: str
+    units: int
+    rag: int
+    agente: int
+    tools: int  # distinct tools co-coded with the mode
+    methods: int
+    top_entries: str  # most frequent tools/methods, "id (n)"
+    covered: bool
+
+
+def coverage(
+    units: list[Unit], catalog: dict[str, str] | None = None, top: int = 5
+) -> tuple[list[CoverageCell], list[FailureModeSummary]]:
+    """Failure mode × tool/method, per system; every catalog mode is summarized.
+
+    A mode of the catalog without units is reported as not covered — absence is a
+    result (§5.2). Modes coded but absent from the catalog are appended.
+    """
+    catalog = catalog or {}
+    cells: Counter[tuple[str, str, str, str]] = Counter()
+    per_mode: dict[str, list[Unit]] = {}
+    for u in units:
+        systems = u.systems or ["unlabelled"]
+        for mode in u.failure_modes:
+            per_mode.setdefault(mode, []).append(u)
+            for system in systems:
+                for tool in u.tools:
+                    cells[(mode, tool, "tool", system)] += 1
+                for method in u.methods:
+                    cells[(mode, method, "method", system)] += 1
+    cell_rows = [
+        CoverageCell(failure_mode=m, entry=e, kind=k, system=s, units=n)  # type: ignore[arg-type]
+        for (m, e, k, s), n in sorted(cells.items(), key=lambda kv: (kv[0][0], -kv[1], kv[0]))
+    ]
+    order = list(catalog) + sorted(set(per_mode) - set(catalog))
+    summaries = []
+    for mode in order:
+        us = per_mode.get(mode, [])
+        entries: Counter[str] = Counter()
+        tools: set[str] = set()
+        methods: set[str] = set()
+        for u in us:
+            tools |= set(u.tools)
+            methods |= set(u.methods)
+            entries.update([*u.tools, *u.methods])
+        summaries.append(
+            FailureModeSummary(
+                failure_mode=mode,
+                label=catalog.get(mode, "(not in catalog)"),
+                units=len(us),
+                rag=sum("rag" in u.systems for u in us),
+                agente=sum("agente" in u.systems for u in us),
+                tools=len(tools),
+                methods=len(methods),
+                top_entries=", ".join(f"{e} ({n})" for e, n in entries.most_common(top)),
+                covered=bool(us),
+            )
+        )
+    return cell_rows, summaries
+
+
+def coverage_matrix(
+    cells: list[CoverageCell], modes: list[str], system: str | None = None
+) -> tuple[list[str], list[list[int]]]:
+    """Wide matrix (rows = modes, columns = entries by total) for one system or all."""
+    chosen = [c for c in cells if system is None or c.system == system]
+    totals: Counter[str] = Counter()
+    grid: dict[tuple[str, str], int] = {}
+    for c in chosen:
+        totals[c.entry] += c.units
+        grid[(c.failure_mode, c.entry)] = grid.get((c.failure_mode, c.entry), 0) + c.units
+    columns = [e for e, _ in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return columns, [[grid.get((m, e), 0) for e in columns] for m in modes]
+
+
+def write_matrix(columns: list[str], rows: list[list[int]], modes: list[str], path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        writer = csv.writer(fh, delimiter=";")
+        writer.writerow(["failure_mode", *columns])
+        for mode, row in zip(modes, rows, strict=True):
+            writer.writerow([mode, *row])
+    return path

@@ -10,6 +10,7 @@ from rich.table import Table
 from msrkit import cli as _cli
 from msrkit.cli._common import (
     _load_detections,
+    _load_run_protocol,
     _resolve_run,
     _unwrap,
     app,
@@ -89,4 +90,45 @@ def analyze_frequency(
     for p in pair_rows[:top]:
         pt.add_row(p.a, p.b, str(p.together), f"{p.jaccard:.2f}", f"{p.lift:.2f}")
     console.print(pt)
+    console.print(f"[green]✓ CSV written to {out}[/green]")
+
+
+@analyze_app.command("coverage")
+def analyze_coverage(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+) -> None:
+    """A3: failure mode × tool/method coverage, for RAG and agents (coding basis).
+
+    Writes the long table, one wide matrix per system and a per-mode summary that
+    lists catalog modes nobody addresses.
+    """
+    from msrkit.analysis import coverage, coverage_matrix, write_csv, write_matrix
+
+    run_id = _resolve_run(_unwrap(run_id))
+    units = _load_units(run_id, "coding")
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    catalog = proto.coding.failure_modes if proto is not None else {}
+    cells, summaries = coverage(units, catalog)
+    out = _out_dir(run_id)
+    write_csv(cells, out / "coverage_long.csv")
+    write_csv(summaries, out / "coverage_summary.csv")
+    modes = [s.failure_mode for s in summaries]
+    for system in ("rag", "agente", None):
+        columns, rows = coverage_matrix(cells, modes, system)
+        write_matrix(columns, rows, modes, out / f"coverage_matrix_{system or 'all'}.csv")
+
+    table = Table(title=f"Failure-mode coverage (coding) — {len(units)} units")
+    for col in ("Mode", "Label", "Units", "rag", "agente", "Tools", "Methods", "Top"):
+        table.add_column(col)
+    for s in summaries:
+        style = "" if s.covered else "dim"
+        table.add_row(
+            s.failure_mode, s.label, str(s.units), str(s.rag), str(s.agente),
+            str(s.tools), str(s.methods), s.top_entries, style=style,
+        )  # fmt: skip
+    console.print(table)
+    uncovered = [s.failure_mode for s in summaries if not s.covered]
+    if uncovered:
+        console.print(f"Not addressed by any unit: {', '.join(uncovered)}")
     console.print(f"[green]✓ CSV written to {out}[/green]")

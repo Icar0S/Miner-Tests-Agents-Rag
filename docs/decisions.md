@@ -309,3 +309,15 @@ This document records architectural, design, and technical decisions made during
 
 - **Context:** A1–A6 (§14) count tools, methods and failure modes. The same repository appears in many items (repo, code hits, issues), and the data comes either from automatic extraction or from manual coding.
 - **Decision:** Analyses count *units*: a GitHub repository with all its items merged, or a single item elsewhere. Every analysis takes `--basis detections|coding`, and the basis is part of each output file name. On the coding basis, several coders are combined by consensus. An `enum` value counts only when all coders agree, and a `multi` field keeps the intersection. Disputed values stay out until a third coder resolves them, so the reported numbers are conservative. A1/A2 (`msrkit analyze frequency`) reports units per tool and method. For tools the counts are broken down by best evidence level (disjoint N1/N2/N3); for tools and methods they are also given per system label, where a hybrid unit counts in both, and per source. Co-occurrence within units is reported with Jaccard and lift.
+
+---
+
+## ADR-036: Failure-Mode Coverage Reports Absence
+
+- **Context:** A3 asks which failure modes (FP1–FP13, AF1–AF12) the tools and methods address, for RAG and for agents. §5.2 treats the agent model as a seed, where a mode with no occurrences is a finding.
+- **Decision:** `msrkit analyze coverage` runs on the coding basis only, because failure modes are coded manually. It writes:
+  - a long table (mode × entry × system, in units);
+  - one wide matrix per system (`rag`, `agente`, all), with columns ordered by total;
+  - a per-mode summary in catalog order: units, rag/agente units, distinct tools and methods, and the most frequent entries.
+
+  Catalog modes nobody addresses are listed as not covered. Coded modes outside the catalog are appended as "(not in catalog)", so emergent categories stay visible. Units without a system label are kept as "unlabelled".

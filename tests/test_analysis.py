@@ -14,6 +14,8 @@ from msrkit.analysis import (
     binomial_greater,
     consensus,
     cooccurrence,
+    coverage,
+    coverage_matrix,
     frequency,
     units_from_codings,
     units_from_detections,
@@ -163,3 +165,54 @@ class TestAnalyzeFrequencyCommand:
         r = runner.invoke(app, ["analyze", "frequency", "--run", "run-a", "--basis", "coding"])
         assert r.exit_code == 0, r.stdout
         assert (tmp_path / "reports/run-a/analysis/frequency_coding.csv").exists()
+
+
+COVERAGE_UNITS = [
+    Unit(id="a", source="github", systems=["rag"], tools={"ragas": "N2"}, methods=["llm-judge"],
+         failure_modes=["FP2", "FP4"]),
+    Unit(id="b", source="github", systems=["rag", "agente"], tools={"promptfoo": "N1"},
+         failure_modes=["FP4", "AF1"]),
+    Unit(id="c", source="devto", systems=[], methods=["metamorphic"], failure_modes=["AF99"]),
+]  # fmt: skip
+CATALOG = {"FP2": "top-k", "FP4": "not extracted", "AF1": "wrong tool", "AF2": "bad args"}
+
+
+class TestCoverage:
+    def test_summary_reports_uncovered_and_uncatalogued(self) -> None:
+        cells, summaries = coverage(COVERAGE_UNITS, CATALOG)
+        by_mode = {s.failure_mode: s for s in summaries}
+        assert [s.failure_mode for s in summaries] == ["FP2", "FP4", "AF1", "AF2", "AF99"]
+        assert not by_mode["AF2"].covered and by_mode["AF2"].units == 0
+        assert by_mode["AF99"].label == "(not in catalog)"
+        fp4 = by_mode["FP4"]
+        assert (fp4.units, fp4.rag, fp4.agente, fp4.tools, fp4.methods) == (2, 2, 1, 2, 1)
+        systems = {(c.failure_mode, c.entry, c.system) for c in cells}
+        assert ("AF1", "promptfoo", "agente") in systems
+        assert ("AF99", "metamorphic", "unlabelled") in systems
+
+    def test_matrix_per_system(self) -> None:
+        cells, summaries = coverage(COVERAGE_UNITS, CATALOG)
+        modes = [s.failure_mode for s in summaries]
+        columns, rows = coverage_matrix(cells, modes, "agente")
+        assert columns == ["promptfoo"]
+        assert dict(zip(modes, (r[0] for r in rows), strict=True))["AF1"] == 1
+        columns_all, _ = coverage_matrix(cells, modes)
+        assert set(columns_all) == {"ragas", "llm-judge", "promptfoo", "metamorphic"}
+
+    def test_command(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(ITEMS, "run-c")
+        rec = _rec("r2", "ana", sistema=["rag"], ferramentas=["ragas"], modos_falha=["FP2"])
+        append_codings(tmp_path, "run-c", [rec])
+        r = CliRunner().invoke(
+            app,
+            ["analyze", "coverage", "--run", "run-c", "-p", "protocols/v0_rag_agents_testing.yaml"],
+        )
+        assert r.exit_code == 0, r.stdout
+        out = tmp_path / "reports/run-c/analysis"
+        assert (
+            (out / "coverage_matrix_rag.csv")
+            .read_text(encoding="utf-8-sig")
+            .startswith("failure_mode;ragas")
+        )
+        assert "Not addressed by any unit" in r.stdout
