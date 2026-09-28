@@ -1182,6 +1182,56 @@ def screen_status(
     console.print(f"Pending (no decision): {total - len(final)}")
 
 
+@app.command()
+def recall(
+    gold: str = typer.Argument(..., help="Gold set YAML (see msrkit.validation)"),
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    all_runs: bool = typer.Option(False, "--all", "-a", help="Use items from every run"),
+) -> None:
+    """Recall of the miner on a gold set curated before collection (§10.3, §12.3)."""
+    from msrkit.extract import Detection
+    from msrkit.storage import ItemStorage
+    from msrkit.validation import load_gold, measure_recall
+
+    storage = ItemStorage(DATA_DIR)
+    runs = storage.list_runs() if _unwrap(all_runs) else [_resolve_run(_unwrap(run_id))]
+    items = [it for r in runs for it in storage.read_items(r)]
+    detections: list[Detection] = []
+    for r in runs:
+        path = DATA_DIR / "extract" / r / "detections.jsonl"
+        if path.exists():
+            detections.extend(
+                Detection.model_validate_json(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+    try:
+        report = measure_recall(load_gold(gold), items, detections)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
+
+    table = Table(title=f"Gold set recall — {', '.join(runs)}")
+    for col in ("Host", "Retrieved", "Total"):
+        table.add_column(col)
+    for host, (got, total) in report.by_host.items():
+        table.add_row(host, str(got), str(total))
+    console.print(table)
+    console.print(
+        f"[bold]Collection recall:[/bold] {report.retrieved}/{report.total} "
+        f"({report.recall:.1%})"
+    )
+    if report.tools_expected:
+        console.print(
+            f"[bold]Detection recall:[/bold] {report.tools_detected}/{report.tools_expected} "
+            f"({report.detection_recall:.1%})"
+        )
+    for url in report.missed:
+        console.print(f"  [yellow]missed[/yellow] {url}")
+    for miss in report.tools_missed:
+        console.print(f"  [yellow]tool not detected[/yellow] {miss}")
+
+
 @app.command(name="dedupe")
 def dedupe(
     run_id: str | None = typer.Option(
