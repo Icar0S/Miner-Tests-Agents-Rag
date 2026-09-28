@@ -55,6 +55,10 @@ terms_by_language:
     - "teste de alucinação"
     - "regressão de prompt"
 
+# ---- Gazetteer (§7.2) ----
+# Ferramentas e métodos conhecidos; caminho relativo a este arquivo.
+gazetteer: gazetteer.yaml
+
 # Idiomas alvo
 languages:
   - en
@@ -91,9 +95,9 @@ sources:
       - {kind: code, label: rag-metricas-teste, evidence: N2, q: '"faithfulness" "context_recall" language:Python path:tests'}
       - {kind: code, label: golden-dataset, evidence: N2, q: '"golden" "dataset" path:evals'}
       - {kind: code, label: tool-call-assert, evidence: N2, q: '"tool_call" "assert" language:Python path:tests'}
-      - {kind: code, label: ci-ragas, evidence: N3, q: 'ragas path:.github/workflows language:YAML'}
-      - {kind: code, label: ci-deepeval, evidence: N3, q: 'deepeval path:.github/workflows language:YAML'}
-      - {kind: code, label: ci-promptfoo, evidence: N3, q: 'promptfoo path:.github/workflows language:YAML'}
+      # Templates: {anchor} e {repo} expandem sobre as âncoras do gazetteer.
+      - {kind: code, label: ci, evidence: N3, q: '{anchor} path:.github/workflows language:YAML'}
+      - {kind: issue, label: issues-ancora, q: 'repo:{repo} is:issue label:bug'}
 
   stackexchange:
     enabled: true

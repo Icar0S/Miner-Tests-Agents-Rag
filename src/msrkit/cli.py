@@ -238,9 +238,21 @@ def validate(
             "(they have no search syntax; use terms or tags).[/red]"
         )
         raise typer.Exit(1)
-    n_raw = sum(len(src.queries) for src in config.sources.values() if src.enabled)
+    gaz = config.gazetteer_data
+    if gaz is not None:
+        console.print(
+            f"  Gazetteer: v{gaz.version} — {len(gaz.tools)} tools "
+            f"({len(gaz.anchors())} anchors), {len(gaz.methods)} methods"
+        )
+    try:
+        n_raw = sum(
+            q.raw for name in config.enabled_sources() for q in config.build_queries(name)
+        )
+    except ValueError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
     if n_raw:
-        console.print(f"  Literal queries: {n_raw}")
+        console.print(f"  Literal queries (after template expansion): {n_raw}")
 
     # Check credentials for enabled sources
     all_ok = True

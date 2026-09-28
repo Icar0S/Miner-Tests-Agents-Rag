@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PrivateAttr, field_validator, model_validator
 
+from msrkit.gazetteer import Gazetteer, load_gazetteer
 from msrkit.models import Query
 
 # ---------------------------------------------------------------------------
@@ -46,6 +47,8 @@ class RawQueryConfig(BaseModel):
     kind: str | None = None  # e.g. repo | code | issue for GitHub
     label: str = ""
     evidence: Literal["N1", "N2", "N3"] | None = None  # evidence level the query targets
+    # Families of gazetteer anchors that `{anchor}` / `{repo}` expand over (None: all).
+    anchor_families: list[str] | None = None
 
 
 class SourceConfig(BaseModel):
@@ -80,6 +83,15 @@ class ProtocolConfig(BaseModel):
     languages: list[str] = ["en"]
     sources: dict[str, SourceConfig]
     limits: LimitsConfig = LimitsConfig()
+    # Path to the gazetteer YAML, relative to the protocol file (§7.2).
+    gazetteer: str | None = None
+
+    _gazetteer: Gazetteer | None = PrivateAttr(default=None)
+
+    @property
+    def gazetteer_data(self) -> Gazetteer | None:
+        """The loaded gazetteer, if the protocol names one."""
+        return self._gazetteer
 
     @model_validator(mode="after")
     def _check_term_languages(self) -> ProtocolConfig:
@@ -105,6 +117,20 @@ class ProtocolConfig(BaseModel):
             for term in lexicon:
                 mapping.setdefault(term, lang)
         return mapping
+
+    def _expand_template(self, raw_q: RawQueryConfig) -> list[tuple[str, str]]:
+        """Expand `{anchor}` / `{repo}` over gazetteer anchors; plain queries pass through."""
+        if "{anchor}" not in raw_q.q and "{repo}" not in raw_q.q:
+            return [(raw_q.q, raw_q.label)]
+        if self._gazetteer is None:
+            raise ValueError(f"query '{raw_q.q}' uses a template but no gazetteer is loaded")
+        out: list[tuple[str, str]] = []
+        for tool in self._gazetteer.anchors(raw_q.anchor_families):
+            repos = tool.repos if "{repo}" in raw_q.q else [""]
+            for repo in repos:
+                text = raw_q.q.replace("{anchor}", tool.token()).replace("{repo}", repo)
+                out.append((text, f"{raw_q.label}:{tool.id}" if raw_q.label else tool.id))
+        return out
 
     def enabled_sources(self) -> list[str]:
         """Return names of all enabled sources."""
@@ -140,19 +166,20 @@ class ProtocolConfig(BaseModel):
                 )
 
         for raw_q in src_cfg.queries:
-            queries.append(
-                Query(
-                    source=source_name,
-                    terms=[raw_q.q],
-                    kind=raw_q.kind,
-                    since=since,
-                    until=until,
-                    extra=src_cfg.extra,
-                    limit=self.limits.max_items_per_source,
-                    raw=True,
-                    label=raw_q.label,
+            for text, label in self._expand_template(raw_q):
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=[text],
+                        kind=raw_q.kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
+                        raw=True,
+                        label=label,
+                    )
                 )
-            )
 
         return queries
 
@@ -185,7 +212,10 @@ def load_protocol(path: str | Path) -> ProtocolConfig:
     if not isinstance(data, dict):
         raise ValueError(f"Protocol file must contain a YAML mapping, got {type(data).__name__}")
 
-    return ProtocolConfig.model_validate(data)
+    config = ProtocolConfig.model_validate(data)
+    if config.gazetteer:
+        config._gazetteer = load_gazetteer(p.parent / config.gazetteer)
+    return config
 
 
 def protocol_sha256(path: str | Path) -> str:

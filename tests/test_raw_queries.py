@@ -115,7 +115,7 @@ class TestValidate:
     def test_sample_protocol_has_section_7_3_queries(self) -> None:
         cfg = load_protocol("protocols/v0_rag_agents_testing.yaml")
         labels = {q.label for q in cfg.sources["github"].queries}
-        assert {"ragas-import", "promptfoo-config", "ci-ragas"} <= labels
+        assert {"ragas-import", "promptfoo-config", "ci"} <= labels
 
     def test_raw_queries_on_devto_are_rejected(self, tmp_path: Path) -> None:
         proto = tmp_path / "p.yaml"

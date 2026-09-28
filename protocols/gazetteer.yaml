@@ -1,0 +1,317 @@
+# ==========================================================================
+# Gazetteer semente — Protocolo E2 v2, §7.2 e §12.2
+# ==========================================================================
+# Lista inicial de âncoras, expandida iterativamente: ferramenta nova encontrada
+# entra aqui e dispara nova rodada, até estabilizar. Versionado junto ao protocolo.
+#
+# Campos das ferramentas:
+#   id / name / aliases  — identificador canônico e nomes (menção em texto = N1)
+#   family               — família do Anexo A
+#   applies_to           — rag, agente (padrão: ambos)
+#   python_imports       — módulos de topo (`import X`, `from X import`) = N2
+#   packages             — nomes de dependência (pyproject, requirements, package.json) = N2
+#   config_files         — arquivos cuja presença indica uso = N2
+#   cli                  — comandos cuja invocação em CI indica adoção = N3
+#   repos                — owner/repo da própria ferramenta (consultas `{repo}`)
+#   ambiguous            — nome colide com palavra comum: só conta com contexto
+#   anchor               — expande `{anchor}`/`{repo}` nas consultas (padrão: true)
+#
+# Repositórios e nomes de pacote devem ser conferidos no piloto.
+# ==========================================================================
+
+version: "0.1"
+
+tools:
+  # ---- Avaliação e teste de LLM/RAG -------------------------------------
+  - id: ragas
+    name: Ragas
+    family: avaliacao-llm-rag
+    applies_to: [rag]
+    python_imports: [ragas]
+    packages: [ragas]
+    repos: [explodinggradients/ragas]
+  - id: deepeval
+    name: DeepEval
+    family: avaliacao-llm-rag
+    python_imports: [deepeval]
+    packages: [deepeval]
+    cli: [deepeval test run]
+    repos: [confident-ai/deepeval]
+  - id: promptfoo
+    name: promptfoo
+    family: avaliacao-llm-rag
+    packages: [promptfoo]
+    config_files: [promptfooconfig.yaml, promptfooconfig.yml]
+    cli: [promptfoo eval, npx promptfoo]
+    repos: [promptfoo/promptfoo]
+  - id: trulens
+    name: TruLens
+    family: avaliacao-llm-rag
+    aliases: [trulens_eval, TruLens-Eval]
+    python_imports: [trulens, trulens_eval]
+    packages: [trulens, trulens-eval]
+    repos: [truera/trulens]
+  - id: arize-phoenix
+    name: Arize Phoenix
+    family: tracing-observabilidade
+    aliases: [phoenix, arize-phoenix]
+    python_imports: [phoenix]
+    packages: [arize-phoenix]
+    repos: [Arize-ai/phoenix]
+    ambiguous: true
+    search_token: arize-phoenix
+  - id: langsmith
+    name: LangSmith
+    family: tracing-observabilidade
+    python_imports: [langsmith]
+    packages: [langsmith]
+    repos: [langchain-ai/langsmith-sdk]
+  - id: langfuse
+    name: Langfuse
+    family: tracing-observabilidade
+    python_imports: [langfuse]
+    packages: [langfuse]
+    repos: [langfuse/langfuse]
+  - id: opik
+    name: Opik
+    family: tracing-observabilidade
+    python_imports: [opik]
+    packages: [opik]
+    repos: [comet-ml/opik]
+  - id: openai-evals
+    name: OpenAI Evals
+    family: avaliacao-llm-rag
+    aliases: [openai/evals]
+    packages: [evals]
+    cli: [oaieval]
+    repos: [openai/evals]
+    search_token: oaieval
+  - id: inspect-ai
+    name: Inspect AI
+    family: avaliacao-llm-rag
+    aliases: [inspect_ai]
+    python_imports: [inspect_ai]
+    packages: [inspect-ai]
+    cli: [inspect eval]
+    repos: [UKGovernmentBEIS/inspect_ai]
+    search_token: inspect_ai
+  - id: giskard
+    name: Giskard
+    family: avaliacao-llm-rag
+    python_imports: [giskard]
+    packages: [giskard]
+    repos: [Giskard-AI/giskard]
+  - id: uptrain
+    name: UpTrain
+    family: avaliacao-llm-rag
+    python_imports: [uptrain]
+    packages: [uptrain]
+    repos: [uptrain-ai/uptrain]
+  - id: autoevals
+    name: autoevals
+    family: avaliacao-llm-rag
+    aliases: [Braintrust autoevals]
+    python_imports: [autoevals]
+    packages: [autoevals]
+    repos: [braintrustdata/autoevals]
+  - id: continuous-eval
+    name: continuous-eval
+    family: avaliacao-llm-rag
+    applies_to: [rag]
+    python_imports: [continuous_eval]
+    packages: [continuous-eval]
+    repos: [relari-ai/continuous-eval]
+  - id: ragchecker
+    name: RAGChecker
+    family: avaliacao-llm-rag
+    applies_to: [rag]
+    python_imports: [ragchecker]
+    packages: [ragchecker]
+    repos: [amazon-science/RAGChecker]
+  - id: lm-eval-harness
+    name: lm-evaluation-harness
+    family: avaliacao-llm-rag
+    aliases: [lm_eval, lm-eval]
+    python_imports: [lm_eval]
+    packages: [lm_eval, lm-eval]
+    cli: [lm_eval]
+    repos: [EleutherAI/lm-evaluation-harness]
+    search_token: lm_eval
+
+  # ---- Guardrails e segurança ------------------------------------------
+  - id: guardrails-ai
+    name: Guardrails AI
+    family: guardrails-seguranca
+    aliases: [guardrails-ai]
+    python_imports: [guardrails]
+    packages: [guardrails-ai]
+    repos: [guardrails-ai/guardrails]
+    ambiguous: true
+    search_token: guardrails-ai
+  - id: nemo-guardrails
+    name: NeMo Guardrails
+    family: guardrails-seguranca
+    aliases: [nemoguardrails]
+    python_imports: [nemoguardrails]
+    packages: [nemoguardrails]
+    repos: [NVIDIA/NeMo-Guardrails]
+    search_token: nemoguardrails
+  - id: garak
+    name: garak
+    family: guardrails-seguranca
+    python_imports: [garak]
+    packages: [garak]
+    cli: [garak]
+    repos: [NVIDIA/garak]
+  - id: pyrit
+    name: PyRIT
+    family: guardrails-seguranca
+    python_imports: [pyrit]
+    packages: [pyrit]
+    repos: [Azure/PyRIT]
+  - id: llm-guard
+    name: LLM Guard
+    family: guardrails-seguranca
+    aliases: [llm_guard, llm-guard]
+    python_imports: [llm_guard]
+    packages: [llm-guard]
+    repos: [protectai/llm-guard]
+    search_token: llm_guard
+
+  # ---- Recuperação e índice --------------------------------------------
+  - id: ranx
+    name: ranx
+    family: recuperacao
+    applies_to: [rag]
+    python_imports: [ranx]
+    packages: [ranx]
+    repos: [AmenRa/ranx]
+  - id: ir-measures
+    name: ir_measures
+    family: recuperacao
+    applies_to: [rag]
+    aliases: [ir-measures]
+    python_imports: [ir_measures]
+    packages: [ir-measures, ir_measures]
+    repos: [terrierteam/ir_measures]
+  - id: pytrec-eval
+    name: pytrec_eval
+    family: recuperacao
+    applies_to: [rag]
+    aliases: [pytrec-eval]
+    python_imports: [pytrec_eval]
+    packages: [pytrec-eval, pytrec_eval]
+    repos: [cvangysel/pytrec_eval]
+  - id: beir
+    name: BEIR
+    family: recuperacao
+    applies_to: [rag]
+    python_imports: [beir]
+    packages: [beir]
+    repos: [beir-cellar/beir]
+  - id: mteb
+    name: MTEB
+    family: recuperacao
+    applies_to: [rag]
+    python_imports: [mteb]
+    packages: [mteb]
+    repos: [embeddings-benchmark/mteb]
+
+  # ---- Agentes: benchmarks e harnesses ---------------------------------
+  - id: agentbench
+    name: AgentBench
+    family: agentes
+    applies_to: [agente]
+    repos: [THUDM/AgentBench]
+  - id: tau-bench
+    name: tau-bench
+    family: agentes
+    applies_to: [agente]
+    aliases: [τ-bench, tau_bench]
+    python_imports: [tau_bench]
+    repos: [sierra-research/tau-bench]
+  - id: swe-bench
+    name: SWE-bench
+    family: agentes
+    applies_to: [agente]
+    aliases: [swebench]
+    python_imports: [swebench]
+    packages: [swebench]
+    repos: [SWE-bench/SWE-bench]
+  - id: bfcl
+    name: Berkeley Function Calling Leaderboard
+    family: agentes
+    applies_to: [agente]
+    aliases: [BFCL]
+    repos: [ShishirPatil/gorilla]
+    search_token: BFCL
+  - id: agentdojo
+    name: AgentDojo
+    family: agentes
+    applies_to: [agente]
+    python_imports: [agentdojo]
+    packages: [agentdojo]
+    repos: [ethz-spylab/agentdojo]
+  - id: agentevals
+    name: agentevals
+    family: agentes
+    applies_to: [agente]
+    python_imports: [agentevals]
+    packages: [agentevals]
+    repos: [langchain-ai/agentevals]
+  - id: webarena
+    name: WebArena
+    family: agentes
+    applies_to: [agente]
+    repos: [web-arena-x/webarena]
+
+  # ---- Frameworks do lado do sistema sob teste (não são ferramentas de teste;
+  #      minerados pelos próprios testes e CI). anchor: false ------------------
+  - {id: langchain, name: LangChain, family: framework-sut, python_imports: [langchain], packages: [langchain], repos: [langchain-ai/langchain], anchor: false}
+  - {id: langgraph, name: LangGraph, family: framework-sut, applies_to: [agente], python_imports: [langgraph], packages: [langgraph], repos: [langchain-ai/langgraph], anchor: false}
+  - {id: llamaindex, name: LlamaIndex, family: framework-sut, aliases: [llama_index, llama-index], python_imports: [llama_index], packages: [llama-index], repos: [run-llama/llama_index], anchor: false}
+  - {id: haystack, name: Haystack, family: framework-sut, applies_to: [rag], python_imports: [haystack], packages: [haystack-ai], repos: [deepset-ai/haystack], ambiguous: true, anchor: false}
+  - {id: autogen, name: AutoGen, family: framework-sut, applies_to: [agente], python_imports: [autogen, autogen_agentchat], packages: [autogen-agentchat, pyautogen], repos: [microsoft/autogen], anchor: false}
+  - {id: crewai, name: CrewAI, family: framework-sut, applies_to: [agente], python_imports: [crewai], packages: [crewai], repos: [crewAIInc/crewAI], anchor: false}
+  - {id: dspy, name: DSPy, family: framework-sut, python_imports: [dspy], packages: [dspy, dspy-ai], repos: [stanfordnlp/dspy], anchor: false}
+  - {id: semantic-kernel, name: Semantic Kernel, family: framework-sut, python_imports: [semantic_kernel], packages: [semantic-kernel], repos: [microsoft/semantic-kernel], anchor: false}
+
+methods:
+  - id: llm-as-judge
+    name: LLM-as-a-judge
+    aliases: [LLM as a judge, LLM judge, LLM-as-judge, judge model, LLM como juiz]
+    oracle: pseudo-automatico
+  - id: metamorphic-testing
+    name: metamorphic testing
+    aliases: [metamorphic relation, invariance test, paraphrase test, consistency check, teste metamórfico]
+    oracle: derivado
+  - id: property-based-testing
+    name: property-based testing
+    aliases: [property test, property-based test, teste de propriedade]
+    oracle: derivado
+  - id: golden-dataset
+    name: golden dataset
+    aliases: [gold standard, ground truth, reference set, eval set, reference answers, dataset de referência]
+    oracle: referencia
+  - id: eval-regression
+    name: eval regression
+    aliases: [regression testing, quality gate, CI gate, prompt regression, snapshot test]
+    oracle: referencia
+  - id: red-teaming
+    name: red teaming
+    aliases: [adversarial eval, jailbreak testing, prompt injection test, fault injection]
+  - id: synthetic-test-generation
+    name: synthetic test generation
+    aliases: [synthetic dataset, test set generation, synthetic eval data]
+  - id: trajectory-evaluation
+    name: trajectory evaluation
+    aliases: [trajectory eval, step-level eval, execution trace, tool call evaluation]
+    applies_to: [agente]
+  - id: human-evaluation
+    name: human evaluation
+    aliases: [human-in-the-loop evaluation, manual review, human annotation]
+    oracle: humano
+  - id: assertion-based-testing
+    name: assertion-based testing
+    aliases: [deterministic assertion, exact match, schema validation, structured output validation]
+    oracle: especificado
