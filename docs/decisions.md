@@ -302,3 +302,10 @@ This document records architectural, design, and technical decisions made during
   - `types-PyYAML` added to dev dependencies, and `feedparser`/`duckdb` declared as untyped imports.
 
   Tests are linted and formatted but not type-checked.
+
+---
+
+## ADR-035: Analyses over Units, with an Explicit Basis
+
+- **Context:** A1–A6 (§14) count tools, methods and failure modes. The same repository appears in many items (repo, code hits, issues), and the data comes either from automatic extraction or from manual coding.
+- **Decision:** Analyses count *units*: a GitHub repository with all its items merged, or a single item elsewhere. Every analysis takes `--basis detections|coding`, and the basis is part of each output file name. On the coding basis, several coders are combined by consensus. An `enum` value counts only when all coders agree, and a `multi` field keeps the intersection. Disputed values stay out until a third coder resolves them, so the reported numbers are conservative. A1/A2 (`msrkit analyze frequency`) reports units per tool and method. For tools the counts are broken down by best evidence level (disjoint N1/N2/N3); for tools and methods they are also given per system label, where a hybrid unit counts in both, and per source. Co-occurrence within units is reported with Jaccard and lift.

@@ -8,6 +8,7 @@ The commands live in modules of this package, by stage of the study:
                 agreement
     validation  precision (sample/score), recall
     corpus      prisma, dedupe, stats, export
+    analyze     frequency, coverage, oracles, topics, compare (A1–A6)
     menu        interactive menu
 
 `app`, `DATA_DIR` and `DEFAULT_PROTOCOL` are exposed here; command modules read
@@ -76,6 +77,7 @@ from msrkit.cli import evidence  # noqa: E402, F401
 from msrkit.cli import review  # noqa: E402, F401
 from msrkit.cli import validation  # noqa: E402, F401
 from msrkit.cli import corpus  # noqa: E402, F401
+from msrkit.cli import analyze  # noqa: E402, F401
 from msrkit.cli import menu  # noqa: E402, F401
 from msrkit.cli._common import _tag_concepts, _tag_term_languages  # noqa: E402, F401
 from msrkit.cli.collect import run  # noqa: E402, F401

@@ -1,0 +1,92 @@
+"""Analysis commands (Protocol E2 v2, §14): A1–A6 over units of analysis."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import typer
+from rich.table import Table
+
+from msrkit import cli as _cli
+from msrkit.cli._common import (
+    _load_detections,
+    _resolve_run,
+    _unwrap,
+    app,
+    console,
+)
+
+analyze_app = typer.Typer(
+    help="Analyses A1–A6 (§14): frequency, coverage, oracles, topics, compare."
+)
+app.add_typer(analyze_app, name="analyze")
+
+BASIS_HELP = "detections (automatic, msrkit extract) or coding (manual form, consensus)"
+
+
+def _load_units(run_id: str, basis: str) -> list[Any]:
+    from msrkit.analysis import units_from_codings, units_from_detections
+    from msrkit.coding import load_codings
+    from msrkit.storage import ItemStorage
+
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if basis == "detections":
+        detections = _load_detections(run_id)
+        if not detections:
+            console.print("[red]✗ No detections; run `msrkit extract` first.[/red]")
+            raise typer.Exit(1)
+        return units_from_detections(items, detections)
+    if basis == "coding":
+        codings = load_codings(_cli.DATA_DIR, run_id)
+        if not codings:
+            console.print("[red]✗ No codings; import them with `msrkit coding import`.[/red]")
+            raise typer.Exit(1)
+        return units_from_codings(items, codings)
+    console.print("[red]✗ --basis must be detections or coding.[/red]")
+    raise typer.Exit(1)
+
+
+def _out_dir(run_id: str) -> Any:
+    return _cli.DATA_DIR / "reports" / run_id / "analysis"
+
+
+@analyze_app.command("frequency")
+def analyze_frequency(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    basis: str = typer.Option("detections", "--basis", help=BASIS_HELP),
+    pairs: str = typer.Option(
+        "tool-method", "--pairs", help="Co-occurrence: tool-method, tool-tool, method-method"
+    ),
+    top: int = typer.Option(20, "--top", help="Rows shown"),
+) -> None:
+    """A1/A2: units per tool and method (by evidence level and system) and co-occurrence."""
+    from msrkit.analysis import cooccurrence, frequency, write_csv
+
+    run_id = _resolve_run(_unwrap(run_id))
+    basis = _unwrap(basis)
+    top = _unwrap(top)
+    units = _load_units(run_id, basis)
+    try:
+        pair_rows = cooccurrence(units, _unwrap(pairs))
+    except ValueError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
+    rows = frequency(units)
+    out = _out_dir(run_id)
+    write_csv(rows, out / f"frequency_{basis}.csv")
+    write_csv(pair_rows, out / f"cooccurrence_{_unwrap(pairs)}_{basis}.csv")
+
+    table = Table(title=f"Frequency ({basis}) — {len(units)} units")
+    for col in ("Entry", "Kind", "Units", "N1", "N2", "N3", "rag", "agente"):
+        table.add_column(col)
+    for r in rows[:top]:
+        levels = (str(r.n1), str(r.n2), str(r.n3)) if r.kind == "tool" else ("—", "—", "—")
+        table.add_row(r.entry, r.kind, str(r.units), *levels, str(r.rag), str(r.agente))
+    console.print(table)
+    pt = Table(title=f"Co-occurrence {_unwrap(pairs)}")
+    for col in ("A", "B", "Together", "Jaccard", "Lift"):
+        pt.add_column(col)
+    for p in pair_rows[:top]:
+        pt.add_row(p.a, p.b, str(p.together), f"{p.jaccard:.2f}", f"{p.lift:.2f}")
+    console.print(pt)
+    console.print(f"[green]✓ CSV written to {out}[/green]")
