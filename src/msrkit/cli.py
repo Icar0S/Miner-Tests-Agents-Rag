@@ -739,6 +739,83 @@ def normalize(
     console.print(f"[green]✓ Normalized {total_items} items from raw data[/green]")
 
 
+@app.command()
+def fetch(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    source: list[str] = typer.Option(  # noqa: B008
+        ["hackernews", "rss"], "--source", "-s", help="Sources whose links are fetched"
+    ),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Max pages to fetch"),
+    all_items: bool = typer.Option(
+        False, "--all", help="Also fetch items with no matched term (default: matched only)"
+    ),
+    interval: float = typer.Option(5.0, "--interval", help="Min seconds between hits per host"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Download the text of pages linked by collected items (opt-in, kept local).
+
+    Honors robots.txt and a per-host interval. Text goes to
+    data/fulltext/<run_id>.jsonl and is never exported (ADR-019).
+    """
+    run_id = _unwrap(run_id)
+    source = _unwrap(source)
+    limit = _unwrap(limit)
+    all_items = _unwrap(all_items)
+    interval = _unwrap(interval)
+    verbose = _unwrap(verbose)
+    _setup_logging(verbose)
+
+    from msrkit.fulltext import FullTextFetcher
+    from msrkit.storage import ItemStorage
+
+    if not run_id:
+        run_id = _get_latest_run_id()
+        if not run_id:
+            console.print("[red]✗ No runs found in data directory.[/red]")
+            raise typer.Exit(1)
+
+    items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+    out_path = DATA_DIR / "fulltext" / f"{run_id}.jsonl"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    done: set[str] = set()
+    if out_path.exists():
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                done.add(json.loads(line)["item_id"])
+
+    targets = [
+        it
+        for it in items
+        if it.source in source
+        and it.id not in done
+        and (all_items or it.matched_terms)
+        and (it.url.host or "") != "news.ycombinator.com"  # HN self-posts already carry text
+    ]
+    if limit is not None:
+        targets = targets[:limit]
+    console.print(
+        f"[bold]Run:[/bold] {run_id} · {len(targets)} page(s) to fetch "
+        f"({len(done)} already fetched)"
+    )
+
+    counts: dict[str, int] = {}
+    fetcher = FullTextFetcher(min_interval_s=interval)
+    try:
+        with open(out_path, "a", encoding="utf-8") as fh:
+            for it in targets:
+                result = fetcher.fetch(str(it.url))
+                counts[result.status] = counts.get(result.status, 0) + 1
+                record = {"item_id": it.id, "source": it.source, **result.__dict__}
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                fh.flush()
+    finally:
+        fetcher.close()
+
+    summary = ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())) or "nothing to fetch"
+    console.print(f"[green]✓ Full text saved to {out_path}[/green] ({summary})")
+
+
 @app.command(name="dedupe")
 def dedupe(
     run_id: str | None = typer.Option(

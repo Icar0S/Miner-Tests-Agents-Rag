@@ -16,7 +16,12 @@ Legenda: ✅ concluído · 🔄 em andamento · ⏳ pendente
 | C5 | **Léxico em português** — termos em pt no protocolo, com estrato identificável | ✅ |
 | C4a | **Conteúdo integral — Stack Exchange:** respostas das threads coletadas junto com a pergunta | ✅ |
 | C4b | **Conteúdo integral — dev.to:** corpo completo do artigo via API oficial (`/api/articles/{id}`) | ✅ |
-| C4c | **Conteúdo integral — links (HN, RSS):** comando `msrkit fetch`, opcional, que baixa o texto do artigo apontado respeitando robots.txt; texto guardado só localmente, nunca exportado | 🔄 |
+| C4c | **Conteúdo integral — links (HN, RSS):** comando `msrkit fetch`, opcional, que baixa o texto do artigo apontado respeitando robots.txt; texto guardado só localmente, nunca exportado | ✅ |
+
+## Próximos passos (fora da §6.5)
+
+- Piloto (30 itens): conferir no Stack Exchange a semântica OU de `tagged` (ADR-017) e decidir a inclusão do Hacker News.
+- Reverificar `docs/sources.md` antes da coleta (condições de acesso mudam).
 
 ## Registro
 

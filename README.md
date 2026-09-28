@@ -183,6 +183,7 @@ Para automação de coletas, scripts e usuários avançados, todos os comandos p
 | **`msrkit dedupe`** | Remove duplicatas por URL canônica e Hash SHA-256 | `msrkit dedupe` (ou `msrkit dedupe --all` para todo o histórico) |
 | **`msrkit stats`** | Exibe resumo de requisições, descartes e itens coletados | `msrkit stats` (ou `msrkit stats --all`) |
 | **`msrkit export`** | Exporta os dados para CSV, JSONL ou DuckDB | `msrkit export -f csv -o data/meus_dados.csv` (adicione `--raw` para brutos) |
+| **`msrkit fetch`** | Baixa o texto das páginas linkadas (HN, RSS), respeitando robots.txt; texto fica só em `data/fulltext/` e nunca é exportado | `msrkit fetch --limit 50` |
 | **`msrkit normalize`** | Reprocessa e reclassifica dados brutos sem refazer chamadas de rede | `msrkit normalize` |
 
 ### Parâmetros e Flags Mais Utilizados:
@@ -296,7 +297,7 @@ data/
 
 ## 🛡️ Princípios Éticos e Rigor Científico
 
-1. **Apenas APIs Oficiais:** Não realizamos scraping nem violação de termos de uso de nenhuma plataforma.
+1. **Apenas APIs Oficiais na Coleta:** A mineração usa só APIs oficiais e feeds públicos, sem violar termos de uso. A leitura do texto das páginas linkadas é um passo separado e opcional (`msrkit fetch`), que respeita robots.txt, limita a taxa por host e mantém o texto apenas localmente (ADR-019).
 2. **Respeito aos Limites de Taxa (Rate Limits):** O MSR-Kit implementa um algoritmo *Token Bucket Governor* que controla o fluxo de requisições de forma determinística, evitando sobrecarga nos servidores das fontes.
 3. **Plataformas Fechadas ou Pagas:** LinkedIn, Discord, X/Twitter, Google Custom Search e Bing não são mineráveis nas condições atuais. A tabela de viabilidade de todas as fontes (verificada em set/2026) está em [docs/sources.md](docs/sources.md).
 4. **Anonimização e Ética:** Não coletamos dados pessoais sensíveis, preservando apenas handles públicos de autores e links de conteúdo aberto.

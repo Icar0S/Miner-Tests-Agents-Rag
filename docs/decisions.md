@@ -161,3 +161,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Protocol E2 accepts English and Portuguese items (criterion I4) and reports a Portuguese exploratory stratum, but the protocol had only English terms and the `languages` field was unused.
 - **Decision:** `terms_by_language` adds lexicons per language next to the base `terms` (English); every key must be declared in `languages`. Queries search all lexicons; each `TermHit` carries the `lang` of its lexicon, and the CSV export adds `matched_languages`. Flexible matching folds accents (positions preserved, so context windows keep the original text) and strips Portuguese `-ção/-ções` suffixes. `pt.stackoverflow` is added to the Stack Exchange sites.
 - **Conservative Principle:** The stratum is derived from which lexicon matched — a reproducible rule — rather than from automatic language detection.
+
+---
+
+## ADR-019: Opt-in Full-Text Retrieval of Linked Pages (`msrkit fetch`)
+
+- **Context:** Hacker News and RSS items carry only a link and, at most, a summary, but extraction (Protocol E2 v2, §12) codes oracle types and failure modes from the article text. The linked pages are ordinary public web pages, not APIs.
+- **Decision:** A separate, opt-in command `msrkit fetch` downloads the linked page for items of a run (by default only items with matched terms, from `hackernews` and `rss`). It honors robots.txt for the msrkit user agent, treats an unreadable robots.txt (5xx or network error) as disallowed, keeps a minimum per-host interval (5 s by default), processes only HTML up to 2 MB, and extracts visible text with the standard library. Results, including refusals, go to `data/fulltext/<run_id>.jsonl`; the command resumes without refetching. **Full text is never exported**: `export` does not read this directory.
+- **Conservative Principle:** Collection through official APIs is unchanged; reading linked pages is explicit, rate-limited, robots-aware, local-only and auditable (every refusal is recorded with its reason).
