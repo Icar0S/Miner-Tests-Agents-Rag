@@ -183,6 +183,7 @@ Para automação de coletas, scripts e usuários avançados, todos os comandos p
 | **`msrkit dedupe`** | Remove duplicatas por URL canônica e Hash SHA-256 | `msrkit dedupe` (ou `msrkit dedupe --all` para todo o histórico) |
 | **`msrkit stats`** | Exibe resumo de requisições, descartes e itens coletados | `msrkit stats` (ou `msrkit stats --all`) |
 | **`msrkit export`** | Exporta os dados para CSV, JSONL ou DuckDB | `msrkit export -f csv -o data/meus_dados.csv` (adicione `--raw` para brutos) |
+| **`msrkit enrich`** | Lê árvore de arquivos, workflows de CI, manifestos, contribuidores e meses com commits dos repositórios GitHub da coleta (evidência N3) | `msrkit enrich --limit 100` |
 | **`msrkit fetch`** | Baixa o texto das páginas linkadas (HN, RSS), respeitando robots.txt; texto fica só em `data/fulltext/` e nunca é exportado | `msrkit fetch --limit 50` |
 | **`msrkit normalize`** | Reprocessa e reclassifica dados brutos sem refazer chamadas de rede | `msrkit normalize` |
 

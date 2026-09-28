@@ -13,6 +13,7 @@ Commands:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sys
@@ -890,6 +891,113 @@ def fetch(
 
     summary = ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())) or "nothing to fetch"
     console.print(f"[green]✓ Full text saved to {out_path}[/green] ({summary})")
+
+
+@app.command()
+def enrich(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Max repositories to enrich"),
+    protocol: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol (defaults to the one in the run manifest)"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Read tree, CI workflows, manifests, contributors and commit months of GitHub repos.
+
+    Signals go to data/enrich/<run_id>/github_repos.jsonl and into the items
+    (tech.has_ci, has_tests, contributors, active_months). Resumable.
+    """
+    run_id = _unwrap(run_id)
+    limit = _unwrap(limit)
+    protocol = _unwrap(protocol)
+    verbose = _unwrap(verbose)
+    _setup_logging(verbose)
+
+    from datetime import date as date_type
+
+    from msrkit.adapters.github import GitHubAdapter
+    from msrkit.enrich import GitHubEnricher, RepoSignals, apply_signals, repo_of
+    from msrkit.governor import Governor
+    from msrkit.storage import ItemStorage
+
+    if not run_id:
+        run_id = _get_latest_run_id()
+        if not run_id:
+            console.print("[red]✗ No runs found in data directory.[/red]")
+            raise typer.Exit(1)
+
+    since = until = None
+    config_files: set[str] = set()
+    protocol_path = protocol
+    if not protocol_path:
+        from msrkit.provenance import load_manifest
+
+        with contextlib.suppress(FileNotFoundError):
+            protocol_path = load_manifest(DATA_DIR, run_id).protocol_path
+    if protocol_path and Path(protocol_path).exists():
+        from msrkit.config import load_protocol
+
+        proto = load_protocol(protocol_path)
+        since = date_type.fromisoformat(proto.window.since)
+        until = date_type.fromisoformat(proto.window.until)
+        if proto.gazetteer_data:
+            config_files = {c for t in proto.gazetteer_data.tools for c in t.config_files}
+
+    storage = ItemStorage(DATA_DIR)
+    items = storage.read_items(run_id)
+    branches: dict[str, str | None] = {}
+    for it in items:
+        repo = repo_of(it)
+        if repo:
+            branches.setdefault(repo, None)
+
+    out_path = DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    signals: dict[str, RepoSignals] = {}
+    if out_path.exists():
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                sig = RepoSignals.model_validate_json(line)
+                signals[sig.repo] = sig
+
+    todo = [r for r in branches if r not in signals]
+    if limit is not None:
+        todo = todo[:limit]
+    console.print(
+        f"[bold]Run:[/bold] {run_id} · {len(branches)} repositories, "
+        f"{len(signals)} already enriched, {len(todo)} to go"
+    )
+
+    adapter = GitHubAdapter(
+        governor=Governor(
+            "github", GitHubAdapter.effective_rate_limit(), state_dir=DATA_DIR / "governor"
+        )
+    )
+    enricher = GitHubEnricher(adapter, config_files=config_files, since=since, until=until)
+    errors = 0
+    try:
+        with open(out_path, "a", encoding="utf-8") as fh:
+            for repo in todo:
+                sig = enricher.enrich(repo)
+                signals[repo] = sig
+                errors += sig.error is not None
+                fh.write(sig.model_dump_json() + "\n")
+                fh.flush()
+    finally:
+        adapter.close()
+
+    updated = apply_signals(items, signals)
+    storage.rewrite_items(items, run_id)
+    deduped_path = DATA_DIR / "items" / run_id / "items_deduped.jsonl"
+    if deduped_path.exists():
+        deduped = storage.read_items(run_id, prefer_deduped=True)
+        apply_signals(deduped, signals)
+        storage.rewrite_items(deduped, run_id, deduped=True)
+
+    console.print(
+        f"[green]✓ Enriched {len(todo)} repositories ({errors} with errors); "
+        f"{updated} items updated.[/green] Signals: {out_path}"
+    )
 
 
 @app.command(name="dedupe")

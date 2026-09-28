@@ -161,6 +161,18 @@ class ItemStorage:
                     items.append(Item.model_validate_json(line))
         return items
 
+    def rewrite_items(self, items: list[Item], run_id: str, deduped: bool = False) -> Path:
+        """Atomically replace a run's item file (items.jsonl or items_deduped.jsonl)."""
+        items_dir = self.data_dir / "items" / run_id
+        items_dir.mkdir(parents=True, exist_ok=True)
+        file_path = items_dir / ("items_deduped.jsonl" if deduped else "items.jsonl")
+        tmp_path = file_path.with_suffix(".jsonl.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            for item in items:
+                f.write(item.model_dump_json() + "\n")
+        tmp_path.replace(file_path)
+        return file_path
+
     def list_runs(self) -> list[str]:
         """List all run IDs that contain saved items."""
         items_dir = self.data_dir / "items"

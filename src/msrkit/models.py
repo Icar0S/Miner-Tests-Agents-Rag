@@ -73,6 +73,8 @@ class TechContext(BaseModel):
     license: str | None = None
     has_ci: bool | None = None
     contributors: int | None = None
+    has_tests: bool | None = None  # test directory or test files in the repository
+    active_months: int | None = None  # distinct months with commits inside the window
     tags: list[str] = []
 
 

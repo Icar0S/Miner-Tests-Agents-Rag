@@ -89,9 +89,7 @@ class Gazetteer(BaseModel):
 
     def anchors(self, families: list[str] | None = None) -> list[ToolEntry]:
         """Tools that expand query templates, optionally restricted to families."""
-        return [
-            t for t in self.tools if t.anchor and (families is None or t.family in families)
-        ]
+        return [t for t in self.tools if t.anchor and (families is None or t.family in families)]
 
     def by_id(self, entry_id: str) -> ToolEntry | MethodEntry | None:
         for entry in [*self.tools, *self.methods]:
