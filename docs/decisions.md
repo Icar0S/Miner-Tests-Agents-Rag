@@ -355,3 +355,19 @@ This document records architectural, design, and technical decisions made during
   - `agent-only`: new for agents.
 
   Hybrid units are counted in both systems and reported separately. Per kind it reports the Jaccard similarity of the RAG and agent catalogs and the *agent transfer rate*: the share of agent entries also seen in RAG units. Saturation uses the fixed screening batches (ADR-027), recomputed deterministically. A unit belongs to the earliest batch of its items, and each batch records the codes (tools, methods, failure modes) it adds. The run is saturated when the last `--window` batches each add at most `--tolerance` new codes. The curve goes to `saturation_<basis>.csv`.
+
+---
+
+## ADR-040: Zenodo Package with Redaction by Source Policy
+
+- **Context:** §18.2 plans the protocol (D1), corpus (D3), gold set (D4) and catalog (D5) for Zenodo. §17 limits redistribution: full text only where the license allows it, no personal data beyond the public author handle (and that only when needed), and the code in each repository stays under that repository's license.
+- **Decision:** `msrkit package` writes one zip containing:
+  - `protocol/`, with the gazetteer;
+  - `run/`: the manifest and discards;
+  - `corpus/`: redacted items and the dedupe report;
+  - `evidence/`: repository signals with file *paths* only, plus detections;
+  - `review/`: decisions, codings, the double-coding sample and agreement results;
+  - `validation/`: the gold set and precision/recall records;
+  - `reports/`.
+
+  It also adds a generated README, `.zenodo.json` (dataset, CC BY 4.0 for the package's own data, creators from `--creator`), `package_manifest.json` (version, git commit, Python, protocol SHA-256, per-file hashes) and `SHA256SUMS`. Redaction follows each adapter's `redistribution` policy. `metadata_only` items lose `body` and the match contexts but keep `body_hash`. Author handles are replaced by salted pseudonyms, whose salt is not published, unless `--keep-authors` is given. Raw API responses are never packaged. Zip entries carry a fixed timestamp.

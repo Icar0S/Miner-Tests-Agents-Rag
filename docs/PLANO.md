@@ -70,7 +70,7 @@ virar o produto" (§19):
 | V1 | **Recall sobre gold set**: formato do gold set (~50 artefatos) e comando que mede quantos o minerador recuperou | §10.3 | P0 | ✅ |
 | V2 | **Amostra de precisão**: exporta 200 detecções estratificadas por fonte e nível para revisão manual e calcula a precisão | §12.3 | P1 | ✅ |
 | V3 | **Testes de contrato com cassettes**: gravar respostas reais por adaptador (vcrpy já é dependência; `tests/cassettes/` está vazio) e checar o esquema das APIs. *Feito: infraestrutura, 5 casos de busca e o caso `enrich` gravado; os casos de busca precisam ser gravados na máquina do pesquisador (`MSRKIT_RECORD=1`), pois este ambiente só alcança o próprio repositório* | §10.2 | P1 | ✅ |
-| V4 | **Pacote de reprodutibilidade** (`msrkit package`): protocolo, manifestos, hashes, versão e corpus de metadados prontos para o Zenodo | §10.3, D2–D3 | P2 | 🔄 |
+| V4 | **Pacote de reprodutibilidade** (`msrkit package`): protocolo, manifestos, hashes, versão e corpus de metadados prontos para o Zenodo | §10.3, D2–D3 | P2 | ✅ |
 
 ### Bloco N — Análises (A1–A6 do protocolo)
 
@@ -88,7 +88,7 @@ virar o produto" (§19):
 |---|---|---|---|
 | M1 | **Dividir `cli.py`** (1.647 linhas, 10 comandos) em módulos por comando, sem mudar comportamento | P1 | ✅ |
 | M2 | **mypy no CI** (strict; zerado e no CI) e `ruff format --check` | P1 | ✅ |
-| M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | ⏳ |
+| M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | 🔄 |
 
 ### Marcos
 

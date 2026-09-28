@@ -13,12 +13,14 @@ from msrkit import cli as _cli
 from msrkit.cli._common import (
     _get_latest_run_id,
     _get_registry,
+    _load_run_protocol,
     _resolve_run,
     _setup_logging,
     _unwrap,
     app,
     console,
 )
+from msrkit.storage import ItemStorage
 
 
 @app.command()
@@ -506,3 +508,62 @@ def export(
         raise typer.Exit(1) from None
 
     console.print(f"[green]✓ Exported {len(items)} items to {out_path}[/green]")
+
+
+@app.command()
+def package(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Zip path"),
+    gold: str | None = typer.Option(None, "--gold", help="Gold set YAML to include (D4)"),
+    creator: list[str] = typer.Option(  # noqa: B008
+        [], "--creator", help="Creator for .zenodo.json, 'Surname, Name' (repeatable)"
+    ),
+    keep_authors: bool = typer.Option(
+        False, "--keep-authors", help="Keep public author handles (default: pseudonymize, §17)"
+    ),
+) -> None:
+    """Reproducibility package for Zenodo: protocol, manifest, redacted corpus, reviews, reports.
+
+    Full text only where the source allows redistribution; no raw responses.
+    """
+    import secrets
+
+    from msrkit.package import build_package
+
+    run_id = _resolve_run(_unwrap(run_id))
+    proto_path_str = _unwrap(protocol)
+    if not proto_path_str:
+        from msrkit.provenance import load_manifest
+
+        with contextlib.suppress(FileNotFoundError):
+            proto_path_str = load_manifest(_cli.DATA_DIR, run_id).protocol_path
+    proto_path = Path(proto_path_str) if proto_path_str else None
+    extras: list[Path] = []
+    proto = _load_run_protocol(run_id, proto_path_str)
+    if proto is not None and proto.gazetteer and proto_path is not None:
+        extras.append(proto_path.parent / proto.gazetteer)
+
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    policies = {name: str(cls.policy.redistribution) for name, cls in _get_registry().items()}
+    out = Path(_unwrap(output) or _cli.DATA_DIR / "packages" / f"msrkit_{run_id}.zip")
+    gold_path = Path(_unwrap(gold)) if _unwrap(gold) else None
+    path, contents = build_package(
+        _cli.DATA_DIR,
+        run_id,
+        out,
+        items,
+        policies,
+        proto_path,
+        extras,
+        gold=gold_path,
+        keep_authors=_unwrap(keep_authors),
+        salt=secrets.token_hex(16),
+        creators=_unwrap(creator) or [],
+    )
+    summary = ", ".join(f"{k}: {v}" for k, v in sorted(contents.items()))
+    console.print(f"[green]✓ Package written to {path}[/green] ({summary})")
+    if proto_path is None or not proto_path.exists():
+        console.print("[yellow]⚠ Protocol file not found: pass --protocol.[/yellow]")
+    if not _unwrap(creator):
+        console.print("[dim]Fill `creators` in .zenodo.json or pass --creator.[/dim]")
