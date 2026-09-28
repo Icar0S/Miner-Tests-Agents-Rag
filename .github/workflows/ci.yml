@@ -34,6 +34,14 @@ jobs:
         run: |
           ruff check src/ tests/
 
+      - name: Check formatting (ruff format)
+        run: |
+          ruff format --check src/ tests/
+
+      - name: Type check (mypy strict)
+        run: |
+          mypy src/
+
       - name: Run Pytest test suite with coverage
         run: |
           pytest --cov=src/msrkit --cov-report=term-missing tests/

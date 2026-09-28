@@ -286,3 +286,19 @@ This document records architectural, design, and technical decisions made during
 
 - **Context:** `cli.py` had grown past 2,600 lines with 15 commands and 3 command groups, which made review and navigation slow.
 - **Decision:** `msrkit.cli` is a package: `collect`, `evidence`, `review`, `validation`, `corpus` and `menu` hold the commands, and `_common` holds the shared helpers. `app`, `DATA_DIR` and `DEFAULT_PROTOCOL` stay in `msrkit.cli`, and command modules read them at call time (`_cli.DATA_DIR`), so the entry point (`msrkit.cli:app`) and every override (tests monkeypatch `msrkit.cli.DATA_DIR`) keep working. Registration order, and so the `--help` order, is fixed explicitly. Behavior is unchanged: the split was done mechanically from the syntax tree, and the full test suite passes unchanged.
+
+---
+
+## ADR-034: Strict Typing and Formatting Enforced in CI
+
+- **Context:** mypy was configured as strict but never ran in CI. The code had accumulated errors: untyped registries, `str` literals where enums were expected, stale `type: ignore` comments, and a CLI import cycle that hid the type of `app`. Formatting was not checked.
+- **Decision:** CI runs `ruff format --check src/ tests/` and `mypy src/` (strict) before the tests. Fixes made:
+  - adapter policies use `RedistributionPolicy`;
+  - the registry is typed `type[BaseAdapter]`;
+  - `BaseAdapter.normalize` declares `terms`;
+  - the DuckDB connection is `Any`, since the library is untyped;
+  - `app` and `DEFAULT_PROTOCOL` moved to `msrkit.cli._common` to break the import cycle;
+  - stale ignores were removed;
+  - `types-PyYAML` added to dev dependencies, and `feedparser`/`duckdb` declared as untyped imports.
+
+  Tests are linted and formatted but not type-checked.

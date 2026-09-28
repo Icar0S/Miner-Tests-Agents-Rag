@@ -10,9 +10,9 @@ The commands live in modules of this package, by stage of the study:
     corpus      prisma, dedupe, stats, export
     menu        interactive menu
 
-`app`, `DATA_DIR` and `DEFAULT_PROTOCOL` live here; command modules read the
-two paths from this module at call time (`_cli.DATA_DIR`), so tests and
-embedding code can override them in one place.
+`app`, `DATA_DIR` and `DEFAULT_PROTOCOL` are exposed here; command modules read
+`DATA_DIR` from this module at call time (`_cli.DATA_DIR`), so tests and
+embedding code can override it in one place.
 """
 
 from __future__ import annotations
@@ -23,6 +23,17 @@ from pathlib import Path
 import typer
 
 from msrkit import __version__
+from msrkit.cli._common import DEFAULT_PROTOCOL, PROJECT_ROOT, app, console
+
+__all__ = [
+    "DATA_DIR",
+    "DEFAULT_PROTOCOL",
+    "app",
+    "run",
+    "_tag_concepts",
+    "_tag_term_languages",
+    "_toggle_source_in_protocol",
+]
 
 # Ensure UTF-8 output on Windows consoles to avoid charmap encoding errors
 if sys.platform == "win32":
@@ -31,21 +42,9 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-app = typer.Typer(
-    name="msrkit",
-    help="MSR-Kit: Mining grey literature through official APIs.",
-    epilog="💡 Dica: Digite 'msrkit menu' para navegar de forma interativa com menu visual.",
-    no_args_is_help=True,
-)
 
-# Default data directory and protocol
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# Default data directory (overridable: command modules read it from here at call time)
 DATA_DIR = Path("data") if Path("data").exists() else (PROJECT_ROOT / "data")
-DEFAULT_PROTOCOL = (
-    "protocols/v0_rag_agents_testing.yaml"
-    if Path("protocols/v0_rag_agents_testing.yaml").exists()
-    else str(PROJECT_ROOT / "protocols" / "v0_rag_agents_testing.yaml")
-)
 
 
 def _version_callback(value: bool) -> None:
@@ -78,10 +77,6 @@ from msrkit.cli import review  # noqa: E402, F401
 from msrkit.cli import validation  # noqa: E402, F401
 from msrkit.cli import corpus  # noqa: E402, F401
 from msrkit.cli import menu  # noqa: E402, F401
-from msrkit.cli._common import (  # noqa: E402, F401
-    _tag_concepts,
-    _tag_term_languages,
-    console,
-)
+from msrkit.cli._common import _tag_concepts, _tag_term_languages  # noqa: E402, F401
 from msrkit.cli.collect import run  # noqa: E402, F401
 from msrkit.cli.menu import _toggle_source_in_protocol  # noqa: E402, F401

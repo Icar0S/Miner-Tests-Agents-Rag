@@ -10,7 +10,6 @@ import typer
 from rich.table import Table
 
 from msrkit import cli as _cli
-from msrkit.cli import app
 from msrkit.cli._common import (
     _cell,
     _load_detections,
@@ -18,6 +17,7 @@ from msrkit.cli._common import (
     _resolve_run,
     _screening_criteria,
     _unwrap,
+    app,
     console,
 )
 

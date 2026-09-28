@@ -71,13 +71,14 @@ class Gazetteer(BaseModel):
 
     @model_validator(mode="after")
     def _check_unique(self) -> Gazetteer:
-        ids = [e.id for e in [*self.tools, *self.methods]]
+        entries: list[ToolEntry | MethodEntry] = [*self.tools, *self.methods]
+        ids = [e.id for e in entries]
         dup_ids = sorted({i for i in ids if ids.count(i) > 1})
         if dup_ids:
             raise ValueError(f"duplicate gazetteer ids: {dup_ids}")
         owner: dict[str, str] = {}
         clashes: list[str] = []
-        for entry in [*self.tools, *self.methods]:
+        for entry in entries:
             for alias in entry.names():
                 key = alias.lower()
                 if key in owner and owner[key] != entry.id:
@@ -92,7 +93,8 @@ class Gazetteer(BaseModel):
         return [t for t in self.tools if t.anchor and (families is None or t.family in families)]
 
     def by_id(self, entry_id: str) -> ToolEntry | MethodEntry | None:
-        for entry in [*self.tools, *self.methods]:
+        entries: list[ToolEntry | MethodEntry] = [*self.tools, *self.methods]
+        for entry in entries:
             if entry.id == entry_id:
                 return entry
         return None

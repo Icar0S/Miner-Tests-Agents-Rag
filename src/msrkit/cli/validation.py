@@ -9,11 +9,11 @@ import typer
 from rich.table import Table
 
 from msrkit import cli as _cli
-from msrkit.cli import app
 from msrkit.cli._common import (
     _load_detections,
     _resolve_run,
     _unwrap,
+    app,
     console,
 )
 

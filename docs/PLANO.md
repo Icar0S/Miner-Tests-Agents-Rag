@@ -76,7 +76,7 @@ virar o produto" (§19):
 
 | Etapa | Descrição | Protocolo | Prioridade | Status |
 |---|---|---|---|---|
-| N1 | Frequência por ferramenta e método, por nível de evidência, e co-ocorrência ferramenta × método | A1, A2 | P2 | ⏳ |
+| N1 | Frequência por ferramenta e método, por nível de evidência, e co-ocorrência ferramenta × método | A1, A2 | P2 | 🔄 |
 | N2 | Matriz de cobertura modo de falha × ferramenta/método, para RAG e agentes | A3 | P2 | ⏳ |
 | N3 | Distribuição na escada de oráculos e por agregação (teste de H2) | A4 | P2 | ⏳ |
 | N4 | LDA + clusterização para o passe de descoberta aberta, com a fração do catálogo vinda dele | A5, §7.6 | P2 | ⏳ |
@@ -87,7 +87,7 @@ virar o produto" (§19):
 | Etapa | Descrição | Prioridade | Status |
 |---|---|---|---|
 | M1 | **Dividir `cli.py`** (1.647 linhas, 10 comandos) em módulos por comando, sem mudar comportamento | P1 | ✅ |
-| M2 | **mypy no CI** (configurado como strict, mas hoje com 42 erros e fora do CI) e `ruff format --check` | P1 | 🔄 |
+| M2 | **mypy no CI** (strict; zerado e no CI) e `ruff format --check` | P1 | ✅ |
 | M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | ⏳ |
 
 ### Marcos

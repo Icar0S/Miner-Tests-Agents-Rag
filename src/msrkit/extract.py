@@ -93,9 +93,9 @@ def dependency_names(path: str, content: str) -> dict[str, str]:
             candidates = re.findall(
                 r'["\']([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*[<>=!~;"\']', stripped
             )
-            key = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*=", stripped)
-            if key:
-                candidates.append(key.group(1))
+            assign = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*=", stripped)
+            if assign:
+                candidates.append(assign.group(1))
         for cand in candidates:
             names.setdefault(_norm_pkg(cand), stripped)
     return names
@@ -243,13 +243,13 @@ class Extractor:
                     break
             patterns = _ci_patterns(tool)
             for wf_path, content in sig.workflows.items():
-                line = next(
+                ci_line = next(
                     (ln for ln in content.splitlines() if any(p.search(ln) for p in patterns)), None
                 )
-                if line is not None:
+                if ci_line is not None:
                     level: Level = "N3" if sustained else "N2"
                     out.append(
-                        self._det(item, sig.repo, tool.id, "tool", level, "ci", wf_path, line)
+                        self._det(item, sig.repo, tool.id, "tool", level, "ci", wf_path, ci_line)
                     )
                     break
         return out

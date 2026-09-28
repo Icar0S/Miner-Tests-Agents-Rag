@@ -1,5 +1,5 @@
 """`python -m msrkit.cli` entry point."""
 
-from msrkit.cli import app
+from msrkit.cli._common import app
 
 app()

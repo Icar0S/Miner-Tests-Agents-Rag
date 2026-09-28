@@ -5,14 +5,30 @@ from __future__ import annotations
 import contextlib
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
 
 from msrkit import cli as _cli
 
+if TYPE_CHECKING:
+    from msrkit.adapters.base import BaseAdapter
+
+app = typer.Typer(
+    name="msrkit",
+    help="MSR-Kit: Mining grey literature through official APIs.",
+    epilog="💡 Dica: Digite 'msrkit menu' para navegar de forma interativa com menu visual.",
+    no_args_is_help=True,
+)
 console = Console()
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+DEFAULT_PROTOCOL = (
+    "protocols/v0_rag_agents_testing.yaml"
+    if Path("protocols/v0_rag_agents_testing.yaml").exists()
+    else str(PROJECT_ROOT / "protocols" / "v0_rag_agents_testing.yaml")
+)
 
 
 def _get_latest_run_id() -> str | None:
@@ -42,7 +58,7 @@ def _setup_logging(verbose: bool = False) -> None:
     )
 
 
-def _get_registry() -> dict[str, type]:
+def _get_registry() -> dict[str, type[BaseAdapter]]:
     """Import and return the adapter registry."""
     from msrkit.registry import all_adapters, discover_adapters
 

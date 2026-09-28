@@ -278,10 +278,9 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
 
 def final_decisions(latest: dict[tuple[str, str], ScreeningDecision]) -> dict[str, Decision]:
     """One decision per item: agreed decision, or `uncertain` when coders disagree."""
-    by_item: dict[str, set[str]] = {}
+    by_item: dict[str, set[Decision]] = {}
     for (item_id, _coder), d in latest.items():
         by_item.setdefault(item_id, set()).add(d.decision)
     return {
-        item_id: next(iter(ds)) if len(ds) == 1 else "uncertain"  # type: ignore[misc]
-        for item_id, ds in by_item.items()
+        item_id: next(iter(ds)) if len(ds) == 1 else "uncertain" for item_id, ds in by_item.items()
     }

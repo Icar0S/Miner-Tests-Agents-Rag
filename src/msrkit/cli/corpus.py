@@ -10,13 +10,13 @@ import typer
 from rich.table import Table
 
 from msrkit import cli as _cli
-from msrkit.cli import app
 from msrkit.cli._common import (
     _get_latest_run_id,
     _get_registry,
     _resolve_run,
     _setup_logging,
     _unwrap,
+    app,
     console,
 )
 

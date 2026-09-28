@@ -32,6 +32,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -61,7 +62,7 @@ class BlueskyAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=True,
         supports_date_filter=True,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://bsky.social/about/support/tos",
         docs_url="https://docs.bsky.app/docs/api/app-bsky-feed-search-posts",
         notes=(

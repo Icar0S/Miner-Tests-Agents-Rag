@@ -33,6 +33,7 @@ from msrkit.models import (
     Query,
     RateLimit,
     RawItem,
+    RedistributionPolicy,
     SourcePolicy,
     TechContext,
 )
@@ -69,7 +70,7 @@ class GitHubAdapter(BaseAdapter):
         max_pages=10,
         supports_full_text_search=True,
         supports_date_filter=True,
-        redistribution="metadata_only",
+        redistribution=RedistributionPolicy.METADATA_ONLY,
         supports_raw_queries=True,
         tos_url="https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
         docs_url="https://docs.github.com/en/rest/search",
@@ -265,7 +266,7 @@ class GitHubAdapter(BaseAdapter):
             id=Item.make_id(self.name, str(p.get("id", ""))),
             source=self.name,
             kind=ItemKind.REPO,
-            url=p.get("html_url", ""),  # type: ignore[arg-type]
+            url=p.get("html_url", ""),
             title=p.get("full_name"),
             body=p.get("description"),
             author_handle=(p.get("owner") or {}).get("login"),
@@ -307,7 +308,7 @@ class GitHubAdapter(BaseAdapter):
             id=Item.make_id(self.name, raw.native_id or p.get("sha", "")),
             source=self.name,
             kind=ItemKind.CODE,
-            url=p.get("html_url", ""),  # type: ignore[arg-type]
+            url=p.get("html_url", ""),
             title=p.get("name"),
             body=None,  # metadata_only
             author_handle=(repo.get("owner") or {}).get("login"),
@@ -345,7 +346,7 @@ class GitHubAdapter(BaseAdapter):
             id=Item.make_id(self.name, str(p.get("id", ""))),
             source=self.name,
             kind=ItemKind.ISSUE,
-            url=p.get("html_url", ""),  # type: ignore[arg-type]
+            url=p.get("html_url", ""),
             title=p.get("title"),
             body=p.get("body"),
             author_handle=(p.get("user") or {}).get("login"),

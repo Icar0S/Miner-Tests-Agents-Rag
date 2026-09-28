@@ -6,23 +6,27 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.table import Table
 
 from msrkit import __version__
 from msrkit import cli as _cli
-from msrkit.cli import app
 from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
     _get_latest_run_id,
     _get_registry,
     _setup_logging,
     _tag_concepts,
     _tag_term_languages,
     _unwrap,
+    app,
     console,
 )
+
+if TYPE_CHECKING:
+    from msrkit.adapters.base import BaseAdapter
 
 
 @app.command()
@@ -42,7 +46,7 @@ def sources(
         _sources_table(registry)
 
 
-def _sources_table(registry: dict[str, type]) -> None:
+def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
     """Display sources as a Rich table."""
     table = Table(title="MSR-Kit Sources", show_lines=True)
     table.add_column("Source", style="bold")
@@ -86,7 +90,7 @@ def _sources_table(registry: dict[str, type]) -> None:
     console.print(table)
 
 
-def _sources_md(registry: dict[str, type]) -> None:
+def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
     """Output sources in Markdown format for docs/sources.md."""
     lines = ["# MSR-Kit Sources\n"]
     lines.append(f"Generated at: {datetime.now(UTC).isoformat()}\n")
@@ -125,7 +129,7 @@ def _sources_md(registry: dict[str, type]) -> None:
 
 @app.command()
 def validate(
-    protocol: str = typer.Argument(_cli.DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Validate protocol schema and check credential availability (no network)."""
@@ -207,7 +211,7 @@ def validate(
 
 @app.command()
 def plan(
-    protocol: str = typer.Argument(_cli.DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Filter plan to a single source"
     ),
@@ -380,7 +384,7 @@ def _discard_incomplete(
 
 @app.command()
 def run(
-    protocol: str = typer.Argument(_cli.DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Execute collection for a single source only"
     ),

@@ -9,11 +9,11 @@ from pathlib import Path
 from rich.table import Table
 
 from msrkit import __version__
-from msrkit import cli as _cli
-from msrkit.cli import app
 from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
     _get_latest_run_id,
     _get_registry,
+    app,
     console,
 )
 from msrkit.cli.collect import plan, run, sources, validate
@@ -337,13 +337,13 @@ def menu() -> None:  # pragma: no cover
             console.print("[dim]Encerrado.[/dim]")
             break
         if choice == "1":
-            _interactive_mining_menu(_cli.DEFAULT_PROTOCOL)
+            _interactive_mining_menu(DEFAULT_PROTOCOL)
         elif choice == "2":
-            _manage_sources_menu(_cli.DEFAULT_PROTOCOL)
+            _manage_sources_menu(DEFAULT_PROTOCOL)
         elif choice == "3":
             sources(md=False, verbose=False)
         elif choice == "4":
-            plan(protocol=_cli.DEFAULT_PROTOCOL, source=None, verbose=False)
+            plan(protocol=DEFAULT_PROTOCOL, source=None, verbose=False)
         elif choice == "5":
             which = Prompt.ask(
                 "Desduplicar [1] Apenas a última coleta ou [2] Todas as coletas históricas?",
@@ -408,7 +408,7 @@ def menu() -> None:  # pragma: no cover
             )
             stats(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "8":
-            validate(protocol=_cli.DEFAULT_PROTOCOL, verbose=False)
+            validate(protocol=DEFAULT_PROTOCOL, verbose=False)
         else:
             console.print("[red]Opção inválida![/red]")
 
