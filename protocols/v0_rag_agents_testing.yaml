@@ -66,9 +66,17 @@ sources:
       sites:
         - stackoverflow
         - softwareengineering
-      # Nota: A API do StackExchange trata múltiplos tags como AND rigoroso.
-      # Para buscar termos livres sobre RAG, mantemos a busca por termos nos sites
-      # mais relevantes, sem forçar conjunção impossível de tags.
+        - sqa
+        - datascience
+        - ai
+      # `tagged` tem semântica OU na API (/search/advanced: "at least one will
+      # be present"). Cada termo é buscado com a lista completa de tags (ADR-017).
+      tagged:
+        - langchain
+        - llamaindex
+        - large-language-model
+        - rag
+        - openai-api
 
   hackernews:
     enabled: true

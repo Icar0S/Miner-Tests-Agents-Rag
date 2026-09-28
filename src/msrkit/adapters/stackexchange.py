@@ -122,73 +122,61 @@ class StackExchangeAdapter(BaseAdapter):
         limit = q.limit or 5000
         total_yielded = 0
 
-        tagged_list = q.extra.get("tagged", [])
-        if isinstance(tagged_list, str):
-            tagged_list = [tagged_list]
-
-        # If terms are provided, search each term across the sites.
-        # If no terms are provided, but tags are provided, search each tag.
-        if q.terms:
-            terms_to_search = q.terms
-            tags_to_search: list[str | None] = [None]
-        elif tagged_list:
-            terms_to_search = [None]
-            tags_to_search = list(tagged_list)
-        else:
-            terms_to_search = [None]
-            tags_to_search = [None]
+        # One request per (site, term). Tags go in the same request: the API
+        # documents `tagged` as OR ("at least one will be present"), so the
+        # full tag list narrows each term to the relevant tags (ADR-017).
+        terms_to_search: list[str | None] = list(q.terms) or [None]
 
         seen_ids: set[str] = set()
 
         for site in sites:
             for term in terms_to_search:
-                for tag in tags_to_search:
-                    if total_yielded >= limit:
-                        return
-                    page = 1
-                    max_pages = self.policy.max_pages or 25
+                if total_yielded >= limit:
+                    return
+                page = 1
+                max_pages = self.policy.max_pages or 25
 
-                    while page <= max_pages and total_yielded < limit:
-                        page_size = min(self.policy.max_page_size, limit - total_yielded)
-                        params = self._build_params(
-                            q, site=site, page=page, pagesize=page_size, term=term, tag=tag
+                while page <= max_pages and total_yielded < limit:
+                    page_size = min(self.policy.max_page_size, limit - total_yielded)
+                    params = self._build_params(
+                        q, site=site, page=page, pagesize=page_size, term=term
+                    )
+                    resp = self._governed_get(f"{_BASE_URL}/search/advanced", params=params)
+
+                    if resp.status_code != 200:
+                        logger.warning(
+                            "SE search returned %d for site=%s page=%d",
+                            resp.status_code,
+                            site,
+                            page,
                         )
-                        resp = self._governed_get(f"{_BASE_URL}/search/advanced", params=params)
+                        break
 
-                        if resp.status_code != 200:
-                            logger.warning(
-                                "SE search returned %d for site=%s page=%d",
-                                resp.status_code,
-                                site,
-                                page,
-                            )
-                            break
+                    data = resp.json()
+                    self._handle_backoff(data)
 
-                        data = resp.json()
-                        self._handle_backoff(data)
+                    items = data.get("items", [])
+                    if not items:
+                        break
 
-                        items = data.get("items", [])
-                        if not items:
-                            break
+                    for item in items:
+                        if total_yielded >= limit:
+                            return
+                        qid = str(item.get("question_id", ""))
+                        seen_key = f"{site}:{qid}"
+                        if not qid or seen_key in seen_ids:
+                            continue
+                        seen_ids.add(seen_key)
+                        yield self._make_raw_item(
+                            source=self.name,
+                            native_id=qid,
+                            payload={**item, "_site": site},
+                        )
+                        total_yielded += 1
 
-                        for item in items:
-                            if total_yielded >= limit:
-                                return
-                            qid = str(item.get("question_id", ""))
-                            seen_key = f"{site}:{qid}"
-                            if not qid or seen_key in seen_ids:
-                                continue
-                            seen_ids.add(seen_key)
-                            yield self._make_raw_item(
-                                source=self.name,
-                                native_id=qid,
-                                payload={**item, "_site": site},
-                            )
-                            total_yielded += 1
-
-                        if not data.get("has_more", False):
-                            break
-                        page += 1
+                    if not data.get("has_more", False):
+                        break
+                    page += 1
 
     def normalize(self, raw: RawItem, terms: list[str] | None = None) -> Item:
         """Convert SE question to canonical Item."""
@@ -247,7 +235,6 @@ class StackExchangeAdapter(BaseAdapter):
         page: int,
         pagesize: int,
         term: str | None = None,
-        tag: str | None = None,
     ) -> dict[str, Any]:
         """Build Stack Exchange search parameters."""
         query_text = term if term is not None else (" ".join(q.terms) if q.terms else "")
@@ -274,23 +261,13 @@ class StackExchangeAdapter(BaseAdapter):
                 ).timestamp()
             )
 
-        # Tagged filter
-        # Stack Exchange /search/advanced treats ';' in 'tagged' as boolean AND.
-        # Joining multiple tags requires questions to match ALL of them simultaneously,
-        # which frequently yields 0 results. If 'tag' is explicitly provided, use it.
-        # If 'tagged' extra has a single tag, use it. If multiple tags are specified
-        # with 'tagged_mode: and', join them with ';'.
-        if tag:
-            params["tagged"] = tag
-        else:
-            tagged = q.extra.get("tagged", [])
-            if isinstance(tagged, str) and tagged:
-                params["tagged"] = tagged
-            elif isinstance(tagged, list):
-                if len(tagged) == 1:
-                    params["tagged"] = tagged[0]
-                elif len(tagged) > 1 and q.extra.get("tagged_mode") == "and":
-                    params["tagged"] = ";".join(tagged)
+        # Tagged filter: ';'-separated list with OR semantics per the API docs
+        # (/search/advanced: "of which at least one will be present").
+        tagged = q.extra.get("tagged", [])
+        if isinstance(tagged, str):
+            tagged = [t for t in tagged.split(";") if t]
+        if tagged:
+            params["tagged"] = ";".join(tagged)
 
         # API key
         key = self._env("STACKEXCHANGE_KEY")

@@ -32,7 +32,7 @@ No divergences found during initial implementation. All endpoints, parameters, a
 - **Spec says:** Standard HTTP JSON search across Stack Overflow / Software Engineering questions.
 - **Docs say:** Stack Exchange API v2.3 strictly requires `Accept-Encoding: gzip` (uncompressed requests trigger errors), enforces dynamic `backoff` directives, and interprets multiple tags as strict `AND` conjunctions.
 - **Decision:** Send gzip headers unconditionally, honor platform backoff pauses in Governor, and query by individual relevant sites and search terms without forcing impossible tag conjunctions (ADR-005).
-- **Correction (2026-09-28):** The official docs for `/search/advanced` define `tagged` as "a semicolon delimited list of tags, of which **at least one** will be present on all returned questions" (OR semantics), not AND. The adapter's AND assumption is being revised (see `docs/PLANO.md`, step C6).
+- **Correction (2026-09-28):** The official docs for `/search/advanced` define `tagged` as "a semicolon delimited list of tags, of which **at least one** will be present on all returned questions" (OR semantics), not AND. The adapter now sends the tag list with OR semantics (ADR-017).
 - **Link:** https://api.stackexchange.com/docs
 
 ### Medium via RSS — 2026-09-15
