@@ -215,3 +215,11 @@ This document records architectural, design, and technical decisions made during
 
 - **Context:** The manifest was written only when a run finished, so an interrupted run could not be resumed at all, and resume skipped whole sources. RNF3 requires resuming without loss or duplication.
 - **Decision:** Each partition has a stable key (`query_key`: source, kind, literal flag, label, terms, window, extra — not position or limit), used as the raw-storage partition name and item `provenance.partition`. The partition plan is frozen in the manifest (`SourceManifestEntry.planned`) before collecting, and the manifest is saved after every partition with `key` and `completed`. `--resume` reuses the frozen plan (no re-estimation), skips completed partitions, and first deletes the raw file, items and manifest entries of incomplete ones, which are then collected from scratch.
+
+---
+
+## ADR-026: Near-Duplicate Pass (MinHash/LSH)
+
+- **Context:** Cross-posted questions, mirrored READMEs and reposted articles survive URL and content-hash deduplication because a single character differs, inflating counts (RF5, §11).
+- **Decision:** `msrkit dedupe` runs a third pass after URL and exact-content passes: MinHash signatures (128 permutations, word 5-shingles, blake2b with a fixed seed) and LSH (32 bands) propose candidate pairs, kept as duplicates when the estimated Jaccard similarity is ≥ `--near-threshold` (default 0.85; `0` disables). Texts with fewer than 30 tokens are skipped, since short titles collide by chance. The earliest-collected item of a group is kept. Counts per reason (url, content, near) and every removed pair with its similarity go to `dedupe_report.json`, which feeds the PRISMA flow (step T6).
+- **Calibration:** the threshold is a pilot parameter; the report's similarity values allow checking borderline pairs manually.

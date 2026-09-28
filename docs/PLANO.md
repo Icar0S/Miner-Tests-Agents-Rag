@@ -56,9 +56,9 @@ virar o produto" (§19):
 
 | Etapa | Descrição | Protocolo | Prioridade | Status |
 |---|---|---|---|---|
-| T1 | **Quase-duplicatas** (MinHash/LSH) como 3ª passada da deduplicação, com limiar configurável e calibrado no piloto | RF5, §11 | P1 | 🔄 |
+| T1 | **Quase-duplicatas** (MinHash/LSH) como 3ª passada da deduplicação, com limiar configurável e calibrado no piloto | RF5, §11 | P1 | ✅ |
 | T2 | **Planilha de triagem** exportada (critérios I1–I5/E1–E6, decisão, justificativa, codificador) e **importada de volta** para o corpus | §8, §11 | P0 | ✅ |
-| T3 | **Ordenação da triagem** por relevância (termos casados, sinais N2/N3), em lotes fixos | §11 | P1 | ⏳ |
+| T3 | **Ordenação da triagem** por relevância (termos casados, sinais N2/N3), em lotes fixos | §11 | P1 | 🔄 |
 | T4 | **Formulário de extração** (Anexo A) e colunas de **qualidade da literatura cinza** (§9), exportados e importados do mesmo modo | Anexo A, §9 | P1 | ⏳ |
 | T5 | **Concordância entre codificadores** (`msrkit agreement`): κ de Cohen por dimensão sobre a amostra de dupla codificação | §15 | P1 | ⏳ |
 | T6 | **Fluxo PRISMA** gerado das contagens de manifesto, descartes, deduplicação e decisões de triagem | RF8 | P1 | ⏳ |

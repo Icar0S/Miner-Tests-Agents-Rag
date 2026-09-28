@@ -1327,6 +1327,11 @@ def dedupe(
     all_runs: bool = typer.Option(
         False, "--all", "-a", help="Consolidate and deduplicate across all historical runs"
     ),
+    near_threshold: float = typer.Option(
+        0.85,
+        "--near-threshold",
+        help="Estimated Jaccard for near-duplicates (pass 3; calibrate in the pilot, 0 disables)",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Deduplicate items for a run or across all runs."""
@@ -1335,7 +1340,7 @@ def dedupe(
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
-    from msrkit.dedupe import deduplicate
+    from msrkit.dedupe import deduplicate_report
     from msrkit.storage import ItemStorage
 
     item_storage = ItemStorage(DATA_DIR)
@@ -1366,10 +1371,16 @@ def dedupe(
         console.print("[yellow]No items found.[/yellow]")
         return
 
-    unique, duplicates = deduplicate(items)
+    threshold = _unwrap(near_threshold)
+    report = deduplicate_report(items, near_threshold=threshold if threshold else None)
+    unique, duplicates = report.unique, report.duplicates
+    counts = report.counts()
     console.print(f"  Input: {len(items)}")
     console.print(f"  Unique: {len(unique)}")
-    console.print(f"  Duplicates removed: {len(duplicates)}")
+    console.print(
+        f"  Duplicates removed: {len(duplicates)} "
+        f"(url: {counts['url']}, content: {counts['content']}, near: {counts['near']})"
+    )
 
     # Save deduplicated items
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -1378,7 +1389,22 @@ def dedupe(
         for item in unique:
             f.write(item.model_dump_json() + "\n")
 
-    console.print(f"[green]✓ Saved to {deduped_path}[/green]")
+    report_path = target_dir / "dedupe_report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "input": len(items),
+                "unique": len(unique),
+                "near_threshold": threshold or None,
+                "removed": counts,
+                "reasons": report.reasons,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    console.print(f"[green]✓ Saved to {deduped_path}[/green] (reasons: {report_path.name})")
 
 
 @app.command()
