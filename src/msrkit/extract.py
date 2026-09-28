@@ -56,6 +56,8 @@ class Detection(BaseModel):
     signal: Signal
     location: str  # item field, file path or query
     evidence: str  # at most EVIDENCE_MAX characters
+    # For ambiguous tool names (§12.2): what confirmed the mention.
+    confirmed_by: Literal["", "context", "structural"] = ""
 
 
 def _norm_pkg(name: str) -> str:
@@ -116,8 +118,12 @@ def _ci_patterns(tool: ToolEntry) -> list[re.Pattern[str]]:
 class Extractor:
     """Applies the gazetteer to items and repository signals."""
 
-    def __init__(self, gazetteer: Gazetteer) -> None:
+    def __init__(self, gazetteer: Gazetteer, context_terms: list[str] | None = None) -> None:
         self.gazetteer = gazetteer
+        # Lexicon that confirms an ambiguous name when found in its context window.
+        self.context_terms = context_terms or []
+        self.dropped_ambiguous = 0  # ambiguous mentions without confirmation, set by run()
+        self._pending: list[Detection] = []
 
     # -- item-level ----------------------------------------------------------
 
@@ -138,12 +144,37 @@ class Extractor:
                 tags=item.tech.tags or None,
                 mode="exact",
             )
-            if hits:
+            if not hits:
+                continue
+            if not tool.ambiguous:
                 out.append(
                     self._det(
                         item, repo, tool.id, "tool", "N1", "text", hits[0].field, hits[0].context
                     )
                 )
+                continue
+            confirmed = next(
+                (
+                    h
+                    for h in hits
+                    if self.context_terms and match_terms(self.context_terms, body=h.context)
+                ),
+                None,
+            )
+            det = self._det(
+                item,
+                repo,
+                tool.id,
+                "tool",
+                "N1",
+                "text",
+                (confirmed or hits[0]).field,
+                (confirmed or hits[0]).context,
+            )
+            if confirmed is not None:
+                out.append(det.model_copy(update={"confirmed_by": "context"}))
+            else:
+                self._pending.append(det)  # kept only with a structural signal (see run)
         for method in self.gazetteer.methods:
             hits = match_terms(
                 method.names(), title=item.title, body=item.body, tags=item.tech.tags or None
@@ -227,6 +258,7 @@ class Extractor:
 
     def run(self, items: list[Item], signals: dict[str, RepoSignals]) -> list[Detection]:
         detections: list[Detection] = []
+        self._pending = []
         anchor_item: dict[str, Item] = {}
         for item in items:
             detections.extend(self.from_item(item))
@@ -240,6 +272,15 @@ class Extractor:
         for repo, sig in signals.items():
             if repo in anchor_item:
                 detections.extend(self.from_repo(sig, anchor_item[repo]))
+
+        structural = {(d.entry_id, d.repo) for d in detections if d.signal != "text" and d.repo}
+        self.dropped_ambiguous = 0
+        for det in self._pending:
+            if det.repo and (det.entry_id, det.repo) in structural:
+                detections.append(det.model_copy(update={"confirmed_by": "structural"}))
+            else:
+                self.dropped_ambiguous += 1
+        self._pending = []
         return detections
 
     @staticmethod

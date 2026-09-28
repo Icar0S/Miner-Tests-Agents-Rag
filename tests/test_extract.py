@@ -178,3 +178,62 @@ class TestSummaryAndCommand:
         assert result.exit_code == 0, result.stdout
         assert (tmp_path / "extract" / "run-x" / "detections.csv").exists()
         assert "ragas" in (tmp_path / "extract" / "run-x" / "detections.jsonl").read_text()
+
+
+class TestDisambiguation:
+    """Ambiguous tool names need lexicon context or a structural signal (B3)."""
+
+    GAZ_AMB = Gazetteer.model_validate(
+        {
+            "version": "t",
+            "tools": [
+                {
+                    "id": "arize-phoenix",
+                    "name": "Arize Phoenix",
+                    "family": "tracing",
+                    "aliases": ["phoenix"],
+                    "packages": ["arize-phoenix"],
+                    "ambiguous": True,
+                },
+            ],
+        }
+    )
+
+    def test_context_confirms_an_ambiguous_mention(self) -> None:
+        ex = Extractor(self.GAZ_AMB, context_terms=["evaluation", "tracing"])
+        ok = _item(
+            "https://news.example/1",
+            ItemKind.THREAD,
+            source="hackernews",
+            title="Phoenix tracing for RAG evaluation",
+        )
+        noise = _item(
+            "https://news.example/2",
+            ItemKind.THREAD,
+            source="hackernews",
+            title="Moving to Phoenix, Arizona next year",
+        )
+        dets = ex.run([ok, noise], {})
+        assert [(d.item_id, d.confirmed_by) for d in dets] == [
+            ("https://news.example/1", "context")
+        ]
+        assert ex.dropped_ambiguous == 1
+
+    def test_structural_signal_confirms_an_ambiguous_mention(self) -> None:
+        ex = Extractor(self.GAZ_AMB, context_terms=["evaluation"])
+        readme = _item("https://github.com/acme/app", title="app", body="Uses phoenix locally")
+        sig = RepoSignals(repo="acme/app", manifests={"requirements.txt": "arize-phoenix==4\n"})
+        dets = ex.run([readme], {"acme/app": sig})
+        text = [d for d in dets if d.signal == "text"]
+        assert [d.confirmed_by for d in text] == ["structural"]
+        assert ex.dropped_ambiguous == 0
+
+    def test_aliases_converge_to_the_canonical_id(self) -> None:
+        ex = Extractor(GAZ)
+        it = _item(
+            "https://news.example/3",
+            ItemKind.THREAD,
+            source="hackernews",
+            title="deepeval vs DeepEval",
+        )
+        assert {d.entry_id for d in ex.from_item(it)} == {"deepeval"}

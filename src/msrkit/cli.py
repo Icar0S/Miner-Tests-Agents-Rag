@@ -1136,7 +1136,9 @@ def extract(
 
     items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
     signals = _load_repo_signals(run_id)
-    detections = Extractor(proto.gazetteer_data).run(items, signals)
+    context_terms = [*proto.all_terms(), *(t for lex in proto.concepts.values() for t in lex)]
+    extractor = Extractor(proto.gazetteer_data, context_terms=context_terms)
+    detections = extractor.run(items, signals)
 
     out_dir = DATA_DIR / "extract" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1162,6 +1164,11 @@ def extract(
         f"[green]✓ {len(detections)} detections from {len(items)} items and "
         f"{len(signals)} enriched repositories.[/green] Files: {out_dir}"
     )
+    if extractor.dropped_ambiguous:
+        console.print(
+            f"[dim]{extractor.dropped_ambiguous} mention(s) of ambiguous tool names dropped "
+            "(no lexicon context and no structural signal, §12.2).[/dim]"
+        )
 
 
 screen_app = typer.Typer(help="Screening sheets: export, import decisions, status (§8, §11).")

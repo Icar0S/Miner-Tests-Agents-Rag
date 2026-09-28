@@ -50,13 +50,13 @@ virar o produto" (§19):
 |---|---|---|---|---|
 | B1 | **Enriquecimento de repositórios GitHub**: árvore de arquivos (diretórios de teste, configs de avaliação), workflows de CI, nº de contribuidores e meses distintos com commits; preenche `has_ci` e `contributors`, hoje nunca preenchidos | §3.4 (N3) | P0 | ✅ |
 | B2 | **Extrator de ferramentas e métodos** (`msrkit extract`): gazetteer + regex + sinais estruturais (import, dependência em pyproject/requirements/package.json, arquivo de config, invocação em CI), com nível N1/N2/N3 e trecho de evidência por detecção | RF6, §12.1 | P0 | ✅ |
-| B3 | **Desambiguação**: nomes que colidem com palavras comuns só contam com co-ocorrência do léxico ou sinal estrutural; aliases convergem para o id canônico | §12.2 | P1 | 🔄 |
+| B3 | **Desambiguação**: nomes que colidem com palavras comuns só contam com co-ocorrência do léxico ou sinal estrutural; aliases convergem para o id canônico | §12.2 | P1 | ✅ |
 
 ### Bloco T — Triagem e extração com humano no laço
 
 | Etapa | Descrição | Protocolo | Prioridade | Status |
 |---|---|---|---|---|
-| T1 | **Quase-duplicatas** (MinHash/LSH) como 3ª passada da deduplicação, com limiar configurável e calibrado no piloto | RF5, §11 | P1 | ⏳ |
+| T1 | **Quase-duplicatas** (MinHash/LSH) como 3ª passada da deduplicação, com limiar configurável e calibrado no piloto | RF5, §11 | P1 | 🔄 |
 | T2 | **Planilha de triagem** exportada (critérios I1–I5/E1–E6, decisão, justificativa, codificador) e **importada de volta** para o corpus | §8, §11 | P0 | ✅ |
 | T3 | **Ordenação da triagem** por relevância (termos casados, sinais N2/N3), em lotes fixos | §11 | P1 | ⏳ |
 | T4 | **Formulário de extração** (Anexo A) e colunas de **qualidade da literatura cinza** (§9), exportados e importados do mesmo modo | Anexo A, §9 | P1 | ⏳ |
