@@ -158,3 +158,45 @@ class TestGovernor:
         rc = RealClock()
         t = rc.now()
         assert t > 1_700_000_000.0
+
+
+class TestGovernorWiredIntoRun:
+    """The run command enforces rate limits and daily quotas (Phase 2, A0)."""
+
+    def test_run_attaches_a_governor_and_stops_on_quota(self, tmp_path, monkeypatch) -> None:
+        from typer.testing import CliRunner
+
+        from msrkit.adapters.hackernews import HackerNewsAdapter
+        from msrkit.cli import app
+        from msrkit.governor import Governor, QuotaExhaustedError
+        from msrkit.provenance import load_manifest
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        monkeypatch.setattr(HackerNewsAdapter, "partition", lambda self, q: [q])
+        calls: list[object] = []
+
+        def search(self, q):
+            calls.append(self._governor)
+            raise QuotaExhaustedError("hackernews: daily cap reached")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr(HackerNewsAdapter, "search", search)
+        result = CliRunner().invoke(
+            app, ["run", "protocols/v0_rag_agents_testing.yaml", "--source", "hackernews"]
+        )
+        assert result.exit_code == 0, result.stdout
+        assert len(calls) == 1  # stopped after the first query
+        assert isinstance(calls[0], Governor)
+        assert (tmp_path / "governor").is_dir()
+
+        run_id = next(p.name for p in (tmp_path / "runs").iterdir())
+        entry = next(s for s in load_manifest(tmp_path, run_id).sources if s.name == "hackernews")
+        assert entry.queries[0].truncation_reasons == ["quota_exhausted"]
+
+    def test_stackexchange_daily_cap_depends_on_key(self, monkeypatch) -> None:
+        from msrkit.adapters.stackexchange import StackExchangeAdapter
+
+        monkeypatch.delenv("STACKEXCHANGE_KEY", raising=False)
+        assert StackExchangeAdapter.effective_rate_limit().daily_cap == 300
+        monkeypatch.setenv("STACKEXCHANGE_KEY", "k")
+        assert StackExchangeAdapter.effective_rate_limit().daily_cap == 10_000

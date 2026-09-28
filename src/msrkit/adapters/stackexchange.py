@@ -193,6 +193,14 @@ class StackExchangeAdapter(BaseAdapter):
                         break
                     page += 1
 
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Daily quota is 300 requests without a key and 10,000 with one."""
+        base = cls.policy.rate_limit
+        if cls._env("STACKEXCHANGE_KEY"):
+            return base.model_copy(update={"daily_cap": 10_000})
+        return base
+
     def _fetch_answers(self, site: str, question_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Fetch answers (with body) for up to 100 questions per request.
 

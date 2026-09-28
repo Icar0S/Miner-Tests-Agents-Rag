@@ -412,6 +412,7 @@ def run(
     _setup_logging(verbose)
 
     from msrkit.config import load_protocol, protocol_sha256
+    from msrkit.governor import Governor, QuotaExhaustedError
     from msrkit.models import (
         Manifest,
         QueryManifestEntry,
@@ -508,7 +509,12 @@ def run(
             continue
 
         adapter_cls = registry[source_name]
-        adapter = adapter_cls()
+        governor = Governor(
+            source_name,
+            adapter_cls.effective_rate_limit(),
+            state_dir=DATA_DIR / "governor",
+        )
+        adapter = adapter_cls(governor=governor)
         avail = adapter.available()
 
         source_entry = SourceManifestEntry(
@@ -578,6 +584,7 @@ def run(
             items_collected = 0
             raw_items_count = 0
             req_before = getattr(adapter, "request_count", 0)
+            quota_hit = False
             response_hashes: list[str] = []
 
             query_display_parts = []
@@ -642,6 +649,9 @@ def run(
 
             except SourceUnsupportedError as e:
                 console.print(f"  [red]Unsupported: {e}[/red]")
+            except QuotaExhaustedError as e:
+                quota_hit = True
+                console.print(f"  [yellow]Quota exhausted: {e}[/yellow]")
             except Exception as e:
                 console.print(f"  [yellow]Error during collection: {e}[/yellow]")
                 logging.getLogger(__name__).exception("Collection error")
@@ -665,6 +675,8 @@ def run(
                 reasons.append("no_historical_coverage")
             if query.limit is not None and raw_items_count >= query.limit:
                 reasons.append("item_limit")
+            if quota_hit:
+                reasons.append("quota_exhausted")
             query_entry = QueryManifestEntry(
                 query_string=query_display,
                 partitions=1,
@@ -677,6 +689,12 @@ def run(
                 response_sha256=response_hashes,
             )
             source_entry.queries.append(query_entry)
+            if quota_hit and config.limits.stop_on_quota_exhausted:
+                console.print(
+                    f"  [yellow]Stopping '{source_name}': daily quota exhausted "
+                    "(stop_on_quota_exhausted).[/yellow]"
+                )
+                break
             discard_note = f", {len(discards)} discarded by local filter" if discards else ""
             console.print(
                 f"    Collected: {items_collected} items "

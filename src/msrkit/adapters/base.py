@@ -35,6 +35,7 @@ from msrkit.models import (
     Availability,
     Item,
     Query,
+    RateLimit,
     RawItem,
     SourcePolicy,
 )
@@ -111,6 +112,11 @@ class BaseAdapter(ABC):
         if self._client is not None:
             self._client.close()
             self._client = None
+
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Rate limit to enforce now; override when it depends on credentials."""
+        return cls.policy.rate_limit
 
     # -------------------------------------------------------------------
     # Abstract methods (must be implemented by subclasses)
