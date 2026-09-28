@@ -67,7 +67,8 @@ ignore = ["A003"]
 "tests/*.py" = ["TCH003"]
 
 [tool.mypy]
-python_version = "3.11"
+# No python_version pin: each CI job checks against its own interpreter (3.11, 3.12).
+# Pinning 3.11 broke 3.12, where dependency stubs (numpy 2.5) use 3.12-only syntax.
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -77,7 +78,6 @@ packages = ["msrkit"]
 [[tool.mypy.overrides]]
 module = ["feedparser", "duckdb", "duckdb.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true
-
 [tool.coverage.run]
 source = ["msrkit"]
 branch = true
