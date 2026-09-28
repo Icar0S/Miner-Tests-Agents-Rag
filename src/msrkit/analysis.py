@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from msrkit.enrich import repo_of
 from msrkit.extract import LEVEL_RANK
+from msrkit.validation import wilson
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -350,3 +351,83 @@ def write_matrix(columns: list[str], rows: list[list[int]], modes: list[str], pa
         for mode, row in zip(modes, rows, strict=True):
             writer.writerow([mode, *row])
     return path
+
+
+# -- A4: oracle ladder and aggregation (H2) -----------------------------------
+
+LADDER = ["especificado", "derivado", "referencia", "pseudo-automatico", "humano"]
+ATOMIC, AGGREGATED = "atomico", "agregado"
+
+
+class OracleRow(BaseModel):
+    system: str  # rag, agente or all
+    rung: str
+    units: int
+    share: float  # of units of that system with at least one rung
+
+
+def unit_rungs(unit: Unit, method_rungs: dict[str, str] | None = None) -> set[str]:
+    """Coded rung, or (detections basis) the typical rungs of the unit's methods."""
+    if unit.oracle:
+        return {unit.oracle}
+    if method_rungs:
+        return {method_rungs[m] for m in unit.methods if m in method_rungs}
+    return set()
+
+
+def oracle_distribution(
+    units: list[Unit], method_rungs: dict[str, str] | None = None
+) -> list[OracleRow]:
+    rows: list[OracleRow] = []
+    for system in ("all", *SYSTEMS):
+        chosen = [u for u in units if system == "all" or system in u.systems]
+        rung_sets = [unit_rungs(u, method_rungs) for u in chosen]
+        with_rung = sum(bool(r) for r in rung_sets)
+        counts = Counter(r for rs in rung_sets for r in rs)
+        order = LADDER + sorted(set(counts) - set(LADDER))
+        rows += [
+            OracleRow(
+                system=system,
+                rung=rung,
+                units=counts[rung],
+                share=round(counts[rung] / with_rung, 4) if with_rung else 0.0,
+            )
+            for rung in order
+        ]
+    return rows
+
+
+class AggregationTest(BaseModel):
+    """H2: the large majority of oracles are atomic."""
+
+    system: str
+    atomic: int
+    aggregated: int
+    unidentified: int  # coded as not identified, or not coded
+    proportion_atomic: float  # among identified
+    ci95: tuple[float, float]
+    threshold: float
+    p_value: float  # one-sided exact binomial, H1: proportion > threshold
+    supported: bool  # p_value < alpha
+
+
+def aggregation_test(
+    units: list[Unit], system: str = "all", threshold: float = 0.5, alpha: float = 0.05
+) -> AggregationTest:
+    chosen = [u for u in units if system == "all" or system in u.systems]
+    atomic = sum(u.aggregation == ATOMIC for u in chosen)
+    aggregated = sum(u.aggregation == AGGREGATED for u in chosen)
+    n = atomic + aggregated
+    p = binomial_greater(atomic, n, threshold) if n else 1.0
+    lo, hi = wilson(atomic, n)
+    return AggregationTest(
+        system=system,
+        atomic=atomic,
+        aggregated=aggregated,
+        unidentified=len(chosen) - n,
+        proportion_atomic=round(atomic / n, 4) if n else 0.0,
+        ci95=(round(lo, 4), round(hi, 4)),
+        threshold=threshold,
+        p_value=round(p, 6),
+        supported=bool(n) and p < alpha,
+    )

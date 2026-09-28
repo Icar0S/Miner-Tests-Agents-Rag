@@ -11,12 +11,14 @@ from typer.testing import CliRunner
 
 from msrkit.analysis import (
     Unit,
+    aggregation_test,
     binomial_greater,
     consensus,
     cooccurrence,
     coverage,
     coverage_matrix,
     frequency,
+    oracle_distribution,
     units_from_codings,
     units_from_detections,
 )
@@ -216,3 +218,52 @@ class TestCoverage:
             .startswith("failure_mode;ragas")
         )
         assert "Not addressed by any unit" in r.stdout
+
+
+ORACLE_UNITS = [
+    Unit(id=f"u{i}", source="s", systems=["rag"], oracle="referencia", aggregation="atomico")
+    for i in range(9)
+] + [
+    Unit(id="v", source="s", systems=["agente"], oracle="humano", aggregation="agregado"),
+    Unit(id="w", source="s", systems=["agente"], oracle=None, aggregation="nao-identificado"),
+    Unit(id="x", source="s", systems=[], methods=["llm-judge", "metamorphic"]),
+]
+
+
+class TestOracles:
+    def test_distribution_coded_and_gazetteer_rungs(self) -> None:
+        rows = {(r.system, r.rung): r for r in oracle_distribution(ORACLE_UNITS)}
+        assert rows[("all", "referencia")].units == 9
+        assert rows[("all", "referencia")].share == pytest.approx(0.9)
+        assert rows[("agente", "humano")].share == 1.0
+        rungs = {"llm-judge": "pseudo-automatico", "metamorphic": "derivado"}
+        rows = {(r.system, r.rung): r for r in oracle_distribution(ORACLE_UNITS, rungs)}
+        assert rows[("all", "derivado")].units == 1
+        assert rows[("all", "pseudo-automatico")].units == 1
+
+    def test_h2(self) -> None:
+        t = aggregation_test(ORACLE_UNITS)
+        assert (t.atomic, t.aggregated, t.unidentified) == (9, 1, 2)
+        assert t.p_value == pytest.approx(11 / 1024, abs=1e-6)
+        assert t.supported
+        assert not aggregation_test(ORACLE_UNITS, threshold=0.9).supported
+        empty = aggregation_test([])
+        assert not empty.supported and empty.p_value == 1.0
+        assert aggregation_test(ORACLE_UNITS, "agente").proportion_atomic == 0.0
+
+    def test_command(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(ITEMS, "run-o")
+        recs = [
+            _rec("r2", "ana", sistema=["rag"], tipo_oraculo="referencia", agregacao="atomico"),
+            _rec("s1", "ana", sistema=["agente"], tipo_oraculo="humano", agregacao="agregado"),
+        ]
+        append_codings(tmp_path, "run-o", recs)
+        r = CliRunner().invoke(app, ["analyze", "oracles", "--run", "run-o"])
+        assert r.exit_code == 0, r.stdout
+        with open(
+            tmp_path / "reports/run-o/analysis/h2_aggregation.csv", encoding="utf-8-sig"
+        ) as fh:
+            rows = {row["system"]: row for row in csv.DictReader(fh, delimiter=";")}
+        assert rows["all"]["supported"] == "False"  # 1 of 2 atomic
+        assert rows["rag"]["atomic"] == "1"

@@ -321,3 +321,14 @@ This document records architectural, design, and technical decisions made during
   - a per-mode summary in catalog order: units, rag/agente units, distinct tools and methods, and the most frequent entries.
 
   Catalog modes nobody addresses are listed as not covered. Coded modes outside the catalog are appended as "(not in catalog)", so emergent categories stay visible. Units without a system label are kept as "unlabelled".
+
+---
+
+## ADR-037: Oracle Ladder Distribution and an Explicit Test of H2
+
+- **Context:** A4 places methods on the oracle ladder (§5.3) and tests H2: the large majority of oracles are atomic, even for stochastic systems.
+- **Decision:** `msrkit analyze oracles` counts units per rung for all units, RAG and agents, with each rung's share among the units that have one. On the coding basis the rung is the coded `tipo_oraculo`. On the detections basis each detected method contributes its typical rung from the gazetteer, which is an approximation. H2 needs coded `agregacao`. Among units coded `atomico` or `agregado`, it reports:
+  - the share of atomic oracles, with a Wilson 95% CI;
+  - a one-sided exact binomial p-value for "share > threshold" (default 0.5, `--threshold` to demand a stronger majority).
+
+  H2 is "supported" when p < 0.05. Units coded `nao-identificado`, or not coded, are counted and reported, never dropped silently.

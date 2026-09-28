@@ -132,3 +132,63 @@ def analyze_coverage(
     if uncovered:
         console.print(f"Not addressed by any unit: {', '.join(uncovered)}")
     console.print(f"[green]✓ CSV written to {out}[/green]")
+
+
+@analyze_app.command("oracles")
+def analyze_oracles(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    basis: str = typer.Option("coding", "--basis", help=BASIS_HELP),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    threshold: float = typer.Option(
+        0.5, "--threshold", help="H2: share of atomic oracles the majority must exceed"
+    ),
+) -> None:
+    """A4: distribution on the oracle ladder and by aggregation; tests H2.
+
+    On the detections basis each method contributes its typical rung from the
+    gazetteer; aggregation (and so H2) needs the coding basis.
+    """
+    from msrkit.analysis import aggregation_test, oracle_distribution, write_csv
+
+    run_id = _resolve_run(_unwrap(run_id))
+    basis = _unwrap(basis)
+    threshold = _unwrap(threshold)
+    units = _load_units(run_id, basis)
+    rungs: dict[str, str] = {}
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    if proto is not None and proto.gazetteer_data is not None:
+        rungs = {m.id: m.oracle for m in proto.gazetteer_data.methods if m.oracle}
+    rows = oracle_distribution(units, rungs if basis == "detections" else None)
+    out = _out_dir(run_id)
+    write_csv(rows, out / f"oracles_{basis}.csv")
+
+    table = Table(title=f"Oracle ladder ({basis}) — {len(units)} units")
+    for col in ("Rung", "all", "rag", "agente"):
+        table.add_column(col)
+    by = {(r.system, r.rung): r for r in rows}
+    for rung in dict.fromkeys(r.rung for r in rows):
+        table.add_row(
+            rung,
+            *(
+                f"{by[(s, rung)].units} ({by[(s, rung)].share:.0%})"
+                for s in ("all", "rag", "agente")
+            ),
+        )
+    console.print(table)
+
+    if basis != "coding":
+        console.print("[dim]Aggregation (H2) needs --basis coding.[/dim]")
+        return
+    tests = [aggregation_test(units, s, threshold) for s in ("all", "rag", "agente")]
+    write_csv(tests, out / "h2_aggregation.csv")
+    h2 = Table(title=f"H2 — atomic oracles > {threshold:.0%}")
+    for col in ("System", "Atomic", "Aggregated", "Unidentified", "Atomic %", "95% CI", "p", "H2"):
+        h2.add_column(col)
+    for t in tests:
+        h2.add_row(
+            t.system, str(t.atomic), str(t.aggregated), str(t.unidentified),
+            f"{t.proportion_atomic:.0%}", f"{t.ci95[0]:.0%}–{t.ci95[1]:.0%}",
+            f"{t.p_value:.4f}", "supported" if t.supported else "not supported",
+        )  # fmt: skip
+    console.print(h2)
+    console.print(f"[green]✓ CSV written to {out}[/green]")
