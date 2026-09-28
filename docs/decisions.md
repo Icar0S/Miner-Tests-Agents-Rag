@@ -208,3 +208,10 @@ This document records architectural, design, and technical decisions made during
 
 - **Context:** Screening (§8, §11) is manual and must be auditable per item, with independent double coding (§15).
 - **Decision:** Eligibility criteria live in the protocol (`screening.inclusion`/`exclusion`, `batch_size`), so the workflow is study-agnostic. `msrkit screen export` writes a CSV sheet (`;`, UTF-8 BOM) in batches with one column per criterion, `decision`, `reason`, `coder`, `notes`, skipping items the coder already decided. `msrkit screen import` validates the whole sheet before recording anything (unknown item, invalid decision, missing coder, *include* with an exclusion criterion marked, *exclude* without criterion or reason) and appends one record per (item, coder) with the sheet's SHA-256 to `data/screening/<run>/decisions.jsonl`. The latest decision per coder wins; the final decision per item is the agreed one, or `uncertain` when coders disagree (to be resolved by a third coder).
+
+---
+
+## ADR-025: Per-Partition Checkpoint and Exact Resume
+
+- **Context:** The manifest was written only when a run finished, so an interrupted run could not be resumed at all, and resume skipped whole sources. RNF3 requires resuming without loss or duplication.
+- **Decision:** Each partition has a stable key (`query_key`: source, kind, literal flag, label, terms, window, extra — not position or limit), used as the raw-storage partition name and item `provenance.partition`. The partition plan is frozen in the manifest (`SourceManifestEntry.planned`) before collecting, and the manifest is saved after every partition with `key` and `completed`. `--resume` reuses the frozen plan (no re-estimation), skips completed partitions, and first deletes the raw file, items and manifest entries of incomplete ones, which are then collected from scratch.

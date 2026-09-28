@@ -257,6 +257,8 @@ class QueryManifestEntry(BaseModel):
     estimated_total: int | None = None
     # Items fetched but dropped by a local filter; details in runs/<id>/discarded.jsonl
     discarded: int = 0
+    key: str = ""  # stable partition id (msrkit.partition.query_key)
+    completed: bool = False  # finished without error; skipped on --resume
     failed_partitions: list[str] = []
     response_sha256: list[str] = []
 
@@ -268,6 +270,8 @@ class SourceManifestEntry(BaseModel):
     adapter_version: str
     availability: Availability
     queries: list[QueryManifestEntry] = []
+    # Partition plan frozen at the first run, so --resume does not re-estimate.
+    planned: list[dict[str, Any]] = []
 
 
 class Manifest(BaseModel):

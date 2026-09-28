@@ -431,6 +431,34 @@ def plan(
         )
 
 
+def _discard_incomplete(
+    run_id: str, source_name: str, queries: list[Any], done: dict[str, Any], entry: Any
+) -> None:
+    """Before resuming, drop partial data of partitions that did not complete.
+
+    Their raw file, their items and their manifest entries are removed, so the
+    partition is collected again from scratch without duplicates.
+    """
+    from msrkit.partition import query_key
+    from msrkit.storage import ItemStorage
+
+    pending = {query_key(q) for q in queries} - set(done)
+    if not pending:
+        return
+    raw_dir = DATA_DIR / "raw" / source_name / run_id
+    for key in pending:
+        for f in raw_dir.glob(f"{key}.jsonl*"):
+            f.unlink()
+    storage = ItemStorage(DATA_DIR)
+    items = storage.read_items(run_id)
+    kept = [
+        it for it in items if not (it.source == source_name and it.provenance.partition in pending)
+    ]
+    if len(kept) != len(items):
+        storage.rewrite_items(kept, run_id)
+    entry.queries = [q for q in entry.queries if q.key not in pending]
+
+
 @app.command()
 def run(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
@@ -455,10 +483,12 @@ def run(
     from msrkit.governor import Governor, QuotaExhaustedError
     from msrkit.models import (
         Manifest,
+        Query,
         QueryManifestEntry,
         SourceManifestEntry,
         SourceUnsupportedError,
     )
+    from msrkit.partition import query_key
     from msrkit.provenance import generate_run_id, save_manifest
     from msrkit.storage import ItemStorage, RawStorage
 
@@ -488,7 +518,6 @@ def run(
     raw_storage = RawStorage(DATA_DIR)
     item_storage = ItemStorage(DATA_DIR)
 
-    completed_sources: set[str] = set()
     if resume:
         from msrkit.provenance import load_manifest
 
@@ -497,9 +526,6 @@ def run(
             console.print(
                 f"[dim]Resuming existing run with {len(manifest.sources)} recorded source(s).[/dim]"
             )
-            for s in manifest.sources:
-                if s.queries and any(q.items > 0 or q.requests > 0 for q in s.queries):
-                    completed_sources.add(s.name)
         except FileNotFoundError:
             console.print(
                 f"[red]✗ Cannot resume: Run '{resume}' not found in data directory.[/red]"
@@ -538,12 +564,6 @@ def run(
         console.print(f"\n{'=' * 60}")
         console.print(f"[bold]Source: {source_name}[/bold]")
 
-        if resume and source_name in completed_sources and not source:
-            console.print(
-                f"  [dim]Source '{source_name}' already completed in run {run_id}, skipping.[/dim]"
-            )
-            continue
-
         if source_name not in registry:
             console.print(f"  [red]Unknown adapter: {source_name}[/red]")
             continue
@@ -557,11 +577,16 @@ def run(
         adapter = adapter_cls(governor=governor)
         avail = adapter.available()
 
-        source_entry = SourceManifestEntry(
-            name=source_name,
-            adapter_version=adapter_cls.version,
-            availability=avail,
-        )
+        existing_entry = next((e for e in manifest.sources if e.name == source_name), None)
+        if resume and existing_entry is not None:
+            source_entry = existing_entry
+            source_entry.availability = avail
+        else:
+            source_entry = SourceManifestEntry(
+                name=source_name,
+                adapter_version=adapter_cls.version,
+                availability=avail,
+            )
 
         if not src_cfg.enabled:
             console.print("  [dim]Disabled in protocol[/dim]")
@@ -575,32 +600,50 @@ def run(
 
         console.print(f"  Status: [{avail.status}] {avail.reason}")
 
-        queries = config.build_queries(source_name)
-        if not adapter_cls.policy.supports_raw_queries and any(q.raw for q in queries):
-            console.print(
-                f"  [yellow]`queries:` ignored: {source_name} "
-                "does not accept literal queries.[/yellow]"
-            )
-            queries = [q for q in queries if not q.raw]
-        partitioned_queries = []
-        for q in queries:
-            try:
-                partitioned_queries.extend(adapter.partition(q))
-            except Exception as e:
+        if source_entry.planned:
+            # Resume: reuse the frozen partition plan instead of re-estimating.
+            queries = [Query.model_validate(d) for d in source_entry.planned]
+        else:
+            queries = config.build_queries(source_name)
+            if not adapter_cls.policy.supports_raw_queries and any(q.raw for q in queries):
                 console.print(
-                    f"  [yellow]Partitioning failed ({e}); running query unpartitioned.[/yellow]"
+                    f"  [yellow]`queries:` ignored: {source_name} "
+                    "does not accept literal queries.[/yellow]"
                 )
-                partitioned_queries.append(q)
-        queries = partitioned_queries
+                queries = [q for q in queries if not q.raw]
+            partitioned_queries = []
+            for q in queries:
+                try:
+                    partitioned_queries.extend(adapter.partition(q))
+                except Exception as e:
+                    console.print(
+                        f"  [yellow]Partitioning failed ({e}); "
+                        "running query unpartitioned.[/yellow]"
+                    )
+                    partitioned_queries.append(q)
+            queries = partitioned_queries
+            source_entry.planned = [q.model_dump(mode="json") for q in queries]
         if limit is not None:
             for q in queries:
                 q.limit = limit
-        console.print(f"  Queries to execute: {len(queries)}")
 
-        total_source_items = 0
-        total_source_requests = 0
+        done = {e.key: e for e in source_entry.queries if e.completed and e.key}
+        if resume:
+            _discard_incomplete(run_id, source_name, queries, done, source_entry)
+        _upsert_source_manifest(manifest, source_entry)
+        save_manifest(manifest, DATA_DIR)  # checkpoint: plan recorded before collecting
+        console.print(
+            f"  Queries to execute: {len(queries) - len(done)}"
+            + (f" ({len(done)} already completed)" if done else "")
+        )
+
+        total_source_items = sum(e.items for e in done.values())
+        total_source_requests = sum(e.requests for e in done.values())
 
         for qi, query in enumerate(queries, 1):
+            key = query_key(query)
+            if key in done:
+                continue
             if total_source_items >= config.limits.max_items_per_source:
                 console.print(
                     f"  [dim]Source '{source_name}' item limit reached "
@@ -625,6 +668,7 @@ def run(
             raw_items_count = 0
             req_before = getattr(adapter, "request_count", 0)
             quota_hit = False
+            failed = False
             response_hashes: list[str] = []
 
             query_display_parts = []
@@ -637,13 +681,7 @@ def run(
 
             try:
                 for raw_item in adapter.search(query):
-                    # Store raw
-                    import hashlib
-
-                    partition_hash = hashlib.sha256(
-                        f"{query.source}:{query.terms}:{qi}".encode()
-                    ).hexdigest()[:12]
-
+                    partition_hash = key
                     raw_ref = raw_storage.save_raw(raw_item, run_id, partition_hash)
                     raw_items_count += 1
 
@@ -688,11 +726,13 @@ def run(
                         break
 
             except SourceUnsupportedError as e:
+                failed = True
                 console.print(f"  [red]Unsupported: {e}[/red]")
             except QuotaExhaustedError as e:
-                quota_hit = True
+                quota_hit = failed = True
                 console.print(f"  [yellow]Quota exhausted: {e}[/yellow]")
             except Exception as e:
+                failed = True
                 console.print(f"  [yellow]Error during collection: {e}[/yellow]")
                 logging.getLogger(__name__).exception("Collection error")
 
@@ -726,9 +766,13 @@ def run(
                 truncation_reasons=reasons,
                 estimated_total=query.estimated_total,
                 discarded=len(discards),
+                key=key,
+                completed=not failed,
                 response_sha256=response_hashes,
             )
             source_entry.queries.append(query_entry)
+            _upsert_source_manifest(manifest, source_entry)
+            save_manifest(manifest, DATA_DIR)  # checkpoint after every partition
             if quota_hit and config.limits.stop_on_quota_exhausted:
                 console.print(
                     f"  [yellow]Stopping '{source_name}': daily quota exhausted "

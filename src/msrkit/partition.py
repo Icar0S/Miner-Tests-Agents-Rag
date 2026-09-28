@@ -193,3 +193,25 @@ def partition_capped(
         for part, truncated in partition(term_q, max_results, estimate_fn, secondary_axes):
             out.append(part.model_copy(update={"truncated": truncated}))
     return out
+
+
+def query_key(q: Query) -> str:
+    """Stable id of a planned query (partition), independent of its position or limit.
+
+    Used as the raw-storage partition name and as the checkpoint key on resume.
+    """
+    import hashlib
+    import json
+
+    payload = {
+        "source": q.source,
+        "kind": q.kind,
+        "raw": q.raw,
+        "label": q.label,
+        "terms": q.terms,
+        "since": q.since.isoformat() if q.since else None,
+        "until": q.until.isoformat() if q.until else None,
+        "extra": q.extra,
+    }
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]

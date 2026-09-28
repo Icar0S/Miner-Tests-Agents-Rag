@@ -1001,3 +1001,60 @@ class TestPlanEstimate:
         assert "Collection Plan (Estimated)" in result.stdout
         assert "hackernews" in result.stdout
         assert "Dry run" not in result.stdout
+
+
+class TestPartitionCheckpoint:
+    """Checkpoint after every partition and exact resume (A5)."""
+
+    def test_resume_skips_done_partitions_and_redoes_the_broken_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.hackernews import HackerNewsAdapter
+        from msrkit.provenance import load_manifest
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+        def two_partitions(self: Any, q: Query) -> list[Query]:
+            return [q.model_copy(update={"terms": [t]}) for t in q.terms[:2]]
+
+        calls: list[str] = []
+        state = {"crash": True}
+
+        def search(self: Any, q: Query) -> Any:
+            calls.append(q.terms[0])
+            for i in range(3):
+                if state["crash"] and q.terms[0] == "RAG evaluation" and i == 1:
+                    raise RuntimeError("connection reset")
+                yield RawItem(
+                    source="hackernews",
+                    native_id=f"{q.terms[0]}-{i}",
+                    payload={
+                        "objectID": f"{q.terms[0]}-{i}",
+                        "title": q.terms[0],
+                        "_tags": ["story"],
+                    },
+                    fetched_at=datetime.now(UTC),
+                )
+
+        monkeypatch.setattr(HackerNewsAdapter, "partition", two_partitions)
+        monkeypatch.setattr(HackerNewsAdapter, "search", search)
+        proto = "protocols/v0_rag_agents_testing.yaml"
+
+        result = runner.invoke(app, ["run", proto, "--source", "hackernews"])
+        assert result.exit_code == 0, result.stdout
+        run_id = next(p.name for p in (tmp_path / "runs").iterdir())
+        entry = load_manifest(tmp_path, run_id).sources[0]
+        assert len(entry.planned) == 2
+        assert [q.completed for q in entry.queries] == [True, False]
+        assert len(ItemStorage(tmp_path).read_items(run_id)) == 4  # 3 + 1 partial
+
+        state["crash"] = False
+        calls.clear()
+        result = runner.invoke(app, ["run", proto, "--source", "hackernews", "--resume", run_id])
+        assert result.exit_code == 0, result.stdout
+        assert calls == ["RAG evaluation"]  # the completed partition is not searched again
+        entry = load_manifest(tmp_path, run_id).sources[0]
+        assert [q.completed for q in entry.queries] == [True, True]
+        items = ItemStorage(tmp_path).read_items(run_id)
+        assert len(items) == 6  # partial item of the broken partition was dropped
+        assert len({it.id for it in items}) == 6
