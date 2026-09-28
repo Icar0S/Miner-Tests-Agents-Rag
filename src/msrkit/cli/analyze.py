@@ -282,3 +282,64 @@ def analyze_topics(
             f"({origin['discovery'] / total:.0%})"
         )
     console.print(f"[green]✓ Written to {out}[/green]")
+
+
+@analyze_app.command("compare")
+def analyze_compare(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    basis: str = typer.Option("coding", "--basis", help=BASIS_HELP),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    window: int = typer.Option(2, "--window", help="Saturation: quiet batches in a row"),
+    tolerance: int = typer.Option(0, "--tolerance", help="Saturation: new codes allowed per batch"),
+) -> None:
+    """A6: RAG × agents (what transfers, what is new) and saturation by screening batch."""
+    from msrkit.analysis import compare_systems, saturation, write_csv
+    from msrkit.screening import rank_items
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    basis = _unwrap(basis)
+    units = _load_units(run_id, basis)
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    rungs: dict[str, str] = {}
+    if basis == "detections" and proto is not None and proto.gazetteer_data is not None:
+        rungs = {m.id: m.oracle for m in proto.gazetteer_data.methods if m.oracle}
+    rows, summaries = compare_systems(units, rungs)
+    out = _out_dir(run_id)
+    write_csv(rows, out / f"compare_{basis}.csv")
+    write_csv(summaries, out / f"compare_summary_{basis}.csv")
+
+    table = Table(title=f"RAG × agents ({basis}) — {len(units)} units")
+    for col in ("Kind", "RAG", "Agents", "Shared", "Jaccard", "Agent entries seen in RAG"):
+        table.add_column(col)
+    for s in summaries:
+        table.add_row(
+            s.kind, str(s.rag_entries), str(s.agente_entries), str(s.shared),
+            f"{s.jaccard:.2f}", f"{s.agent_transfer_rate:.0%}",
+        )  # fmt: skip
+    console.print(table)
+    new_for_agents = [r.entry for r in rows if r.category == "agent-only"]
+    if new_for_agents:
+        console.print(f"Only in agent units: {', '.join(new_for_agents[:20])}")
+
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    batch_size = proto.screening.batch_size if proto is not None else 25
+    ranking = rank_items(items, _load_detections(run_id), batch_size)
+    sat = saturation(
+        units,
+        {i: r.batch for i, r in ranking.items()},
+        window=_unwrap(window),
+        tolerance=_unwrap(tolerance),
+        method_rungs=rungs,
+    )
+    write_csv(sat.points, out / f"saturation_{basis}.csv")
+    curve = " ".join(f"{p.batch}:{p.cumulative_entries}" for p in sat.points)
+    console.print(f"Saturation curve (batch:cumulative codes): {curve or '—'}")
+    if sat.saturated:
+        console.print(
+            f"[green]Saturated from batch {sat.saturated_at}[/green] "
+            f"(last {sat.window} batches added ≤ {sat.tolerance} new codes)."
+        )
+    else:
+        console.print("[yellow]Not saturated: recent batches still add new codes.[/yellow]")
+    console.print(f"[green]✓ CSV written to {out}[/green]")

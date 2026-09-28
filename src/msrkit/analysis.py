@@ -431,3 +431,143 @@ def aggregation_test(
         p_value=round(p, 6),
         supported=bool(n) and p < alpha,
     )
+
+
+# -- A6: RAG × agents, and saturation ------------------------------------------
+
+
+class ComparisonRow(BaseModel):
+    entry: str
+    kind: Literal["tool", "method", "failure_mode", "oracle"]
+    rag_units: int
+    agente_units: int
+    hybrid_units: int  # units labelled with both
+    category: Literal["transfers", "rag-only", "agent-only"]
+
+
+class ComparisonSummary(BaseModel):
+    kind: str
+    rag_entries: int
+    agente_entries: int
+    shared: int
+    jaccard: float
+    agent_transfer_rate: float  # share of agent entries also found in RAG units
+
+
+def _entries(u: Unit, method_rungs: dict[str, str] | None) -> list[tuple[str, str]]:
+    out = [(t, "tool") for t in u.tools] + [(m, "method") for m in u.methods]
+    out += [(f, "failure_mode") for f in u.failure_modes]
+    out += [(r, "oracle") for r in sorted(unit_rungs(u, method_rungs))]
+    return out
+
+
+def compare_systems(
+    units: list[Unit], method_rungs: dict[str, str] | None = None
+) -> tuple[list[ComparisonRow], list[ComparisonSummary]]:
+    """What appears in RAG units, in agent units, or in both (RQ5)."""
+    rag: Counter[tuple[str, str]] = Counter()
+    agent: Counter[tuple[str, str]] = Counter()
+    hybrid: Counter[tuple[str, str]] = Counter()
+    for u in units:
+        for key in _entries(u, method_rungs):
+            rag[key] += "rag" in u.systems
+            agent[key] += "agente" in u.systems
+            hybrid[key] += {"rag", "agente"} <= set(u.systems)
+    rows = []
+    for key in sorted(set(rag) | set(agent)):
+        r, a = rag[key], agent[key]
+        if not r and not a:
+            continue
+        category = "transfers" if r and a else ("rag-only" if r else "agent-only")
+        rows.append(
+            ComparisonRow(
+                entry=key[0],
+                kind=key[1],  # type: ignore[arg-type]
+                rag_units=r,
+                agente_units=a,
+                hybrid_units=hybrid[key],
+                category=category,  # type: ignore[arg-type]
+            )
+        )
+    rows.sort(key=lambda x: (x.kind, x.category, -(x.rag_units + x.agente_units), x.entry))
+    summaries = []
+    for kind in ("tool", "method", "failure_mode", "oracle"):
+        r_set = {row.entry for row in rows if row.kind == kind and row.rag_units}
+        a_set = {row.entry for row in rows if row.kind == kind and row.agente_units}
+        union = r_set | a_set
+        summaries.append(
+            ComparisonSummary(
+                kind=kind,
+                rag_entries=len(r_set),
+                agente_entries=len(a_set),
+                shared=len(r_set & a_set),
+                jaccard=round(len(r_set & a_set) / len(union), 4) if union else 0.0,
+                agent_transfer_rate=round(len(r_set & a_set) / len(a_set), 4) if a_set else 0.0,
+            )
+        )
+    return rows, summaries
+
+
+class SaturationPoint(BaseModel):
+    batch: int
+    units: int  # units first seen in this batch
+    new_entries: int
+    cumulative_entries: int
+    new: list[str]  # "kind:entry"
+
+
+class Saturation(BaseModel):
+    points: list[SaturationPoint]
+    saturated: bool
+    saturated_at: int | None  # first batch of the final run of `window` quiet batches
+    window: int
+    tolerance: int
+
+
+def saturation(
+    units: list[Unit],
+    batch_of_item: dict[str, int],
+    window: int = 2,
+    tolerance: int = 0,
+    method_rungs: dict[str, str] | None = None,
+) -> Saturation:
+    """New codes (tools, methods, failure modes) per screening batch (§11).
+
+    A unit belongs to the earliest batch of its items. Saturation is reached when
+    the last `window` batches each add at most `tolerance` new codes.
+    """
+    by_batch: dict[int, list[Unit]] = {}
+    for u in units:
+        batches = [batch_of_item[i] for i in u.item_ids if i in batch_of_item]
+        if batches:
+            by_batch.setdefault(min(batches), []).append(u)
+    seen: set[str] = set()
+    points = []
+    for batch in sorted(by_batch):
+        new: list[str] = []
+        for u in by_batch[batch]:
+            for entry, kind in _entries(u, method_rungs):
+                if kind == "oracle":
+                    continue
+                code = f"{kind}:{entry}"
+                if code not in seen:
+                    seen.add(code)
+                    new.append(code)
+        points.append(
+            SaturationPoint(
+                batch=batch,
+                units=len(by_batch[batch]),
+                new_entries=len(new),
+                cumulative_entries=len(seen),
+                new=sorted(new),
+            )
+        )
+    tail = points[-window:] if window > 0 else []
+    saturated = len(points) >= window > 0 and all(p.new_entries <= tolerance for p in tail)
+    return Saturation(
+        points=points,
+        saturated=saturated,
+        saturated_at=tail[0].batch if saturated else None,
+        window=window,
+        tolerance=tolerance,
+    )

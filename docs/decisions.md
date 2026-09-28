@@ -343,3 +343,15 @@ This document records architectural, design, and technical decisions made during
   - k-means on TF-IDF.
 
   Both use unigrams and bigrams, English plus Portuguese stop words, `min_df` and a recorded seed. Top terms of topics and clusters that share no token with any gazetteer name, alias, id or package, or with the protocol lexicon, are flagged as candidates. Candidates are then inspected manually. Accepted ones enter the gazetteer with `origin: discovery`, and the command reports the catalog fraction by origin. Outputs: `topics.csv`, `clusters.csv` (with the items closest to each centroid), `topic_assignments.csv` and `discovery.json`. scikit-learn is an optional extra (`analysis`), installed in CI. The core miner does not depend on it.
+
+---
+
+## ADR-039: RAG × Agents Comparison and Saturation per Screening Batch
+
+- **Context:** RQ5 asks what transfers from RAG to agents and what is new; A6 answers it. §11 asks to stop coding when new batches stop adding codes (saturation).
+- **Decision:** `msrkit analyze compare` classifies every tool, method, failure mode and oracle rung by the systems of the units where it appears:
+  - `transfers`: found in both RAG and agent units;
+  - `rag-only`;
+  - `agent-only`: new for agents.
+
+  Hybrid units are counted in both systems and reported separately. Per kind it reports the Jaccard similarity of the RAG and agent catalogs and the *agent transfer rate*: the share of agent entries also seen in RAG units. Saturation uses the fixed screening batches (ADR-027), recomputed deterministically. A unit belongs to the earliest batch of its items, and each batch records the codes (tools, methods, failure modes) it adds. The run is saturated when the last `--window` batches each add at most `--tolerance` new codes. The curve goes to `saturation_<basis>.csv`.

@@ -13,12 +13,14 @@ from msrkit.analysis import (
     Unit,
     aggregation_test,
     binomial_greater,
+    compare_systems,
     consensus,
     cooccurrence,
     coverage,
     coverage_matrix,
     frequency,
     oracle_distribution,
+    saturation,
     units_from_codings,
     units_from_detections,
 )
@@ -267,3 +269,60 @@ class TestOracles:
             rows = {row["system"]: row for row in csv.DictReader(fh, delimiter=";")}
         assert rows["all"]["supported"] == "False"  # 1 of 2 atomic
         assert rows["rag"]["atomic"] == "1"
+
+
+SYSTEM_UNITS = [
+    Unit(id="a", source="s", item_ids=["i1"], systems=["rag"], tools={"ragas": "N2"},
+         failure_modes=["FP2"], oracle="referencia"),
+    Unit(id="b", source="s", item_ids=["i2"], systems=["agente"], tools={"promptfoo": "N1"},
+         methods=["trajectory-eval"], failure_modes=["AF1", "FP8"], oracle="referencia"),
+    Unit(id="c", source="s", item_ids=["i3", "i4"], systems=["rag", "agente"],
+         tools={"promptfoo": "N1"}, failure_modes=["FP8"]),
+    Unit(id="d", source="s", item_ids=["i5"], systems=["rag"], tools={"ragas": "N1"}),
+]  # fmt: skip
+
+
+class TestCompare:
+    def test_categories_and_summary(self) -> None:
+        rows, summaries = compare_systems(SYSTEM_UNITS)
+        cat = {(r.kind, r.entry): r for r in rows}
+        assert cat[("tool", "ragas")].category == "rag-only"
+        assert cat[("tool", "promptfoo")].category == "transfers"
+        assert cat[("tool", "promptfoo")].hybrid_units == 1
+        assert cat[("method", "trajectory-eval")].category == "agent-only"
+        assert cat[("failure_mode", "FP8")].category == "transfers"
+        assert cat[("oracle", "referencia")].category == "transfers"
+        tools = next(s for s in summaries if s.kind == "tool")
+        assert (tools.rag_entries, tools.agente_entries, tools.shared) == (2, 1, 1)
+        assert tools.agent_transfer_rate == 1.0
+        fm = next(s for s in summaries if s.kind == "failure_mode")
+        assert fm.agent_transfer_rate == 0.5  # FP8 shared, AF1 new
+
+    def test_saturation(self) -> None:
+        batches = {"i1": 1, "i2": 2, "i3": 3, "i4": 1, "i5": 4}
+        sat = saturation(SYSTEM_UNITS, batches, window=1)
+        assert [p.batch for p in sat.points] == [1, 2, 4]  # unit c counts in batch 1
+        assert sat.points[0].new == ["failure_mode:FP2", "failure_mode:FP8", "tool:promptfoo",
+                                     "tool:ragas"]  # fmt: skip
+        assert [p.new_entries for p in sat.points] == [4, 2, 0]
+        assert sat.saturated and sat.saturated_at == 4
+        assert not saturation(SYSTEM_UNITS, batches, window=2).saturated
+        assert saturation(SYSTEM_UNITS, batches, window=2, tolerance=2).saturated
+        assert not saturation([], {}, window=1).saturated
+
+    def test_command(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(ITEMS, "run-x")
+        append_codings(
+            tmp_path,
+            "run-x",
+            [
+                _rec("r2", "ana", sistema=["rag"], ferramentas=["ragas"], modos_falha=["FP2"]),
+                _rec("s1", "ana", sistema=["agente"], ferramentas=["ragas"], modos_falha=["AF1"]),
+            ],
+        )
+        r = CliRunner().invoke(app, ["analyze", "compare", "--run", "run-x", "--window", "1"])
+        assert r.exit_code == 0, r.stdout
+        assert "Saturation curve" in r.stdout
+        out = tmp_path / "reports/run-x/analysis"
+        assert (out / "compare_coding.csv").exists() and (out / "saturation_coding.csv").exists()
