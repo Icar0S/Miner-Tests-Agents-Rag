@@ -585,6 +585,14 @@ def run(
             total_source_requests += requests_made
             if hasattr(adapter, "pop_response_hashes"):
                 response_hashes = adapter.pop_response_hashes()
+            discards = adapter.pop_discards() if hasattr(adapter, "pop_discards") else []
+            if discards:
+                discard_path = DATA_DIR / "runs" / run_id / "discarded.jsonl"
+                discard_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(discard_path, "a", encoding="utf-8") as fh:
+                    for d in discards:
+                        record = {"source": source_name, "query": query_display, **d}
+                        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
             reasons: list[str] = []
             if query.truncated:
                 reasons.append("source_cap")
@@ -600,12 +608,14 @@ def run(
                 truncated=bool(reasons),
                 truncation_reasons=reasons,
                 estimated_total=query.estimated_total,
+                discarded=len(discards),
                 response_sha256=response_hashes,
             )
             source_entry.queries.append(query_entry)
+            discard_note = f", {len(discards)} discarded by local filter" if discards else ""
             console.print(
                 f"    Collected: {items_collected} items "
-                f"({raw_items_count} raw, {requests_made} requests)"
+                f"({raw_items_count} raw, {requests_made} requests{discard_note})"
             )
 
         adapter.close()

@@ -148,6 +148,9 @@ class DevToAdapter(BaseAdapter):
                         art_title = article.get("title") or ""
                         art_desc = article.get("description") or ""
                         if not match_terms(q.terms, title=art_title, body=art_desc):
+                            self._record_discard(
+                                art_id, art_title, article.get("url") or "", "no_term_match"
+                            )
                             continue
 
                     seen_ids.add(art_id)

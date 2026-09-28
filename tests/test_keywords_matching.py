@@ -203,3 +203,65 @@ class TestAdapterNormalizeWithTerms:
         results = list(adapter.search(q))
         assert len(results) == 1
         assert results[0].payload["title"] == "Complete Guide to RAG testing"
+
+
+class TestFlexibleMatching:
+    """Flexible mode tolerates inflection and hyphens without losing precision (C3)."""
+
+    TERMS = [
+        "RAG testing",
+        "RAG evaluation",
+        "evaluate RAG",
+        "LLM as a judge",
+        "agent testing",
+        "golden dataset",
+    ]
+
+    def test_titles_lost_by_exact_matching_are_now_matched(self) -> None:
+        for title in [
+            "Evaluating RAG pipelines with Ragas",
+            "LLM-as-a-judge for retrieval-augmented generation",
+            "Agents testing in practice",
+            "Building golden datasets",
+            "RAG-evaluation checklist",
+        ]:
+            assert match_terms(self.TERMS, title=title), title
+            assert not match_terms(self.TERMS, title=title, mode="exact"), title
+
+    def test_acronyms_stay_exact(self) -> None:
+        assert match_terms(["RAG testing"], title="RAGs testing")
+        assert not match_terms(["RAG testing"], title="brag testing")
+        assert not match_terms(["RAG testing"], title="rage testing")
+
+    def test_unrelated_text_does_not_match(self) -> None:
+        assert not match_terms(self.TERMS, title="Cooking with cast iron")
+        assert not match_terms(["agent testing"], title="testing the agent")
+
+    def test_symbol_terms_keep_exact_boundaries(self) -> None:
+        assert match_terms(["c++"], title="modern C++ tooling")
+        assert not match_terms(["c++"], title="c++x")
+
+    def test_rss_discards_are_recorded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        feed_xml = """<?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0"><channel><title>Feed</title>
+            <item><title>Cooking with Cast Iron</title>
+                <link>https://example.com/cooking</link><description>x</description></item>
+            <item><title>Evaluating RAG pipelines</title>
+                <link>https://example.com/rag</link><description>y</description></item>
+        </channel></rss>"""
+        adapter = RSSAdapter()
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = feed_xml
+        monkeypatch.setattr(adapter, "_governed_get", lambda url: resp)
+
+        q = Query(source="rss", terms=["evaluate RAG"], extra={"feeds": ["https://x/feed"]})
+        results = list(adapter.search(q))
+        assert [r.payload["title"] for r in results] == ["Evaluating RAG pipelines"]
+        discards = adapter.pop_discards()
+        assert len(discards) == 1
+        assert discards[0]["title"] == "Cooking with Cast Iron"
+        assert discards[0]["reason"] == "no_term_match"
+        assert adapter.pop_discards() == []

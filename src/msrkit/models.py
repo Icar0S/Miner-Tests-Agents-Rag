@@ -243,6 +243,8 @@ class QueryManifestEntry(BaseModel):
     # "item_limit" (collection stopped at the configured item limit).
     truncation_reasons: list[str] = []
     estimated_total: int | None = None
+    # Items fetched but dropped by a local filter; details in runs/<id>/discarded.jsonl
+    discarded: int = 0
     failed_partitions: list[str] = []
     response_sha256: list[str] = []
 

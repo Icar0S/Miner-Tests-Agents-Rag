@@ -306,7 +306,9 @@ class TestRssAdapterUnit:
         assert item.kind == ItemKind.ARTICLE
         assert item.author_handle == "techblogger"
         assert item.created_at is not None
-        assert len(item.matched_terms) == 2
+        assert {h.term for h in item.matched_terms} == {"golden dataset", "Testing RAG"}
+        # Flexible matching also catches the plural "Golden Datasets" in the title.
+        assert any(h.field == "title" and h.term == "golden dataset" for h in item.matched_terms)
 
     def test_estimate_always_none(self) -> None:
         adapter = RSSAdapter()

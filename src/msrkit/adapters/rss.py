@@ -137,6 +137,9 @@ class RSSAdapter(BaseAdapter):
                 if q.terms and not match_terms(
                     q.terms, title=title_val, body=summary_val, tags=entry_tags
                 ):
+                    self._record_discard(
+                        entry_id, title_val, entry.get("link", ""), "no_term_match"
+                    )
                     continue
 
                 seen_ids.add(entry_id)

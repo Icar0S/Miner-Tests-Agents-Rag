@@ -137,3 +137,11 @@ This document records architectural, design, and technical decisions made during
 - **Context:** Access conditions change faster than the code (X moved to pay-per-use, Google Custom Search closes on 2027-01-01, Bing Web Search was retired on 2025-08-11).
 - **Decision:** `docs/sources.md` holds the feasibility table (viable / conditional / infeasible) with the verification date and official links. It must be re-verified before each collection run. Execution conditions required by the protocol are tracked in `docs/PLANO.md`.
 - **Conservative Principle:** A source's status is a dated claim backed by official documentation, not an assumption baked into code.
+
+---
+
+## ADR-016: Flexible Term Matching and Audited Local Discards (supersedes the exact-phrase rule of ADR-011)
+
+- **Context:** Exact-phrase matching dropped relevant items in sources filtered locally (dev.to, RSS): "Evaluating RAG pipelines" did not match "evaluate RAG", and "LLM-as-a-judge" did not match "LLM as a judge". Discards were silent, breaking PRISMA auditability (Protocol E2 v2, §6.5 and §11).
+- **Decision:** `match_terms` defaults to a deterministic `flexible` mode: each word of a term tolerates one inflectional suffix (light stem + `\w*`) and words may be separated by spaces, hyphens, underscores or slashes. Words shorter than four characters (acronyms such as RAG, LLM) stay exact, allowing only a plural "s". Terms with symbols (C++, .NET) keep exact boundaries. `mode="exact"` remains available. Items dropped by a local filter are written to `data/runs/<run_id>/discarded.jsonl` with the reason, and counted in the manifest (`discarded`).
+- **Conservative Principle:** Recall losses are made visible and auditable; matching remains rule-based and reproducible. Word order is still significant ("testing the agent" does not match "agent testing").
