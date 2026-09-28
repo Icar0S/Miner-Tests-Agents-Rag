@@ -15,8 +15,8 @@ Legenda: ✅ concluído · 🔄 em andamento · ⏳ pendente
 | C6 | **Filtro de tags do Stack Exchange** — `tagged` com semântica OU, como documentado pela API | ✅ |
 | C5 | **Léxico em português** — termos em pt no protocolo, com estrato identificável | ✅ |
 | C4a | **Conteúdo integral — Stack Exchange:** respostas das threads coletadas junto com a pergunta | ✅ |
-| C4b | **Conteúdo integral — dev.to:** corpo completo do artigo via API oficial (`/api/articles/{id}`) | 🔄 |
-| C4c | **Conteúdo integral — links (HN, RSS):** comando `msrkit fetch`, opcional, que baixa o texto do artigo apontado respeitando robots.txt; texto guardado só localmente, nunca exportado | ⏳ |
+| C4b | **Conteúdo integral — dev.to:** corpo completo do artigo via API oficial (`/api/articles/{id}`) | ✅ |
+| C4c | **Conteúdo integral — links (HN, RSS):** comando `msrkit fetch`, opcional, que baixa o texto do artigo apontado respeitando robots.txt; texto guardado só localmente, nunca exportado | 🔄 |
 
 ## Registro
 

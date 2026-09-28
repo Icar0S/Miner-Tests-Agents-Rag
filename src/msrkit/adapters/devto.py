@@ -154,10 +154,14 @@ class DevToAdapter(BaseAdapter):
                             continue
 
                     seen_ids.add(art_id)
+                    payload = dict(article)
+                    if q.extra.get("full_text", True):
+                        # Only kept articles pay the extra request (Protocol E2 v2, §6.5).
+                        payload["_body_markdown"] = self._fetch_body(art_id)
                     yield self._make_raw_item(
                         source=self.name,
                         native_id=art_id,
-                        payload=article,
+                        payload=payload,
                     )
                     total_yielded += 1
 
@@ -168,6 +172,15 @@ class DevToAdapter(BaseAdapter):
                 if len(articles) < per_page:
                     break
                 page += 1
+
+    def _fetch_body(self, art_id: str) -> str | None:
+        """Full article markdown from the official single-article endpoint."""
+        resp = self._governed_get(f"{_BASE_URL}/articles/{art_id}")
+        if resp.status_code != 200:
+            logger.warning("dev.to article %s returned %d", art_id, resp.status_code)
+            return None
+        data = resp.json()
+        return data.get("body_markdown") if isinstance(data, dict) else None
 
     def normalize(self, raw: RawItem, terms: list[str] | None = None) -> Item:
         """Convert dev.to article to canonical Item."""
@@ -182,9 +195,10 @@ class DevToAdapter(BaseAdapter):
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(",")]
 
-        matched = match_terms(
-            terms or [], title=p.get("title"), body=p.get("description"), tags=tags
-        )
+        # Full text when fetched; kept locally only (redistribution is metadata_only,
+        # so export strips it unless --include-body, which this source refuses).
+        body = p.get("_body_markdown") or p.get("description")
+        matched = match_terms(terms or [], title=p.get("title"), body=body, tags=tags)
 
         return Item(
             id=Item.make_id(self.name, str(p.get("id", ""))),
@@ -192,7 +206,7 @@ class DevToAdapter(BaseAdapter):
             kind=ItemKind.ARTICLE,
             url=p.get("url", ""),  # type: ignore[arg-type]
             title=p.get("title"),
-            body=p.get("description"),  # metadata_only: don't store full body
+            body=body,
             author_handle=(p.get("user") or {}).get("username"),
             created_at=created_at,
             engagement=Engagement(

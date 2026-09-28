@@ -642,6 +642,49 @@ class TestSearchLoopsAndQueryBuilding:
         assert "Try a golden dataset" in item.body
         assert item.matched_terms and item.matched_terms[0].term == "golden dataset"
 
+    def test_devto_fetches_full_body_only_for_kept_articles(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Kept articles get body_markdown from /articles/{id}; discarded cost nothing (C4b)."""
+        adapter = DevToAdapter()
+        urls: list[str] = []
+
+        def mock_get(url: str, params: dict[str, Any] | None = None) -> MagicMock:
+            urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            if url.endswith("/articles/1"):
+                resp.json.return_value = {"id": 1, "body_markdown": "Full text: golden dataset"}
+            else:
+                resp.json.return_value = [
+                    {
+                        "id": 1,
+                        "title": "RAG testing guide",
+                        "description": "short",
+                        "url": "https://dev.to/a/1",
+                        "published_at": "2024-01-01T00:00:00Z",
+                    },
+                    {
+                        "id": 2,
+                        "title": "Cooking",
+                        "description": "x",
+                        "url": "https://dev.to/a/2",
+                        "published_at": "2024-01-01T00:00:00Z",
+                    },
+                ]
+            return resp
+
+        monkeypatch.setattr(adapter, "_governed_get", mock_get)
+        q = Query(source="devto", terms=["RAG testing"], extra={"tags": ["rag"]}, limit=10)
+        raws = list(adapter.search(q))
+
+        assert [r.native_id for r in raws] == ["1"]
+        assert sum(u.endswith("/articles/1") for u in urls) == 1
+        assert not any(u.endswith("/articles/2") for u in urls)
+        item = adapter.normalize(raws[0], terms=["golden dataset"])
+        assert item.body == "Full text: golden dataset"
+        assert item.matched_terms[0].term == "golden dataset"
+
     def test_hackernews_search_loop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = HackerNewsAdapter()
         mock_resp = MagicMock()
