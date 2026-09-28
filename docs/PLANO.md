@@ -88,7 +88,7 @@ virar o produto" (§19):
 |---|---|---|---|
 | M1 | **Dividir `cli.py`** (1.647 linhas, 10 comandos) em módulos por comando, sem mudar comportamento | P1 | ✅ |
 | M2 | **mypy no CI** (strict; zerado e no CI) e `ruff format --check` | P1 | ✅ |
-| M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | 🔄 |
+| M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | ✅ |
 
 ### Marcos
 
@@ -98,6 +98,20 @@ virar o produto" (§19):
 2. **v0.2 congelada (P1):** restante de A, B, T e V1–V3, mais M1–M2. Reverificar
    `docs/sources.md` antes da coleta.
 3. **Pós-coleta (P2):** bloco N e V4.
+
+### Pendências que dependem da equipe de pesquisa
+
+O código da Fase 2 está completo. Ficam fora dele, por exigirem rede aberta ou decisão
+de pesquisa:
+
+- **Cassettes de busca (V3):** gravar os 5 casos com `MSRKIT_RECORD=1 pytest
+  tests/test_cassettes.py` numa máquina com acesso às APIs (o ambiente de desenvolvimento
+  só alcança este repositório; o caso `enrich` já está gravado).
+- **Gold set (V1):** curar `protocols/gold_set.yaml` antes da coleta, a partir de
+  `gold_set.example.yaml`.
+- **Piloto:** calibrar `--near-threshold`, conferir a semântica OU de `tagged` no Stack
+  Exchange, decidir a inclusão do Hacker News e revisar os pesos da ordenação (ADR-027).
+- **Zenodo (V4):** informar os criadores (`--creator`) e confirmar a licença do pacote.
 
 ## Registro
 

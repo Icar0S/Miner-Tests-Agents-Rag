@@ -11,7 +11,7 @@
 2. [Arquitetura do Sistema e Componentes Internos](#2-arquitetura-do-sistema-e-componentes-internos)
 3. [Instalação e Modos de Execução](#3-instalação-e-modos-de-execução)
 4. [Guia do Menu Interativo (`msrkit menu`)](#4-guia-do-menu-interativo-msrkit-menu)
-5. [Referência Completa de Comandos da CLI](#5-referência-completa-de-comandos-da-cli)
+5. [Referência Completa de Comandos da CLI](#5-referência-completa-de-comandos-da-cli) — inclui o [fluxo completo do estudo](#16-fluxo-completo-do-estudo-da-coleta-ao-pacote)
 6. [Contrato Científico: Protocolo YAML](#6-contrato-científico-protocolo-yaml)
 7. [Matriz Detalhada de Fontes e Credenciais](#7-matriz-detalhada-de-fontes-e-credenciais)
 8. [Estrutura de Armazenamento e Esquema dos Dados](#8-estrutura-de-armazenamento-e-esquema-dos-dados)
@@ -75,6 +75,23 @@ flowchart TD
         ITEMS --> DUCK[(data/msrkit.duckdb SQL)]
         DUCK --> EXPORT[Exportador CSV / JSONL]
     end
+
+    subgraph Evidência & Revisão
+        ITEMS --> ENRICH[enrich: árvore, CI, manifestos, commits]
+        ENRICH --> EXTRACT[extract: gazetteer → N1/N2/N3]
+        ITEMS --> EXTRACT
+        EXTRACT --> SCREEN[screen: triagem por lotes ordenados]
+        SCREEN --> CODING[coding: formulário Anexo A + §9]
+        CODING --> AGREE[agreement: κ de Cohen]
+    end
+
+    subgraph Validação, Análise & Publicação
+        EXTRACT --> VALID[recall / precision]
+        CODING --> ANALYZE[analyze: A1–A6]
+        SCREEN --> PRISMA[prisma]
+        ANALYZE --> PKG[package: Zenodo]
+        PRISMA --> PKG
+    end
 ```
 
 ### Detalhamento dos Componentes Principais:
@@ -105,6 +122,30 @@ flowchart TD
 - **Raw Storage:** Grava respostas brutas das APIs em `data/raw/{source}/{run_id}/{partition_hash}.jsonl.gz` de forma imutável.
 - **Items Storage:** Grava itens normalizados em `data/items/{run_id}/items.jsonl` e desduplicados em `items_deduped.jsonl`.
 - **DuckDB Layer:** Ingere itens no banco analítico local `data/msrkit.duckdb` (tabela relacional `items`), permitindo queries SQL de alta performance e filtragens complexas.
+
+#### 7. Gazetteer (`src/msrkit/gazetteer.py`, `protocols/gazetteer.yaml`) — ADR-021
+- Catálogo versionado de ferramentas e métodos: aliases (menção N1), imports Python, pacotes, arquivos de configuração e comandos de CLI (sinais N2/N3), família, sistema-alvo, degrau típico na escada de oráculos e origem (`seed` ou `discovery`).
+- Expande os modelos de consulta `{anchor}` e `{repo}` do protocolo; nomes ambíguos só contam com contexto do léxico ou sinal estrutural.
+
+#### 8. Enriquecimento e extração (`enrich.py`, `extract.py`) — ADR-023
+- `enrich` lê, pela API oficial e sob o Governor, árvore, workflows de CI, manifestos de dependência, contribuidores e meses com commits de cada repositório.
+- `extract` aplica o gazetteer e atribui o nível de evidência: N1 menção em texto; N2 import, configuração ou dependência; N3 invocação em CI com commits em ≥2 meses e ≥2 contribuidores.
+
+#### 9. Revisão manual (`screening.py`, `coding.py`, `agreement.py`) — ADR-024, 027–029
+- Planilhas CSV (`;`, UTF-8 com BOM) validadas por inteiro antes de gravar; uma decisão por (item, codificador).
+- Triagem ordenada por relevância em lotes fixos; formulário declarativo no protocolo; κ de Cohen por dimensão sobre amostra estratificada de dupla codificação.
+
+#### 10. Validação do instrumento (`validation.py`) — ADR-031, 032
+- Recall sobre gold set curado antes da coleta; precisão sobre amostra estratificada (fonte × nível) ponderada pela população do estrato; testes de contrato sobre cassettes gravados.
+
+#### 11. Análises e descoberta (`analysis.py`, `discovery.py`) — ADR-035–039
+- Unidades de análise (repositório ou item) a partir das detecções ou da codificação por consenso; frequência, coocorrência, cobertura de modos de falha, escada de oráculos e H2, comparação RAG × agentes e saturação; LDA e k-means no passe de descoberta aberta (extra opcional `analysis`).
+
+#### 12. PRISMA e pacote (`prisma.py`, `package.py`) — ADR-030, 040
+- Fluxo PRISMA derivado só dos registros da execução; pacote Zenodo com redação por política de redistribuição e checksums.
+
+#### 13. CLI (`src/msrkit/cli/`) — ADR-033
+- Pacote por etapa: `collect`, `evidence`, `review`, `validation`, `corpus`, `analyze`, `menu`; `app` e `DATA_DIR` expostos em `msrkit.cli`.
 
 ---
 
@@ -265,7 +306,7 @@ msrkit run protocols/v0_rag_agents_testing.yaml --resume 20260922_153000_abc123
 ```
 
 ### 5. `msrkit dedupe`
-Executa a desduplicação em duas etapas sobre os itens coletados.
+Executa a desduplicação em três passadas (URL canônica, hash de conteúdo e quase-duplicatas por MinHash/LSH; `--near-threshold 0` desativa a terceira) e grava `dedupe_report.json` com os motivos.
 ```bash
 # Desduplicar itens da última coleta:
 msrkit dedupe
@@ -309,11 +350,80 @@ Reprocessa dados brutos (`data/raw/`) sem gastar novas requisições de rede. Mu
 msrkit normalize --run 20260922_153000_abc123
 ```
 
+### 9. `msrkit enrich` e `msrkit extract`
+```bash
+msrkit enrich                 # sinais de repositório (consome a cota do GitHub)
+msrkit extract --top 30       # detecções com nível N1/N2/N3 e resumo por entrada
+```
+
+### 10. `msrkit screen`
+```bash
+msrkit screen export --coder ana            # lotes fixos ordenados por relevância
+msrkit screen export --coder ana -b 1 -b 2  # só os lotes 1 e 2
+msrkit screen import data/screening/<run>/sheet_ana.csv
+msrkit screen status
+```
+Marque os critérios com `x`; `decision` aceita `include`, `exclude` ou `uncertain`. Uma exclusão exige um critério E marcado ou um motivo.
+
+### 11. `msrkit coding` e `msrkit agreement`
+```bash
+msrkit coding sample                         # ≥20% dos incluídos, estratificado por fonte
+msrkit coding export --coder bia --double-sample
+msrkit coding import data/coding/<run>/form_bia.csv
+msrkit agreement                             # κ por dimensão do §15
+```
+As colunas `auto_*` trazem sugestões do `extract`/`enrich`; `--prefill` as copia para o formulário (desativado por padrão para manter a codificação independente).
+
+### 12. `msrkit recall` e `msrkit precision`
+```bash
+msrkit recall protocols/gold_set.yaml
+msrkit precision sample --n 200
+msrkit precision score data/validation/<run>/precision_sample.csv
+```
+
+### 13. `msrkit prisma`
+Gera `prisma.json` e `prisma.md` (com diagrama Mermaid) a partir do manifesto, dos descartes, do relatório de deduplicação, das decisões e das codificações.
+
+### 14. `msrkit analyze`
+```bash
+msrkit analyze frequency --basis detections   # ou --basis coding
+msrkit analyze coverage                       # modo de falha × ferramenta/método
+msrkit analyze oracles --threshold 0.75       # escada de oráculos e teste de H2
+msrkit analyze topics --topics 12 --clusters 12   # requer pip install -e ".[analysis]"
+msrkit analyze compare --window 2             # RAG × agentes e saturação
+```
+
+### 15. `msrkit package`
+```bash
+msrkit package --creator "Sobrenome, Nome" --gold protocols/gold_set.yaml
+```
+
+### 16. Fluxo completo do estudo: da coleta ao pacote
+
+A ordem abaixo segue o Protocolo E2 v2. Cada etapa grava em `data/` e pode ser refeita sem repetir as anteriores.
+
+| # | Etapa | Comando | Saída principal |
+|---|---|---|---|
+| 1 | Validar protocolo e credenciais | `msrkit validate` | — |
+| 2 | Estimar partições e truncamento | `msrkit plan --estimate` | tabela no terminal |
+| 3 | Coletar (retomável) | `msrkit run [--resume]` | `raw/`, `items/`, `runs/<run>/manifest.json` |
+| 4 | Deduplicar (URL, conteúdo, quase-duplicata) | `msrkit dedupe` | `items_deduped.jsonl`, `dedupe_report.json` |
+| 5 | Enriquecer repositórios GitHub | `msrkit enrich` | `enrich/<run>/github_repos.jsonl` |
+| 6 | Extrair ferramentas e métodos | `msrkit extract` | `extract/<run>/detections.jsonl` |
+| 7 | Triagem em lotes (dois codificadores) | `msrkit screen export --coder ana` → preencher → `msrkit screen import` | `screening/<run>/decisions.jsonl` |
+| 8 | Amostra de dupla codificação | `msrkit coding sample` | `coding/<run>/double_sample.json` |
+| 9 | Extração manual (Anexo A + §9) | `msrkit coding export --coder ana` → preencher → `msrkit coding import` | `coding/<run>/codings.jsonl` |
+| 10 | Concordância | `msrkit agreement` | `agreement.json`, `disagreements.csv` |
+| 11 | Validar o minerador | `msrkit recall gold.yaml`, `msrkit precision sample` → julgar → `msrkit precision score` | `validation/<run>/` |
+| 12 | Fluxo PRISMA | `msrkit prisma` | `reports/<run>/prisma.md` |
+| 13 | Análises A1–A6 | `msrkit analyze` (`frequency`, `coverage`, `oracles`, `topics`, `compare`) | `reports/<run>/analysis/` |
+| 14 | Pacote Zenodo | `msrkit package --creator "Sobrenome, Nome"` | `packages/msrkit_<run>.zip` |
+
 ---
 
 ## 6. Contrato Científico: Protocolo YAML
 
-O arquivo de protocolo (ex: [protocols/v0_rag_agents_testing.yaml](file:///c:/Users/joaom/Documents/projetos/Miner-Tests-Agents-Rag/protocols/v0_rag_agents_testing.yaml)) é a especificação formal e reprodutível da sua pesquisa.
+O arquivo de protocolo (ex: [protocols/v0_rag_agents_testing.yaml](../protocols/v0_rag_agents_testing.yaml)) é a especificação formal e reprodutível da sua pesquisa.
 
 ### Estrutura do Esquema:
 
@@ -370,6 +480,16 @@ sources:
 
 ---
 
+### Seções adicionadas na Fase 2
+
+| Seção | Para que serve | Decisão |
+|---|---|---|
+| `sources.<fonte>.queries` | Consultas literais na sintaxe da fonte (ex.: busca de código do GitHub), com modelos `{anchor}`/`{repo}` | ADR-020 |
+| `concepts`, `concept_queries` | Grupos de léxico (`rag`, `agente`, `teste`) que rotulam cada item e geram consultas pelo produto dos grupos | ADR-022 |
+| `gazetteer` | Caminho do catálogo de ferramentas e métodos, relativo ao protocolo | ADR-021 |
+| `screening` | Critérios I/E e tamanho do lote da triagem | ADR-024, 027 |
+| `coding` | Campos do formulário (Anexo A + §9), catálogo de modos de falha, taxa de dupla codificação e dimensões do κ | ADR-028, 029 |
+
 ## 7. Matriz Detalhada de Fontes e Credenciais
 
 O MSR-Kit implementa adaptadores dedicados para 11 fontes de literatura cinza.
@@ -413,7 +533,15 @@ data/
 │       └── items_deduped.jsonl # Itens após processo de desduplicação
 ├── runs/                       # Manifestos de auditoria científica
 │   └── {run_id}/
-│       └── manifest.json       # Manifesto com hashes SHA-256, queries e proveniência
+│       ├── manifest.json       # Hashes SHA-256, consultas, partições (checkpoint a cada partição)
+│       └── discarded.jsonl     # Itens descartados por filtro local, com motivo
+├── enrich/{run_id}/            # Sinais de repositório (msrkit enrich)
+├── extract/{run_id}/           # Detecções N1/N2/N3 (msrkit extract)
+├── screening/{run_id}/         # Planilhas e decisions.jsonl
+├── coding/{run_id}/            # Formulários, codings.jsonl, amostra dupla, concordância
+├── validation/{run_id}/        # Amostra e relatório de precisão
+├── reports/{run_id}/           # prisma.md/json e analysis/*.csv
+├── packages/                   # Pacotes Zenodo (msrkit package)
 └── msrkit.duckdb               # Banco de dados DuckDB local para análise SQL
 ```
 
@@ -429,7 +557,8 @@ Cada publicação minerada é transformada no modelo Pydantic `Item`:
 - **`author_handle`**: Identificador público do autor (sem dados pessoais sensíveis).
 - **`created_at` / `updated_at`**: Timestamps normalizados em formato UTC.
 - **`engagement`**: Métricas de popularidade (`stars`, `forks`, `votes`, `reactions`, `comments`, `views`).
-- **`tech`**: Contexto técnico (`language`, `license`, `has_ci`, `contributors`, `tags`).
+- **`tech`**: Contexto técnico (`language`, `license`, `has_ci`, `has_tests`, `contributors`, `active_months`, `tags`).
+- **`concepts`**: Grupos do protocolo cujo léxico casou (ex.: `rag`, `agente`, `teste`); o rótulo de sistema do E2 é `concepts ∩ {rag, agente}`.
 - **`matched_terms`**: Lista de termos casados com a janela de contexto de ±40 tokens.
 - **`provenance`**: Rastreabilidade científica (Run ID, query executada, partição, versão do adaptador, timestamp UTC, hash da resposta bruta e offset da linha no arquivo `.gz`).
 
@@ -449,6 +578,9 @@ A literatura cinza apresenta frequentes sobreposições entre diferentes canais 
    - Para evitar fusões falsas-positivas de entidades (ADR-012), o hash de conteúdo SHA-256 (`content_hash`) só é acionado quando há **corpo textual (`body`) não vazio**.
    - O título e o corpo do texto têm espaços em branco colapsados e são normalizados.
    - **Proteção para Código e Posts sem Corpo:** Arquivos de código (`ItemKind.CODE`) e publicações estritamente baseadas em links/título dependem exclusivamente da canonicalização de URL. Isso garante que arquivos com nomes universais em repositórios diferentes (como `test_rag.py`, `eval.py`, `conftest.py`) ou posts com títulos genéricos em fontes distintas **nunca sejam incorretamente descartados como duplicatas**.
+3. **Passo 3 (Quase-duplicatas, ADR-026):**
+   - Assinaturas MinHash (128 permutações, 5-shingles de palavras) e LSH (32 bandas) propõem pares candidatos, mantidos como duplicatas quando a similaridade de Jaccard estimada é ≥ `--near-threshold` (0,85 por padrão; `0` desativa).
+   - Textos com menos de 30 tokens são ignorados. O relatório `dedupe_report.json` lista cada par removido com a similaridade, para calibrar o limiar no piloto.
 
 ---
 
@@ -458,13 +590,14 @@ O MSR-Kit foi construído com salvaguardas explícitas de propriedade intelectua
 - **Fontes com política `metadata_only`:** GitHub, Dev.to, Reddit, Hugging Face, RSS, Bluesky e Hacker News são tratadas como `metadata_only`.
 - **Fontes com política `full_text_with_attribution`:** Stack Exchange permite redistribuição sob licença Creative Commons (CC BY-SA).
 - **Proteção no Exportador:** Se o usuário executar `msrkit export --include-body`, o exportador analisa todas as fontes contidas nos dados minerados. Se houver itens de fontes cuja política seja `metadata_only`, **o comando aborta imediatamente com erro (exit code 1)** antes de criar os arquivos, evitando a distribuição acidental de textos com direitos autorais.
+- **Pacote Zenodo (`msrkit package`, ADR-040):** itens de fontes `metadata_only` perdem `body` e contextos (mantêm `body_hash`); identificadores de autor viram pseudônimos com sal não publicado, salvo `--keep-authors`; respostas brutas e conteúdo de arquivos de repositório nunca entram no pacote.
 
 ---
 
 ## 11. Guia de Desenvolvimento, Testes e Extensão
 
 ### Executar a Suíte de Testes
-O projeto contém mais de 200 testes unitários e de integração utilizando `pytest` e cassettes gravados (`vcrpy`):
+O projeto contém cerca de 400 testes unitários e de integração utilizando `pytest` e cassettes gravados (`vcrpy`). O CI roda `ruff check`, `ruff format --check`, `mypy` (strict) e a suíte com cobertura mínima de 80%:
 
 ```bash
 # Executar todos os testes com isolamento de rede:
@@ -476,8 +609,17 @@ pytest -m "not network"
 # Verificar conformidade de estilo com o Ruff:
 ruff check src/ tests/
 
+# Formatação:
+ruff format --check src/ tests/
+
 # Checagem estrita de tipos com Mypy:
 mypy src/
+
+# Análises opcionais (LDA/k-means) e seus testes:
+pip install -e ".[dev,analysis]"
+
+# Gravar um cassette de contrato (exige rede; apague o arquivo para regravar):
+MSRKIT_RECORD=1 pytest tests/test_cassettes.py -k stackexchange
 ```
 
 ### Como Adicionar um Novo Adaptador de Fonte
@@ -489,5 +631,6 @@ Para integrar uma nova API ao MSR-Kit:
    - `available() -> Availability`: Checa sem rede se credenciais ou dependências estão satisfeitas.
    - `estimate(q: Query) -> int | None`: Estima a contagem total de itens.
    - `search(q: Query) -> Iterator[RawItem]`: Consome a API utilizando obrigatoriamente `self._governed_get()`.
-   - `normalize(raw: RawItem) -> Item`: Mapeia a resposta da API para o modelo canônico `Item`.
+   - `normalize(raw: RawItem, terms: list[str] | None = None) -> Item`: Mapeia a resposta da API para o modelo canônico `Item`.
 5. O adaptador será descoberto e registrado automaticamente no sistema via `src/msrkit/registry.py`.
+6. Acrescente um caso em `tests/test_cassettes.py` e grave o cassette com `MSRKIT_RECORD=1`.
