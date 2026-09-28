@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      collect:
+        description: "Também rodar a coleta de teste (workflow Coleta) com as fontes públicas"
+        type: boolean
+        default: false
+      per_query_limit:
+        description: "Coleta: máximo de itens por consulta"
+        type: string
+        default: "10"
 
 jobs:
   test:
@@ -53,3 +62,11 @@ jobs:
       - name: Verify collection planning (dry-run)
         run: |
           python -m msrkit.cli plan protocols/v0_rag_agents_testing.yaml
+
+  collect:
+    name: Coleta de teste
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.collect }}
+    uses: ./.github/workflows/collect.yml
+    with:
+      per_query_limit: ${{ inputs.per_query_limit }}
+    secrets: inherit

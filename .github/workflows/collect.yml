@@ -20,6 +20,23 @@ on:
       limit:
         description: "Máximo de itens por fonte. Vazio = limite do protocolo."
         default: "300"
+  # Também chamável pelo CI (entrada `collect`), útil enquanto este arquivo não
+  # está no branch padrão, onde o GitHub exige que um workflow exista para ser
+  # disparado manualmente.
+  workflow_call:
+    inputs:
+      sources:
+        type: string
+        default: "hackernews,devto,stackexchange,huggingface,rss"
+      manual_sources:
+        type: string
+        default: ""
+      per_query_limit:
+        type: string
+        default: "10"
+      limit:
+        type: string
+        default: "300"
 
 permissions:
   contents: read
