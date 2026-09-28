@@ -61,6 +61,7 @@ class BaseAdapter(ABC):
         self._request_count = 0
         self._response_hashes: list[str] = []
         self._last_response_sha256: str = ""
+        self._discards: list[dict[str, str]] = []
 
     @property
     def request_count(self) -> int:
@@ -77,6 +78,18 @@ class BaseAdapter(ABC):
         hashes = list(self._response_hashes)
         self._response_hashes.clear()
         return hashes
+
+    def _record_discard(self, native_id: str, title: str, url: str, reason: str) -> None:
+        """Record an item fetched but dropped by a local filter (audit trail for PRISMA)."""
+        self._discards.append(
+            {"native_id": native_id, "title": title, "url": url, "reason": reason}
+        )
+
+    def pop_discards(self) -> list[dict[str, str]]:
+        """Return and clear items discarded by local filters since the last call."""
+        discards = list(self._discards)
+        self._discards.clear()
+        return discards
 
     @property
     def client(self) -> httpx.Client:

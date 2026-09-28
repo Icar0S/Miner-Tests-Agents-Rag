@@ -86,6 +86,12 @@ def _get_registry() -> dict[str, type]:
     return all_adapters()
 
 
+def _tag_term_languages(item: Any, term_langs: dict[str, str]) -> None:
+    """Label each term hit with the language of its lexicon (language stratum)."""
+    for hit in item.matched_terms:
+        hit.lang = term_langs.get(hit.term, hit.lang)
+
+
 def _unwrap(val: object) -> Any:
     """Unwrap Typer default parameter if called directly from Python code."""
     from typer.models import ArgumentInfo, OptionInfo
@@ -382,6 +388,9 @@ def run(
         else:
             target_manifest.sources.append(entry)
 
+    all_terms = config.all_terms()
+    term_langs = config.term_languages()
+
     registry = _get_registry()
     run_id = resume or generate_run_id()
     proto_hash = protocol_sha256(protocol)
@@ -477,7 +486,13 @@ def run(
         queries = config.build_queries(source_name)
         partitioned_queries = []
         for q in queries:
-            partitioned_queries.extend(adapter.partition(q))
+            try:
+                partitioned_queries.extend(adapter.partition(q))
+            except Exception as e:
+                console.print(
+                    f"  [yellow]Partitioning failed ({e}); running query unpartitioned.[/yellow]"
+                )
+                partitioned_queries.append(q)
         queries = partitioned_queries
         if limit is not None:
             for q in queries:
@@ -533,7 +548,7 @@ def run(
 
                     # Normalize
                     try:
-                        item = adapter.normalize(raw_item, terms=config.terms)
+                        item = adapter.normalize(raw_item, terms=all_terms)
                         # Update provenance
                         item.provenance.run_id = run_id
                         item.provenance.query_string = query_display
@@ -544,17 +559,18 @@ def run(
                         )
 
                         # Post-normalization term matching
-                        if not item.matched_terms and config.terms:
+                        if not item.matched_terms and all_terms:
                             from msrkit.keywords import match_terms
 
                             item.matched_terms = match_terms(
-                                config.terms,
+                                all_terms,
                                 title=item.title,
                                 body=item.body,
                                 tags=item.tech.tags,
                                 path=item.tech.path,
                             )
 
+                        _tag_term_languages(item, term_langs)
                         item_storage.save_items([item], run_id)
                         items_collected += 1
                         total_source_items += 1
@@ -579,18 +595,37 @@ def run(
             total_source_requests += requests_made
             if hasattr(adapter, "pop_response_hashes"):
                 response_hashes = adapter.pop_response_hashes()
+            discards = adapter.pop_discards() if hasattr(adapter, "pop_discards") else []
+            if discards:
+                discard_path = DATA_DIR / "runs" / run_id / "discarded.jsonl"
+                discard_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(discard_path, "a", encoding="utf-8") as fh:
+                    for d in discards:
+                        record = {"source": source_name, "query": query_display, **d}
+                        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            reasons: list[str] = []
+            if query.truncated:
+                reasons.append("source_cap")
+            if not adapter_cls.policy.historical_coverage:
+                reasons.append("no_historical_coverage")
+            if query.limit is not None and raw_items_count >= query.limit:
+                reasons.append("item_limit")
             query_entry = QueryManifestEntry(
                 query_string=query_display,
                 partitions=1,
                 requests=requests_made,
                 items=items_collected,
-                truncated=False,
+                truncated=bool(reasons),
+                truncation_reasons=reasons,
+                estimated_total=query.estimated_total,
+                discarded=len(discards),
                 response_sha256=response_hashes,
             )
             source_entry.queries.append(query_entry)
+            discard_note = f", {len(discards)} discarded by local filter" if discards else ""
             console.print(
                 f"    Collected: {items_collected} items "
-                f"({raw_items_count} raw, {requests_made} requests)"
+                f"({raw_items_count} raw, {requests_made} requests{discard_note})"
             )
 
         adapter.close()
@@ -635,13 +670,15 @@ def normalize(
 
     # Load protocol terms if available
     terms: list[str] = []
+    term_langs: dict[str, str] = {}
     protocol_path = protocol or manifest.protocol_path
     if protocol_path and Path(protocol_path).exists():
         try:
             from msrkit.config import load_protocol
 
             proto = load_protocol(protocol_path)
-            terms = proto.terms
+            terms = proto.all_terms()
+            term_langs = proto.term_languages()
         except Exception as e:
             logging.getLogger(__name__).warning("Could not load protocol for terms: %s", e)
 
@@ -691,6 +728,7 @@ def normalize(
                             tags=item.tech.tags,
                             path=item.tech.path,
                         )
+                    _tag_term_languages(item, term_langs)
                     normalized.append(item)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Normalization error: %s", e)
@@ -699,6 +737,83 @@ def normalize(
                 total_items += len(normalized)
 
     console.print(f"[green]✓ Normalized {total_items} items from raw data[/green]")
+
+
+@app.command()
+def fetch(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    source: list[str] = typer.Option(  # noqa: B008
+        ["hackernews", "rss"], "--source", "-s", help="Sources whose links are fetched"
+    ),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Max pages to fetch"),
+    all_items: bool = typer.Option(
+        False, "--all", help="Also fetch items with no matched term (default: matched only)"
+    ),
+    interval: float = typer.Option(5.0, "--interval", help="Min seconds between hits per host"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Download the text of pages linked by collected items (opt-in, kept local).
+
+    Honors robots.txt and a per-host interval. Text goes to
+    data/fulltext/<run_id>.jsonl and is never exported (ADR-019).
+    """
+    run_id = _unwrap(run_id)
+    source = _unwrap(source)
+    limit = _unwrap(limit)
+    all_items = _unwrap(all_items)
+    interval = _unwrap(interval)
+    verbose = _unwrap(verbose)
+    _setup_logging(verbose)
+
+    from msrkit.fulltext import FullTextFetcher
+    from msrkit.storage import ItemStorage
+
+    if not run_id:
+        run_id = _get_latest_run_id()
+        if not run_id:
+            console.print("[red]✗ No runs found in data directory.[/red]")
+            raise typer.Exit(1)
+
+    items = ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+    out_path = DATA_DIR / "fulltext" / f"{run_id}.jsonl"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    done: set[str] = set()
+    if out_path.exists():
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                done.add(json.loads(line)["item_id"])
+
+    targets = [
+        it
+        for it in items
+        if it.source in source
+        and it.id not in done
+        and (all_items or it.matched_terms)
+        and (it.url.host or "") != "news.ycombinator.com"  # HN self-posts already carry text
+    ]
+    if limit is not None:
+        targets = targets[:limit]
+    console.print(
+        f"[bold]Run:[/bold] {run_id} · {len(targets)} page(s) to fetch "
+        f"({len(done)} already fetched)"
+    )
+
+    counts: dict[str, int] = {}
+    fetcher = FullTextFetcher(min_interval_s=interval)
+    try:
+        with open(out_path, "a", encoding="utf-8") as fh:
+            for it in targets:
+                result = fetcher.fetch(str(it.url))
+                counts[result.status] = counts.get(result.status, 0) + 1
+                record = {"item_id": it.id, "source": it.source, **result.__dict__}
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                fh.flush()
+    finally:
+        fetcher.close()
+
+    summary = ", ".join(f"{k}: {v}" for k, v in sorted(counts.items())) or "nothing to fetch"
+    console.print(f"[green]✓ Full text saved to {out_path}[/green] ({summary})")
 
 
 @app.command(name="dedupe")
@@ -864,6 +979,11 @@ def stats(
         items = sum(q.items for q in source.queries)
         requests = sum(q.requests for q in source.queries)
         truncated = any(q.truncated for q in source.queries)
+        reason_counts: dict[str, int] = {}
+        for q in source.queries:
+            for reason in q.truncation_reasons:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        reason_text = ", ".join(f"{r}×{n}" for r, n in sorted(reason_counts.items()))
         total_items += items
         total_requests += requests
 
@@ -873,7 +993,9 @@ def stats(
             str(len(source.queries)),
             str(items),
             str(requests),
-            "[red]Yes[/red]" if truncated else "[green]No[/green]",
+            (f"[red]Yes[/red] ({reason_text})" if reason_text else "[red]Yes[/red]")
+            if truncated
+            else "[green]No[/green]",
         )
 
     console.print(table)
@@ -1043,6 +1165,7 @@ def export(
                 "created_at",
                 "updated_at",
                 "matched_terms",
+                "matched_languages",
                 "stars",
                 "votes",
                 "tags",
@@ -1063,6 +1186,9 @@ def export(
                         ", ".join(sorted(set(hit.term for hit in item.matched_terms)))
                         if item.matched_terms
                         else ""
+                    )
+                    row["matched_languages"] = ", ".join(
+                        sorted({hit.lang for hit in item.matched_terms if hit.lang})
                     )
                     row["stars"] = (
                         item.engagement.stars

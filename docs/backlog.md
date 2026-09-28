@@ -1,5 +1,7 @@
 # Backlog
 
+> Execution conditions required by Protocol E2 v2 (§6.5) are tracked in [`PLANO.md`](PLANO.md). RQ6–RQ8 were dropped in protocol v2.
+
 Items identified as relevant for the empirical study but explicitly out of scope for v0 infrastructure (§18).
 
 ---

@@ -105,6 +105,7 @@ class TermHit(BaseModel):
     term: str
     field: Literal["title", "body", "tags", "path"]
     context: str  # ±40 tokens around the occurrence
+    lang: str | None = None  # language of the lexicon the term belongs to
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +173,10 @@ class Query(BaseModel):
     until: date | None = None
     extra: dict[str, Any] = {}
     limit: int | None = None
+    # Set by adapter.partition(): True when the source's result cap still cuts
+    # this partition after all possible splits (potential sampling bias).
+    truncated: bool = False
+    estimated_total: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +217,9 @@ class SourcePolicy(BaseModel):
     max_pages: int | None = None
     supports_full_text_search: bool
     supports_date_filter: bool
+    # False when the source only serves recent items (e.g. RSS), so any
+    # historical window is necessarily incomplete.
+    historical_coverage: bool = True
     redistribution: RedistributionPolicy
     tos_url: str
     docs_url: str
@@ -231,7 +239,13 @@ class QueryManifestEntry(BaseModel):
     requests: int
     items: int
     truncated: bool
+    # Why the query may be incomplete: "source_cap" (result cap not resolved by
+    # partitioning), "no_historical_coverage" (source serves only recent items),
+    # "item_limit" (collection stopped at the configured item limit).
+    truncation_reasons: list[str] = []
     estimated_total: int | None = None
+    # Items fetched but dropped by a local filter; details in runs/<id>/discarded.jsonl
+    discarded: int = 0
     failed_partitions: list[str] = []
     response_sha256: list[str] = []
 

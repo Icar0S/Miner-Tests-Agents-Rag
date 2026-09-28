@@ -440,6 +440,7 @@ limits:
             )
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(app, ["run", str(proto_file)])
         assert result.exit_code == 0
@@ -481,6 +482,7 @@ limits:
                 )
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,
@@ -570,6 +572,7 @@ limits:
         from msrkit.adapters.hackernews import HackerNewsAdapter
 
         monkeypatch.setattr(HackerNewsAdapter, "search", lambda *args, **kwargs: iter([]))
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,
@@ -671,6 +674,7 @@ limits:
             return iter([])
 
         monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        monkeypatch.setattr(HackerNewsAdapter, "estimate", lambda *args, **kwargs: 10)
         # Should execute cleanly without Manifest validation error for OptionInfo run_id
         run(protocol="protocols/v0_rag_agents_testing.yaml", source="hackernews", limit=1)
 
@@ -789,6 +793,7 @@ limits:
                 )
 
         monkeypatch.setattr(GitHubAdapter, "search", mock_search)
+        monkeypatch.setattr(GitHubAdapter, "estimate", lambda *args, **kwargs: 10)
 
         result = runner.invoke(
             app,
@@ -878,3 +883,93 @@ limits:
         assert len(items) == 1
         assert items[0].provenance.partition == "partA"
         assert items[0].provenance.raw_ref.endswith("partA.jsonl.gz:0")
+
+
+class TestTruncationManifest:
+    """The run manifest records truncation and its reasons (C2)."""
+
+    def _run_source(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str) -> Any:
+        from msrkit.provenance import load_manifest
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        result = runner.invoke(
+            app, ["run", "protocols/v0_rag_agents_testing.yaml", "--source", source, "--limit", "2"]
+        )
+        assert result.exit_code == 0, result.stdout
+        run_id = next(p.name for p in (tmp_path / "runs").iterdir() if p.is_dir())
+        entry = next(s for s in load_manifest(tmp_path, run_id).sources if s.name == source)
+        return entry, run_id
+
+    def test_source_cap_and_item_limit_are_recorded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.hackernews import HackerNewsAdapter
+
+        def mock_partition(self: Any, q: Query) -> list[Query]:
+            return [
+                q.model_copy(
+                    update={"terms": [q.terms[0]], "truncated": True, "estimated_total": 2500}
+                )
+            ]
+
+        def mock_search(self: Any, query: Query) -> Any:
+            for i in range(5):
+                yield RawItem(
+                    source="hackernews",
+                    native_id=str(i),
+                    payload={"objectID": str(i), "title": "LLM evaluation", "_tags": ["story"]},
+                    fetched_at=datetime.now(UTC),
+                )
+
+        monkeypatch.setattr(HackerNewsAdapter, "partition", mock_partition)
+        monkeypatch.setattr(HackerNewsAdapter, "search", mock_search)
+        entry, run_id = self._run_source(tmp_path, monkeypatch, "hackernews")
+
+        q = entry.queries[0]
+        assert q.truncated is True
+        assert q.truncation_reasons == ["source_cap", "item_limit"]
+        assert q.estimated_total == 2500
+
+        stats = runner.invoke(app, ["stats", "--run", run_id])
+        assert "source_cap×1" in stats.stdout
+
+    def test_rss_is_marked_without_historical_coverage(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.rss import RSSAdapter
+
+        monkeypatch.setattr(RSSAdapter, "search", lambda *args, **kwargs: iter([]))
+        entry, _ = self._run_source(tmp_path, monkeypatch, "rss")
+        assert entry.queries
+        assert all(q.truncated for q in entry.queries)
+        assert all("no_historical_coverage" in q.truncation_reasons for q in entry.queries)
+
+
+class TestLanguageStratum:
+    """Term hits carry their lexicon language, exported as matched_languages (C5)."""
+
+    def test_csv_exports_matched_languages(
+        self, tmp_path: Path, sample_items: list[Item], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.cli import _tag_term_languages
+        from msrkit.models import TermHit
+
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        item = sample_items[0]
+        item.matched_terms = [
+            TermHit(term="RAG testing", field="title", context="c"),
+            TermHit(term="teste de RAG", field="body", context="c"),
+        ]
+        _tag_term_languages(item, {"RAG testing": "en", "teste de RAG": "pt"})
+        assert [h.lang for h in item.matched_terms] == ["en", "pt"]
+
+        ItemStorage(tmp_path).save_items([item], "run-lang")
+        out = tmp_path / "out.csv"
+        result = runner.invoke(
+            app, ["export", "--run", "run-lang", "--format", "csv", "-o", str(out)]
+        )
+        assert result.exit_code == 0, result.stdout
+        header, row = out.read_text(encoding="utf-8-sig").splitlines()[:2]
+        cols = header.split(";")
+        assert "matched_languages" in cols
+        assert row.split(";")[cols.index("matched_languages")] == "en, pt"

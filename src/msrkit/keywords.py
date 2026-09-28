@@ -1,28 +1,81 @@
 """Keyword matching: term detection with context windows.
 
-v0 uses simple case-insensitive matching with word boundaries.
-No stemming, embeddings, or classification.
+Two deterministic modes (no embeddings or ML classification):
+
+- ``flexible`` (default): each word of a term tolerates inflection (a light
+  suffix-stripping stem followed by ``\\w*``), and words may be separated by
+  spaces, hyphens, underscores or slashes. "evaluate RAG" matches "Evaluating
+  RAG"; "LLM as a judge" matches "LLM-as-a-judge". Words shorter than four
+  characters (acronyms such as RAG, LLM) stay exact, allowing only a plural "s",
+  so "rag" never matches "brag" or "courage".
+- ``exact``: case-insensitive exact phrase with word boundaries (v0 behavior).
+
+Terms containing symbols (C++, .NET, C#) always use exact matching.
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
+from functools import lru_cache
 from typing import Literal
 
 from msrkit.models import TermHit
 
+MatchMode = Literal["flexible", "exact"]
 
-def _build_pattern(term: str) -> re.Pattern[str]:
-    """Build a regex pattern for a term with word boundaries.
+# Checked in order; the first suffix that leaves a stem of MIN_STEM chars wins.
+_SUFFIXES = (
+    # English
+    "ations", "ation", "ings", "ing", "ers", "er", "ed",
+    # Portuguese, accent-folded (avaliação/avaliações -> avali-, testes -> test-)
+    "acoes", "acao", "coes", "cao",
+    # shared
+    "es", "s", "e",
+)  # fmt: skip
+MIN_STEM = 4
+_WORD_SEP = re.compile(r"[\s\-_/]+")
+_SEP_PATTERN = r"[\s\-_/]+"
 
-    Multi-word terms are matched as exact phrases.
-    Uses word boundaries if the term starts/ends with word characters,
-    or negative lookarounds if boundary characters are non-alphanumeric (e.g. C++, .NET).
-    """
+
+def _fold(text: str) -> str:
+    """Strip accents one character at a time, so string positions are preserved."""
+    return "".join(unicodedata.normalize("NFD", ch)[0] for ch in text)
+
+
+def _stem(word: str) -> str:
+    """Strip one common English inflectional suffix, keeping at least MIN_STEM chars."""
+    lower = word.lower()
+    for suffix in _SUFFIXES:
+        if lower.endswith(suffix) and len(lower) - len(suffix) >= MIN_STEM:
+            return lower[: -len(suffix)]
+    return lower
+
+
+def _word_pattern(word: str) -> str:
+    if len(word) < MIN_STEM:
+        return re.escape(word) + r"s?\b"
+    return re.escape(_stem(word)) + r"\w*"
+
+
+def _exact_pattern(term: str) -> re.Pattern[str]:
+    """Exact phrase with word boundaries, or lookarounds for symbol edges (C++, .NET)."""
     escaped = re.escape(term)
     left = r"\b" if re.match(r"^\w", term) else r"(?<!\w)"
     right = r"\b" if re.search(r"\w$", term) else r"(?!\w)"
     return re.compile(rf"{left}{escaped}{right}", re.IGNORECASE)
+
+
+@lru_cache(maxsize=1024)
+def _build_pattern(term: str, mode: MatchMode = "flexible") -> re.Pattern[str]:
+    """Build the regex for a term in the given matching mode."""
+    words = [w for w in _WORD_SEP.split(_fold(term.strip())) if w]
+    if mode == "exact":
+        return _exact_pattern(term)
+    if not words or any(re.search(r"\W", w) for w in words):
+        return _exact_pattern(_fold(term))
+    body = _SEP_PATTERN.join(_word_pattern(w) for w in words)
+    return re.compile(rf"\b{body}", re.IGNORECASE)
 
 
 def _extract_context(text: str, match_start: int, match_end: int, window: int = 40) -> str:
@@ -67,6 +120,7 @@ def match_terms(
     tags: list[str] | None = None,
     path: str | None = None,
     context_window: int = 40,
+    mode: MatchMode = "flexible",
 ) -> list[TermHit]:
     """Match terms against item fields.
 
@@ -77,6 +131,7 @@ def match_terms(
         tags: Item tags.
         path: Item path (e.g., file path for code).
         context_window: Number of tokens for context.
+        mode: "flexible" (inflections and hyphens tolerated) or "exact".
 
     Returns:
         List of TermHit instances for all matches.
@@ -91,13 +146,16 @@ def match_terms(
     ]
 
     for term in terms:
-        pattern = _build_pattern(term)
+        pattern = _build_pattern(term, mode)
 
         for field_name, field_value in fields:
             if field_value is None:
                 continue
 
-            for match in pattern.finditer(field_value):
+            # Flexible mode matches on accent-folded text; _fold keeps positions,
+            # so the context window is cut from the original text.
+            searchable = _fold(field_value) if mode == "flexible" else field_value
+            for match in pattern.finditer(searchable):
                 context = _extract_context(
                     field_value,
                     match.start(),

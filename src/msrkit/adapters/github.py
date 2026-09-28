@@ -36,6 +36,7 @@ from msrkit.models import (
     SourcePolicy,
     TechContext,
 )
+from msrkit.partition import partition_capped
 from msrkit.registry import register
 
 logger = logging.getLogger(__name__)
@@ -111,18 +112,39 @@ class GitHubAdapter(BaseAdapter):
         )
 
     def estimate(self, q: Query) -> int | None:
-        """Use total_count from the search response."""
+        """Largest total_count among the API queries search() will issue.
+
+        search() sends one query per (term, language), each capped at 1,000
+        results, so the partition decision depends on the largest of them.
+        """
         kind = q.kind or "repo"
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
-        query_string = self._build_query_string(q)
+        terms: list[str | None] = list(q.terms) or [None]
+        languages = q.extra.get("languages") or [None]
 
-        params: dict[str, Any] = {"q": query_string, "per_page": 1}
-        resp = self._governed_get(f"{_BASE_URL}{endpoint}", params=params)
+        largest = 0
+        for term in terms:
+            for lang in languages:
+                query_string = self._build_single_query_string(q, term=term, language=lang)
+                params: dict[str, Any] = {"q": query_string, "per_page": 1}
+                resp = self._governed_get(f"{_BASE_URL}{endpoint}", params=params)
+                if resp.status_code != 200:
+                    logger.warning("GitHub estimate failed: %d", resp.status_code)
+                    return None
+                largest = max(largest, resp.json().get("total_count", 0))
+        return largest
 
-        if resp.status_code != 200:
-            logger.warning("GitHub estimate failed: %d", resp.status_code)
-            return None
-        return resp.json().get("total_count")
+    def partition(self, q: Query) -> list[Query]:
+        """Split by term, then by date window until each query fits the 1,000 cap."""
+        kind = q.kind or "repo"
+        if kind == "code" and not self._env("GITHUB_TOKEN"):
+            return [q]  # search() skips unauthenticated code search
+        return partition_capped(
+            q,
+            self.policy.max_results_per_query,
+            self.estimate,
+            split_dates=kind != "code",  # code search has no date qualifier
+        )
 
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search GitHub, paginating up to 10 pages (1000 results)."""
@@ -136,7 +158,7 @@ class GitHubAdapter(BaseAdapter):
         total_yielded = 0
         seen_ids: set[str] = set()
 
-        terms_to_search = q.terms if (q.terms and len(q.terms) > 1) else [None]
+        terms_to_search: list[str | None] = list(q.terms) or [None]
         languages = q.extra.get("languages") or [None]
 
         for term in terms_to_search:

@@ -306,7 +306,9 @@ class TestRssAdapterUnit:
         assert item.kind == ItemKind.ARTICLE
         assert item.author_handle == "techblogger"
         assert item.created_at is not None
-        assert len(item.matched_terms) == 2
+        assert {h.term for h in item.matched_terms} == {"golden dataset", "Testing RAG"}
+        # Flexible matching also catches the plural "Golden Datasets" in the title.
+        assert any(h.field == "title" and h.term == "golden dataset" for h in item.matched_terms)
 
     def test_estimate_always_none(self) -> None:
         adapter = RSSAdapter()
@@ -527,8 +529,8 @@ class TestSearchLoopsAndQueryBuilding:
         assert len(raw_items) == 1
         assert raw_items[0].native_id == "555"
 
-    def test_stackexchange_multi_tag_decoupled_params(self) -> None:
-        """Multiple tags are not joined with ';' when terms are present to prevent 0-match AND."""
+    def test_stackexchange_tags_are_or_joined_with_terms(self) -> None:
+        """Tags are sent together with each term, ';'-joined (OR per the API docs)."""
         adapter = StackExchangeAdapter()
         q = Query(
             source="stackexchange",
@@ -537,51 +539,151 @@ class TestSearchLoopsAndQueryBuilding:
         )
         params = adapter._build_params(q, site="stackoverflow", page=1, pagesize=10, term="rag")
         assert params.get("q") == "rag"
-        assert "tagged" not in params
+        assert params.get("tagged") == "rag;langchain"
 
-    def test_stackexchange_tags_search_without_terms(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When terms is empty, tags are queried individually."""
+    def test_stackexchange_tagged_accepts_string(self) -> None:
         adapter = StackExchangeAdapter()
-        captured_params: list[dict[str, Any]] = []
+        q = Query(source="stackexchange", terms=[], extra={"tagged": "rag;langchain"})
+        params = adapter._build_params(q, site="stackoverflow", page=1, pagesize=10)
+        assert params.get("tagged") == "rag;langchain"
+        assert "q" not in params
+
+    def test_stackexchange_one_request_per_site_and_term(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = StackExchangeAdapter()
+        captured: list[dict[str, Any]] = []
 
         def mock_get(url: str, params: dict[str, Any]) -> MagicMock:
-            captured_params.append(params)
+            captured.append(params)
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {
                 "has_more": False,
-                "items": [{"question_id": len(captured_params), "title": "SE Q"}],
+                "items": [{"question_id": len(captured), "title": "SE Q"}],
             }
             return resp
 
         monkeypatch.setattr(adapter, "_governed_get", mock_get)
-
         q = Query(
             source="stackexchange",
-            terms=[],
-            extra={"sites": ["stackoverflow"], "tagged": ["rag", "langchain"]},
+            terms=["RAG testing", "agent evaluation"],
+            extra={
+                "sites": ["stackoverflow", "softwareengineering"],
+                "tagged": ["rag", "langchain"],
+                "include_answers": False,
+            },
             limit=10,
         )
-        raw_items = list(adapter.search(q))
-        assert len(raw_items) == 2
-        assert len(captured_params) == 2
-        assert captured_params[0].get("tagged") == "rag"
-        assert captured_params[1].get("tagged") == "langchain"
+        assert len(list(adapter.search(q))) == 4
+        assert [(c["site"], c["q"]) for c in captured] == [
+            ("stackoverflow", "RAG testing"),
+            ("stackoverflow", "agent evaluation"),
+            ("softwareengineering", "RAG testing"),
+            ("softwareengineering", "agent evaluation"),
+        ]
+        assert all(c["tagged"] == "rag;langchain" for c in captured)
 
-    def test_stackexchange_explicit_tagged_mode_and(self) -> None:
-        """When tagged_mode is 'and', multi-tags are joined with ';'."""
+    def test_stackexchange_thread_includes_answers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Answers are fetched in one batch per page and appended to the thread body (C4a)."""
         adapter = StackExchangeAdapter()
-        q = Query(
-            source="stackexchange",
-            terms=["rag"],
-            extra={
-                "sites": ["stackoverflow"],
-                "tagged": ["rag", "langchain"],
-                "tagged_mode": "and",
-            },
-        )
-        params = adapter._build_params(q, site="stackoverflow", page=1, pagesize=10, term="rag")
-        assert params.get("tagged") == "rag;langchain"
+        urls: list[str] = []
+
+        def mock_get(url: str, params: dict[str, Any]) -> MagicMock:
+            urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            if url.endswith("/answers"):
+                resp.json.return_value = {
+                    "has_more": False,
+                    "items": [
+                        {
+                            "question_id": 1,
+                            "answer_id": 10,
+                            "body": "Use ragas in CI",
+                            "score": 5,
+                            "is_accepted": True,
+                        },
+                        {
+                            "question_id": 1,
+                            "answer_id": 11,
+                            "body": "Try a golden dataset",
+                            "score": 2,
+                        },
+                    ],
+                }
+            else:
+                resp.json.return_value = {
+                    "has_more": False,
+                    "items": [
+                        {
+                            "question_id": 1,
+                            "title": "How to test RAG?",
+                            "body": "Q body",
+                            "answer_count": 2,
+                        },
+                        {"question_id": 2, "title": "Unanswered", "body": "B", "answer_count": 0},
+                    ],
+                }
+            return resp
+
+        monkeypatch.setattr(adapter, "_governed_get", mock_get)
+        q = Query(source="stackexchange", terms=["RAG"], extra={"sites": ["stackoverflow"]})
+        raws = list(adapter.search(q))
+
+        assert len(urls) == 2
+        assert urls[1].endswith("/questions/1/answers")  # unanswered question not requested
+        assert len(raws[0].payload["_answers"]) == 2
+        assert raws[1].payload["_answers"] == []
+
+        item = adapter.normalize(raws[0], terms=["golden dataset"])
+        assert item.body.startswith("Q body")
+        assert "--- Resposta aceita (score 5) ---" in item.body
+        assert "Try a golden dataset" in item.body
+        assert item.matched_terms and item.matched_terms[0].term == "golden dataset"
+
+    def test_devto_fetches_full_body_only_for_kept_articles(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Kept articles get body_markdown from /articles/{id}; discarded cost nothing (C4b)."""
+        adapter = DevToAdapter()
+        urls: list[str] = []
+
+        def mock_get(url: str, params: dict[str, Any] | None = None) -> MagicMock:
+            urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            if url.endswith("/articles/1"):
+                resp.json.return_value = {"id": 1, "body_markdown": "Full text: golden dataset"}
+            else:
+                resp.json.return_value = [
+                    {
+                        "id": 1,
+                        "title": "RAG testing guide",
+                        "description": "short",
+                        "url": "https://dev.to/a/1",
+                        "published_at": "2024-01-01T00:00:00Z",
+                    },
+                    {
+                        "id": 2,
+                        "title": "Cooking",
+                        "description": "x",
+                        "url": "https://dev.to/a/2",
+                        "published_at": "2024-01-01T00:00:00Z",
+                    },
+                ]
+            return resp
+
+        monkeypatch.setattr(adapter, "_governed_get", mock_get)
+        q = Query(source="devto", terms=["RAG testing"], extra={"tags": ["rag"]}, limit=10)
+        raws = list(adapter.search(q))
+
+        assert [r.native_id for r in raws] == ["1"]
+        assert sum(u.endswith("/articles/1") for u in urls) == 1
+        assert not any(u.endswith("/articles/2") for u in urls)
+        item = adapter.normalize(raws[0], terms=["golden dataset"])
+        assert item.body == "Full text: golden dataset"
+        assert item.matched_terms[0].term == "golden dataset"
 
     def test_hackernews_search_loop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = HackerNewsAdapter()

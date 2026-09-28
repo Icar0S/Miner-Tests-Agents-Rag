@@ -39,6 +39,22 @@ terms:
   - "prompt regression"
   - "eval harness"
 
+# ---- Léxico em português (estrato exploratório, critério I4) ----
+# Buscado junto com `terms`; cada ocorrência registra o idioma do termo
+# (campo `lang` em matched_terms e coluna matched_languages no CSV).
+terms_by_language:
+  pt:
+    - "teste de RAG"
+    - "avaliação de RAG"
+    - "teste de LLM"
+    - "avaliação de LLM"
+    - "LLM como juiz"
+    - "teste de agentes"
+    - "avaliação de agentes"
+    - "dataset de referência"
+    - "teste de alucinação"
+    - "regressão de prompt"
+
 # Idiomas alvo
 languages:
   - en
@@ -66,9 +82,18 @@ sources:
       sites:
         - stackoverflow
         - softwareengineering
-      # Nota: A API do StackExchange trata múltiplos tags como AND rigoroso.
-      # Para buscar termos livres sobre RAG, mantemos a busca por termos nos sites
-      # mais relevantes, sem forçar conjunção impossível de tags.
+        - sqa
+        - datascience
+        - ai
+        - pt.stackoverflow   # estrato em português
+      # `tagged` tem semântica OU na API (/search/advanced: "at least one will
+      # be present"). Cada termo é buscado com a lista completa de tags (ADR-017).
+      tagged:
+        - langchain
+        - llamaindex
+        - large-language-model
+        - rag
+        - openai-api
 
   hackernews:
     enabled: true
@@ -85,7 +110,9 @@ sources:
         - testing
 
   reddit:
-    enabled: true
+    # Desabilitado no Estudo E2: credenciais novas exigem aprovação manual
+    # prévia do Reddit desde nov/2025 (ADR-014, docs/sources.md).
+    enabled: false
     extra:
       subreddits:
         - LocalLLaMA
