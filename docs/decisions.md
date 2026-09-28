@@ -263,3 +263,11 @@ This document records architectural, design, and technical decisions made during
 
   The output is `data/reports/<run>/prisma.json` and `prisma.md`, which has a Mermaid diagram.
 - **Conservative Principle:** a stage without input (dedupe not run) is shown as "n/a", never as zero. Records not retrieved are labelled as an estimate.
+
+---
+
+## ADR-031: Precision on a Stratified Detection Sample
+
+- **Context:** §12.3 requires the extractor's precision to be measured. Detections are dominated by N1 text mentions, so a simple random sample would barely see N2/N3 or the smaller sources.
+- **Decision:** `msrkit precision sample` stratifies detections by source × evidence level. It allocates the sample (default 200) proportionally, with at least one per stratum and largest remainders for the rest, and draws it with a recorded seed. The sheet shows each detection's stable key, stratum, evidence and item, plus a `correct` column. `msrkit precision score` reads the judged sheet. It reports precision per stratum and overall, and within each level. Both estimates weight strata by their population size (Σ Wₕ·pₕ), so over-sampled small strata do not bias them. A Wilson 95% interval on the sample is also reported.
+- **Limit:** the Wilson interval ignores the stratified design (it is conservative when strata are homogeneous). Judges should record doubtful cases in `note`.
