@@ -83,6 +83,10 @@ class CodingForm(BaseModel):
 
     fields: list[CodingField] = []
     failure_modes: dict[str, str] = {}
+    # Double coding (§15): share of eligible items and the dimensions whose κ is reported
+    # (empty = every categorical field).
+    double_coding_rate: float = 0.2
+    agreement: list[str] = []
 
     @model_validator(mode="after")
     def _unique(self) -> CodingForm:
@@ -91,6 +95,11 @@ class CodingForm(BaseModel):
         clash = sorted(set(names) & {"item_id", "coder", "notes", *AUTO_COLUMNS})
         if dup or clash:
             raise ValueError(f"coding field names must be unique and not reserved: {dup + clash}")
+        unknown = [a for a in self.agreement if a not in names]
+        if unknown:
+            raise ValueError(f"coding.agreement names unknown fields: {unknown}")
+        if not 0 < self.double_coding_rate <= 1:
+            raise ValueError("coding.double_coding_rate must be in (0, 1]")
         return self
 
     def allowed(self, field: CodingField, gazetteer: Gazetteer | None) -> list[str]:

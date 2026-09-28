@@ -118,6 +118,9 @@ screening:
 # vocabulary: tools/methods (gazetteer) ou failure_modes (catálogo abaixo).
 # prefill: coluna auto_* copiada para o campo só com --prefill.
 coding:
+  # §15: dupla codificação independente em ≥20% dos elegíveis; κ por dimensão.
+  double_coding_rate: 0.2
+  agreement: [sistema, nivel_evidencia, modos_falha, tipo_oraculo]
   failure_modes:
     FP1: "Conteúdo ausente na base"
     FP2: "Documento relevante fora do top-k"

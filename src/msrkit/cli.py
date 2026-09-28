@@ -1349,6 +1349,9 @@ def coding_export(
     pending_only: bool = typer.Option(
         True, "--pending-only/--recode", help="Skip items this coder already coded"
     ),
+    double_sample: bool = typer.Option(
+        False, "--double-sample", help="Only items of the double-coding sample (coding sample)"
+    ),
 ) -> None:
     """Write the extraction sheet: one column per form field, plus auto_* suggestions.
 
@@ -1379,6 +1382,13 @@ def coding_export(
             )
             raise typer.Exit(1)
         items = [it for it in items if final.get(it.id) == status]
+    if _unwrap(double_sample):
+        sample_path = DATA_DIR / "coding" / run_id / "double_sample.json"
+        if not sample_path.exists():
+            console.print("[red]✗ No double-coding sample; run `msrkit coding sample`.[/red]")
+            raise typer.Exit(1)
+        chosen = set(json.loads(sample_path.read_text(encoding="utf-8"))["item_ids"])
+        items = [it for it in items if it.id in chosen]
     if _unwrap(pending_only) and coder:
         done = {item_id for (item_id, c) in load_codings(DATA_DIR, run_id) if c == coder}
         items = [it for it in items if it.id not in done]
@@ -1420,6 +1430,48 @@ def coding_import(
     console.print(f"[green]✓ {len(records)} coded items recorded in {path}[/green]")
 
 
+@coding_app.command("sample")
+def coding_sample(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    rate: float | None = typer.Option(
+        None, "--rate", help="Share of eligible items (default: coding.double_coding_rate)"
+    ),
+    seed: int = typer.Option(20260928, "--seed", help="Random seed (recorded)"),
+) -> None:
+    """Draw the double-coding sample (§15), stratified by source, among included items."""
+    from msrkit.agreement import double_sample
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    rate = _unwrap(rate) or (proto.coding.double_coding_rate if proto else 0.2)
+    seed = _unwrap(seed)
+    final = final_decisions(load_decisions(DATA_DIR, run_id))
+    eligible = [
+        it
+        for it in ItemStorage(DATA_DIR).read_items(run_id, prefer_deduped=True)
+        if final.get(it.id) == "include"
+    ]
+    if not eligible:
+        console.print("[red]✗ No included items yet (`msrkit screen import`).[/red]")
+        raise typer.Exit(1)
+    try:
+        ids = double_sample(eligible, rate=rate, seed=seed)
+    except ValueError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        raise typer.Exit(1) from None
+    out = DATA_DIR / "coding" / run_id / "double_sample.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    record = {"rate": rate, "seed": seed, "eligible": len(eligible), "item_ids": ids}
+    out.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    console.print(
+        f"[green]✓ {len(ids)} of {len(eligible)} included items sampled for double "
+        f"coding[/green] → {out}"
+    )
+
+
 @coding_app.command("status")
 def coding_status(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
@@ -1442,6 +1494,83 @@ def coding_status(
     console.print(table)
     double = sum(len(c) >= 2 for c in coders_by_item.values())
     console.print(f"Coded items: {len(coders_by_item)} · double-coded: {double}")
+
+
+@app.command()
+def agreement(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    all_fields: bool = typer.Option(
+        False, "--all-fields", help="Every categorical field, not only coding.agreement"
+    ),
+) -> None:
+    """Cohen's κ per dimension between coders (screening and extraction form, §15).
+
+    Writes data/coding/<run_id>/agreement.json and disagreements.csv (one row per
+    item and dimension, for the third coder).
+    """
+    import csv
+
+    from msrkit.agreement import agreement as compute_agreement
+    from msrkit.coding import load_codings
+    from msrkit.screening import load_decisions
+
+    run_id = _resolve_run(_unwrap(run_id))
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    if proto is None:
+        console.print("[red]✗ Protocol not found; pass --protocol.[/red]")
+        raise typer.Exit(1)
+    form = proto.coding
+    dims = None if _unwrap(all_fields) or not form.agreement else form.agreement
+    codings = load_codings(DATA_DIR, run_id)
+    decisions = load_decisions(DATA_DIR, run_id)
+    results = compute_agreement(form, codings, decisions, dimensions=dims)
+    if not results:
+        console.print("[yellow]No item was coded by two coders yet.[/yellow]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Inter-coder agreement — {run_id}")
+    for col in ("Dimension", "Coders", "n", "Agreement", "κ", "Landis & Koch"):
+        table.add_column(col)
+    for r in results:
+        table.add_row(
+            r.dimension,
+            " × ".join(r.coders),
+            str(r.n),
+            f"{r.percent:.0%}",
+            "—" if r.kappa is None else f"{r.kappa:.2f}",
+            r.interpretation,
+        )
+    console.print(table)
+
+    out_dir = DATA_DIR / "coding" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "agreement.json").write_text(
+        json.dumps([r.model_dump() for r in results], indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    values: dict[tuple[str, str], dict[str, Any]] = {}
+    for (item_id, coder), rec in codings.items():
+        values[(item_id, coder)] = dict(rec.values)
+    for (item_id, coder), d in decisions.items():
+        values.setdefault((item_id, coder), {})["screening"] = d.decision
+    with open(out_dir / "disagreements.csv", "w", encoding="utf-8-sig", newline="") as fh:
+        writer = csv.writer(fh, delimiter=";")
+        writer.writerow(["item_id", "dimension", "coder_a", "value_a", "coder_b", "value_b"])
+        for r in results:
+            a, b = r.coders
+            for item_id in r.disagreements:
+                va = values.get((item_id, a), {}).get(r.dimension)
+                vb = values.get((item_id, b), {}).get(r.dimension)
+                writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb)])
+    n_dis = sum(len(r.disagreements) for r in results)
+    console.print(f"[green]✓ {n_dis} disagreement(s) written to {out_dir}[/green]")
+
+
+def _cell(value: Any) -> str:
+    if isinstance(value, list):
+        return ", ".join(value)
+    return "" if value is None else str(value)
 
 
 @app.command()
