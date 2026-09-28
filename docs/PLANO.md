@@ -86,8 +86,8 @@ virar o produto" (§19):
 
 | Etapa | Descrição | Prioridade | Status |
 |---|---|---|---|
-| M1 | **Dividir `cli.py`** (1.647 linhas, 10 comandos) em módulos por comando, sem mudar comportamento | P1 | 🔄 |
-| M2 | **mypy no CI** (configurado como strict, mas hoje com 42 erros e fora do CI) e `ruff format --check` | P1 | ⏳ |
+| M1 | **Dividir `cli.py`** (1.647 linhas, 10 comandos) em módulos por comando, sem mudar comportamento | P1 | ✅ |
+| M2 | **mypy no CI** (configurado como strict, mas hoje com 42 erros e fora do CI) e `ruff format --check` | P1 | 🔄 |
 | M3 | **Documentação** (`docs/manual.md`, README) acompanhando cada etapa | contínua | ⏳ |
 
 ### Marcos

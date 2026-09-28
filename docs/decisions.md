@@ -119,7 +119,7 @@ This document records architectural, design, and technical decisions made during
 ## ADR-013: Windows Console UTF-8 Stream Reconfiguration
 
 - **Context:** On Windows PowerShell and Command Prompt environments using legacy codepages (e.g. `cp1252`), Rich terminal formatting using Unicode symbols (such as checkmarks `✓` and crosses `✗`) triggers `UnicodeEncodeError`.
-- **Decision:** In `cli.py`, `sys.stdout` and `sys.stderr` are reconfigured to UTF-8 with `errors="replace"` if running on `win32`.
+- **Decision:** In `msrkit/cli/__init__.py`, `sys.stdout` and `sys.stderr` are reconfigured to UTF-8 with `errors="replace"` if running on `win32`.
 - **Conservative Principle:** Ensures rock-solid CLI execution on any developer workstation without requiring external shell adjustments.
 
 ---
@@ -279,3 +279,10 @@ This document records architectural, design, and technical decisions made during
 - **Context:** §10.2 asks for contract tests that catch API changes. Unit tests use hand-written mocks, which drift from the real APIs silently.
 - **Decision:** `tests/test_cassettes.py` replays vcrpy cassettes from `tests/cassettes/` with record mode `none`. Any request not in the cassette fails, so changes in how an adapter calls its API are caught. For each search adapter (GitHub, Stack Exchange, Hacker News, dev.to, Hugging Face), every recorded result must keep the payload keys its normalizer uses, normalize into a valid Item, and yield the same id twice. A separate case covers `msrkit enrich` on this project's own repository. Recording happens only with `MSRKIT_RECORD=1` (mode `once`). Auth headers, key/token parameters and cookies are filtered, and `test_no_secrets_in_cassettes` scans every cassette for tokens. Missing cassettes are skipped with the recording command.
 - **Status:** the enrichment cassette is recorded. The search cassettes must be recorded on a machine with open network access, because the development environment only reaches this repository.
+
+---
+
+## ADR-033: CLI Split into a Package by Study Stage
+
+- **Context:** `cli.py` had grown past 2,600 lines with 15 commands and 3 command groups, which made review and navigation slow.
+- **Decision:** `msrkit.cli` is a package: `collect`, `evidence`, `review`, `validation`, `corpus` and `menu` hold the commands, and `_common` holds the shared helpers. `app`, `DATA_DIR` and `DEFAULT_PROTOCOL` stay in `msrkit.cli`, and command modules read them at call time (`_cli.DATA_DIR`), so the entry point (`msrkit.cli:app`) and every override (tests monkeypatch `msrkit.cli.DATA_DIR`) keep working. Registration order, and so the `--help` order, is fixed explicitly. Behavior is unchanged: the split was done mechanically from the syntax tree, and the full test suite passes unchanged.
