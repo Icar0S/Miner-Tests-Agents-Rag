@@ -122,6 +122,7 @@ Datasets de teste para o piloto (semana 5), antes da coleta oficial.
 | R1 | **`.env` com parâmetros da busca e grupos de fontes:** janela e léxico (§7.1, §7.5) sobrepondo o protocolo, fontes separadas em prontas, com configuração manual, pagas e inviáveis; valores efetivos no manifesto (ADR-041) | ✅ |
 | R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | ✅ |
 | R3 | **Primeiros datasets de teste** das fontes públicas (até 10 itens por consulta). 1ª coleta (run 36498904192): 224 itens para triagem; Stack Exchange 0 com filtro de tags e HF cortado no 1º termo (ADR-042). 2ª coleta, corrigida (run 36501012949): 999 identificados, 453 para triagem — HN 204, Stack Exchange 117, Hugging Face 122, dev.to 10, RSS 0; detecções só N1 (sem GitHub). Próxima: incluir GitHub quando o secret `MSRKIT_GITHUB_TOKEN` existir | ✅ |
+| R4 | **Medium por RSS com acúmulo diário:** a API oficial do Medium só publica (sem leitura/busca, sem integrações novas); 15 feeds (9 tags do Medium, 3 publicações, 3 blogs) coletados todo dia no Actions, com dados acumulados em cache e CSV consolidado (ADR-043). Ativa após o merge no `main` | ✅ |
 
 ## Registro
 

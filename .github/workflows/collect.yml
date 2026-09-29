@@ -23,6 +23,11 @@ on:
   # Também chamável pelo CI (entrada `collect`), útil enquanto este arquivo não
   # está no branch padrão, onde o GitHub exige que um workflow exista para ser
   # disparado manualmente.
+  # Acúmulo diário dos feeds RSS (Medium e blogs): cada feed traz só os ~10
+  # posts mais recentes, então coletar todo dia é o único jeito oficial de
+  # formar histórico. Agendamentos só rodam a partir do branch padrão (main).
+  schedule:
+    - cron: "23 7 * * *"
   workflow_call:
     inputs:
       sources:
@@ -48,7 +53,7 @@ jobs:
     timeout-minutes: 120
     env:
       PROTOCOL: protocols/v0_rag_agents_testing.yaml
-      MSRKIT_SOURCES_PUBLIC: ${{ inputs.sources }}
+      MSRKIT_SOURCES_PUBLIC: ${{ github.event_name == 'schedule' && 'rss' || inputs.sources }}
       MSRKIT_SOURCES_MANUAL: ${{ inputs.manual_sources }}
       MSRKIT_SOURCES_PAID: x_twitter
       MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord
@@ -75,6 +80,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      # Execução agendada: posts novos são de depois do data-cutoff do protocolo,
+      # então a janela vai até a data da execução (registrado no manifesto em
+      # env_overrides). Os dados de execuções anteriores voltam do cache.
+      - name: Scheduled RSS accumulation setup
+        if: github.event_name == 'schedule'
+        run: echo "MSRKIT_WINDOW_UNTIL=$(date -u +%F)" >> "$GITHUB_ENV"
+
+      - name: Restore accumulated data
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: msrkit-rss-${{ github.run_id }}
+          restore-keys: msrkit-rss-
+
       - name: Validate protocol and credentials
         run: msrkit validate "$PROTOCOL"
 
@@ -96,6 +116,19 @@ jobs:
           msrkit prisma
           msrkit export -f csv -o data/exports/itens.csv
           msrkit package -p "$PROTOCOL"
+
+      - name: Consolidated RSS export
+        if: github.event_name == 'schedule'
+        run: |
+          msrkit dedupe --all
+          msrkit export --all -f csv -o data/exports/rss_acumulado.csv
+
+      - name: Save accumulated data
+        if: always() && github.event_name == 'schedule'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: msrkit-rss-${{ github.run_id }}
 
       - name: Summary
         if: always()
@@ -119,7 +152,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
           path: |
-            data/exports/itens.csv
+            data/exports/
             data/runs/*/manifest.json
             data/runs/*/discarded.jsonl
             data/items/*/dedupe_report.json

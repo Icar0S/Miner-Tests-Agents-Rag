@@ -289,11 +289,26 @@ sources:
   rss:
     enabled: true
     extra:
+      # Medium não tem API de leitura ou busca (a API oficial só publica e não
+      # aceita integrações novas); o acesso oficial são os feeds públicos, com
+      # os ~10 posts mais recentes cada. A coleta agendada (collect.yml) acumula
+      # o que for publicado ao longo do tempo.
       feeds:
+        # Medium — tags
         - "https://medium.com/feed/tag/rag"
+        - "https://medium.com/feed/tag/retrieval-augmented-generation"
         - "https://medium.com/feed/tag/llm-evaluation"
+        - "https://medium.com/feed/tag/llm-testing"
+        - "https://medium.com/feed/tag/llm-as-a-judge"
         - "https://medium.com/feed/tag/ai-agents"
+        - "https://medium.com/feed/tag/agentic-ai"
         - "https://medium.com/feed/tag/llmops"
+        - "https://medium.com/feed/tag/ai-evaluation"
+        # Medium — publicações
+        - "https://pub.towardsai.net/feed"
+        - "https://medium.com/feed/data-science-collective"
+        - "https://levelup.gitconnected.com/feed"
+        # Blogs de ferramentas e de ML
         - "https://blog.langchain.dev/rss/"
         - "https://towardsdatascience.com/feed"
         - "https://arize.com/feed/"
