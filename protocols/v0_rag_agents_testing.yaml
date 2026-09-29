@@ -308,8 +308,8 @@ sources:
         - "https://pub.towardsai.net/feed"
         - "https://medium.com/feed/data-science-collective"
         - "https://levelup.gitconnected.com/feed"
-        # Blogs de ferramentas e de ML
-        - "https://blog.langchain.dev/rss/"
+        # Blogs de ferramentas e de ML (o do LangChain saiu: desde set/2026 o
+        # endereço do RSS redireciona para a página HTML do blog, sem feed)
         - "https://towardsdatascience.com/feed"
         - "https://arize.com/feed/"
       note: "RSS entrega apenas itens recentes; sem cobertura histórica."
