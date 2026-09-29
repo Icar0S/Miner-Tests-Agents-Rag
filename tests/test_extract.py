@@ -237,3 +237,50 @@ class TestDisambiguation:
             title="deepeval vs DeepEval",
         )
         assert {d.entry_id for d in ex.from_item(it)} == {"deepeval"}
+
+
+class TestCiCodeHits:
+    """CI workflow hits from `{anchor} path:.github/workflows` queries (ADR-045)."""
+
+    def _hit(self) -> Item:
+        return _item(
+            "https://github.com/acme/app/blob/main/.github/workflows/eval.yml",
+            kind=ItemKind.CODE,
+            query="deepeval path:.github/workflows language:YAML",
+            path=".github/workflows/eval.yml",
+        )
+
+    def test_workflow_hit_is_a_ci_signal(self) -> None:
+        dets = Extractor(GAZ).run([self._hit()], {})
+        ci = [d for d in dets if d.signal == "ci"]
+        assert [(d.entry_id, d.level) for d in ci] == [("deepeval", "N2")]
+
+    def test_promoted_to_n3_when_adoption_is_sustained(self) -> None:
+        signals = {"acme/app": _sig(months=3, contributors=4)}
+        dets = Extractor(GAZ).run([self._hit()], signals)
+        assert ("deepeval", "N3") in {(d.entry_id, d.level) for d in dets if d.signal == "ci"}
+        thin = {"acme/app": _sig(months=1, contributors=1)}
+        dets = Extractor(GAZ).run([self._hit()], thin)
+        assert {d.level for d in dets if d.signal == "ci"} == {"N2"}
+
+    def test_non_workflow_code_hit_is_not_ci(self) -> None:
+        hit = _item(
+            "https://github.com/acme/app/blob/main/src/x.py",
+            kind=ItemKind.CODE,
+            query="deepeval path:.github/workflows",
+            path="src/x.py",
+        )
+        assert not [d for d in Extractor(GAZ).run([hit], {}) if d.signal == "ci"]
+
+
+def test_enrich_priority_puts_ci_and_code_hits_first() -> None:
+    from msrkit.enrich import enrich_priority
+
+    items = [
+        _item("https://github.com/a/issues-only/issues/1", kind=ItemKind.ISSUE),
+        _item("https://github.com/b/repo", kind=ItemKind.REPO),
+        _item("https://github.com/c/code/blob/main/x.py", kind=ItemKind.CODE, path="x.py"),
+        _item("https://github.com/d/ci/blob/main/.github/workflows/t.yml", kind=ItemKind.CODE,
+              path=".github/workflows/t.yml"),
+    ]  # fmt: skip
+    assert enrich_priority(items) == ["d/ci", "c/code", "b/repo", "a/issues-only"]

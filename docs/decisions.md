@@ -428,3 +428,22 @@ This document records architectural, design, and technical decisions made during
   - 69% of the tools and 89% of the methods seen in agent units also appear in RAG units. Trajectory evaluation, SWE-bench, OpenAI Evals, Inspect, LLM Guard and Opik appear only in agent units.
 
   These are automatic detections, not coded data. They serve the pilot and do not answer the RQs.
+
+---
+
+## ADR-045: CI Workflow Code Hits as N3 Evidence, and Enrichment by Priority
+
+- **Context:** The second collection with GitHub (run 36521583989) ran all 181 GitHub queries. That includes the CI queries `{anchor} path:.github/workflows language:YAML` from §7.3. Still, only one N3 detection appeared, for two reasons:
+  - Extraction read code hits only for imports and config files, so a workflow file returned by a CI query produced no `ci` signal.
+  - `msrkit enrich --limit 150` took the first 150 of 785 repositories in collection order. The repositories with CI hits, which need commit months and contributors to reach N3, were mostly left out.
+- **Decision:**
+  - A code hit whose path is under `.github/workflows/`, from a query naming a gazetteer tool, yields a `ci` detection at N2. That detection is promoted to N3 when the repository's enrichment shows sustained adoption (commits in ≥2 months and ≥2 contributors, ADR-023); `is_sustained` holds the rule.
+  - `enrich` orders repositories by the evidence they can yield: CI hits first, then other code hits, then repositories found as such, then the rest.
+  - The collection workflow enriches up to 300 repositories.
+- **Second collection (automatic basis, before screening):**
+  - 2,255 records identified and 1,641 left for screening.
+  - 118 duplicates removed, 15 of them near-duplicates.
+  - 889 detections.
+  - The catalog of codes saturated at batch 65 of 66.
+  - The most frequent test tools are Ragas (50 units), DeepEval (32), LangSmith (20), Langfuse (13) and promptfoo (12).
+  - The most frequent methods are LLM-as-a-judge (72), golden datasets (58), eval regression (44) and red teaming (43).

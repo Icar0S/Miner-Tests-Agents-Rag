@@ -40,7 +40,7 @@ def enrich(
     from datetime import date as date_type
 
     from msrkit.adapters.github import GitHubAdapter
-    from msrkit.enrich import GitHubEnricher, RepoSignals, apply_signals, repo_of
+    from msrkit.enrich import GitHubEnricher, RepoSignals, apply_signals, enrich_priority
     from msrkit.governor import Governor
     from msrkit.storage import ItemStorage
 
@@ -61,11 +61,8 @@ def enrich(
 
     storage = ItemStorage(_cli.DATA_DIR)
     items = storage.read_items(run_id)
-    branches: dict[str, str | None] = {}
-    for it in items:
-        repo = repo_of(it)
-        if repo:
-            branches.setdefault(repo, None)
+    # Most informative repositories first, so a --limit keeps the N3 candidates.
+    branches: dict[str, str | None] = dict.fromkeys(enrich_priority(items))
 
     out_path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)

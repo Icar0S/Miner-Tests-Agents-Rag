@@ -27,6 +27,8 @@ from urllib.parse import quote, urlparse
 
 from pydantic import BaseModel
 
+from msrkit.models import ItemKind
+
 if TYPE_CHECKING:
     from msrkit.adapters.github import GitHubAdapter
     from msrkit.models import Item
@@ -193,6 +195,32 @@ class GitHubEnricher:
             if len(commits) < 100:
                 break
         return sorted(months)
+
+
+def enrich_priority(items: list[Item]) -> list[str]:
+    """Repositories ordered by the evidence they can yield, for a limited enrichment.
+
+    CI workflow hits first (the N3 candidates), then other code hits (N2), then
+    repositories found as such, then the rest (e.g. only issues); ties keep the
+    collection order.
+    """
+    score: dict[str, int] = {}
+    for it in items:
+        repo = repo_of(it)
+        if not repo:
+            continue
+        path = it.tech.path or ""
+        if path.startswith(".github/workflows/"):
+            s = 3
+        elif it.kind == ItemKind.CODE:
+            s = 2
+        elif it.kind == ItemKind.REPO:
+            s = 1
+        else:
+            s = 0
+        score[repo] = max(score.get(repo, 0), s)
+    order = list(score)
+    return sorted(order, key=lambda r: (-score[r], order.index(r)))
 
 
 def apply_signals(items: list[Item], signals: dict[str, RepoSignals]) -> int:

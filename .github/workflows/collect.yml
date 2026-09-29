@@ -21,8 +21,8 @@ on:
         description: "Máximo de itens por fonte. Vazio = limite do protocolo (o teto por consulta já limita a amostra)."
         default: ""
       enrich_limit:
-        description: "Máximo de repositórios GitHub enriquecidos (N2/N3)."
-        default: "150"
+        description: "Máximo de repositórios GitHub enriquecidos (N2/N3), com prioridade aos achados em CI e código."
+        default: "300"
   # Acúmulo diário dos feeds RSS (Medium e blogs): cada feed traz só os ~10
   # posts mais recentes, então coletar todo dia é o único jeito oficial de
   # formar histórico. Agendamentos só rodam a partir do branch padrão (main).
@@ -47,7 +47,7 @@ on:
         default: ""
       enrich_limit:
         type: string
-        default: "150"
+        default: "300"
 
 permissions:
   contents: read
@@ -116,7 +116,7 @@ jobs:
 
       - name: Deduplicate, enrich, extract, screening sheet, PRISMA
         env:
-          ENRICH_LIMIT: ${{ inputs.enrich_limit || '150' }}
+          ENRICH_LIMIT: ${{ inputs.enrich_limit || '300' }}
           EVENT: ${{ github.event_name }}
         run: |
           msrkit dedupe
