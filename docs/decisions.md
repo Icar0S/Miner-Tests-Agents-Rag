@@ -448,3 +448,9 @@ This document records architectural, design, and technical decisions made during
   - The most frequent test tools are Ragas (50 units), DeepEval (32), LangSmith (20), Langfuse (13) and promptfoo (12).
   - The most frequent methods are LLM-as-a-judge (72), golden datasets (58), eval regression (44) and red teaming (43).
 - **Enrichment rate:** Enrichment used the GitHub adapter's governor, which is tuned for the search API (30 requests/minute). The core REST API allows 5,000 requests/hour with a token. At the search rate, 300 repositories × ~12 requests took about two hours of the job. `enrich` now has its own governor (`github-core`, `CORE_RATE_LIMIT` = 4,500/hour, burst 10); 403/429 responses still back off.
+- **Third collection (run 36528947297, automatic basis):**
+  - 3,668 records identified, 496 filtered, 224 duplicates removed and 2,916 left for screening. GitHub ran 324 queries and returned 2,459 items on disk.
+  - All 300 prioritized repositories were enriched without errors.
+  - 1,890 detections. N3 rose from 1 to at least 97 (sum over the 25 entries listed). The tools with the most N3 detections are webarena, guardrails-ai and agentdojo (8 each), then tau-bench and garak (7 each).
+  - Frameworks of the system under test (LangChain, LangGraph, LlamaIndex) and tracing tools (LangSmith, Langfuse) have no N3 detections: they are imported (N2), but no CI invocation of them was found. N3 therefore marks test tools that run in CI, as intended.
+  - The catalog saturated at batch 116 of 117, with 50 codes.
