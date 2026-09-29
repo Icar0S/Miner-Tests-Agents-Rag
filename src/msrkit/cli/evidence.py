@@ -40,7 +40,13 @@ def enrich(
     from datetime import date as date_type
 
     from msrkit.adapters.github import GitHubAdapter
-    from msrkit.enrich import GitHubEnricher, RepoSignals, apply_signals, enrich_priority
+    from msrkit.enrich import (
+        CORE_RATE_LIMIT,
+        GitHubEnricher,
+        RepoSignals,
+        apply_signals,
+        enrich_priority,
+    )
     from msrkit.governor import Governor
     from msrkit.storage import ItemStorage
 
@@ -77,9 +83,7 @@ def enrich(
     )
 
     adapter = GitHubAdapter(
-        governor=Governor(
-            "github", GitHubAdapter.effective_rate_limit(), state_dir=_cli.DATA_DIR / "governor"
-        )
+        governor=Governor("github-core", CORE_RATE_LIMIT, state_dir=_cli.DATA_DIR / "governor")
     )
     enricher = GitHubEnricher(adapter, config_files=config_files, since=since, until=until)
     errors = 0

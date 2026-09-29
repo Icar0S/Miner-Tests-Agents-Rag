@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from msrkit.adapters.github import GitHubAdapter
 from msrkit.cli import app
-from msrkit.enrich import GitHubEnricher, _is_test_path, apply_signals, repo_of
+from msrkit.enrich import CORE_RATE_LIMIT, GitHubEnricher, _is_test_path, apply_signals, repo_of
 from msrkit.models import Item, ItemKind, Provenance
 from msrkit.storage import ItemStorage
 
@@ -153,3 +153,10 @@ class TestEnrichCommand:
 
         result = runner.invoke(app, ["enrich", "--run", "run-e"])
         assert "1 already enriched, 0 to go" in result.stdout
+
+
+def test_core_rate_limit_is_under_quota_and_above_search_rate():
+    per_hour = CORE_RATE_LIMIT.requests * 3600 / CORE_RATE_LIMIT.per_seconds
+    search = GitHubAdapter.policy.rate_limit
+    assert per_hour < 5000  # core REST quota with a token
+    assert per_hour > search.requests * 3600 / search.per_seconds

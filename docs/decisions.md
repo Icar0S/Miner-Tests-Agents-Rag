@@ -447,3 +447,4 @@ This document records architectural, design, and technical decisions made during
   - The catalog of codes saturated at batch 65 of 66.
   - The most frequent test tools are Ragas (50 units), DeepEval (32), LangSmith (20), Langfuse (13) and promptfoo (12).
   - The most frequent methods are LLM-as-a-judge (72), golden datasets (58), eval regression (44) and red teaming (43).
+- **Enrichment rate:** Enrichment used the GitHub adapter's governor, which is tuned for the search API (30 requests/minute). The core REST API allows 5,000 requests/hour with a token. At the search rate, 300 repositories × ~12 requests took about two hours of the job. `enrich` now has its own governor (`github-core`, `CORE_RATE_LIMIT` = 4,500/hour, burst 10); 403/429 responses still back off.
