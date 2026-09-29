@@ -121,7 +121,7 @@ Datasets de teste para o piloto (semana 5), antes da coleta oficial.
 |---|---|---|
 | R1 | **`.env` com parâmetros da busca e grupos de fontes:** janela e léxico (§7.1, §7.5) sobrepondo o protocolo, fontes separadas em prontas, com configuração manual, pagas e inviáveis; valores efetivos no manifesto (ADR-041) | ✅ |
 | R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | ✅ |
-| R3 | **Primeiros datasets de teste** das fontes públicas. 1ª coleta: 740 identificados, 224 para triagem (HN 204, dev.to 10, HF 10); Stack Exchange 0 com filtro de tags e HF/dev.to cortados no 1º termo, corrigidos (ADR-042); 2ª coleta em andamento | 🔄 |
+| R3 | **Primeiros datasets de teste** das fontes públicas (até 10 itens por consulta). 1ª coleta (run 36498904192): 224 itens para triagem; Stack Exchange 0 com filtro de tags e HF cortado no 1º termo (ADR-042). 2ª coleta, corrigida (run 36501012949): 999 identificados, 453 para triagem — HN 204, Stack Exchange 117, Hugging Face 122, dev.to 10, RSS 0; detecções só N1 (sem GitHub). Próxima: incluir GitHub quando o secret `MSRKIT_GITHUB_TOKEN` existir | ✅ |
 
 ## Registro
 

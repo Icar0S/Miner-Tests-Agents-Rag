@@ -401,4 +401,4 @@ This document records architectural, design, and technical decisions made during
 
     The E2 protocol uses `off`, because its terms are already specific and screening filters the rest. `any` becomes affordable with `STACKEXCHANGE_KEY` (10,000 req/day).
   - With `--per-query-limit`, queries of sources that search each term separately (`SourcePolicy.searches_each_term`) are split into one query per term. dev.to and RSS are fetched by tag or feed and filtered locally, so they keep one query: splitting them would page through every tag since 2023 once per term.
-- **Evidence:** the second test collection (same parameters, `tagged_mode: off`) shows whether Stack Exchange returns items without the tag filter. Its result is recorded in `docs/PLANO.md` (R3).
+- **Evidence:** the second test collection used the same parameters with `tagged_mode: off` (run 36501012949). Stack Exchange went from 0 to 146 items in 146 requests (117 after deduplication), within the 300-request daily quota without a key. Hugging Face went from 10 items in one query to 123 items spread over 30 per-term queries. In total, 999 records were identified and 453 left for screening.
