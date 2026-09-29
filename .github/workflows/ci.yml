@@ -15,6 +15,10 @@ on:
         description: "Coleta: máximo de itens por consulta"
         type: string
         default: "10"
+      manual_sources:
+        description: "Coleta: fontes com credencial nos secrets (ex.: github,bluesky)"
+        type: string
+        default: ""
 
 jobs:
   test:
@@ -69,4 +73,5 @@ jobs:
     uses: ./.github/workflows/collect.yml
     with:
       per_query_limit: ${{ inputs.per_query_limit }}
+      manual_sources: ${{ inputs.manual_sources }}
     secrets: inherit
