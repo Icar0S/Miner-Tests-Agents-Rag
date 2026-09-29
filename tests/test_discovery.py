@@ -93,3 +93,26 @@ class TestTopicsCommand:
         assert (out / "topics.csv").exists() and (out / "clusters.csv").exists()
         r = CliRunner().invoke(app, [*args, "--topics", "2", "--clusters", "2"])
         assert r.exit_code == 1  # nothing included yet
+
+
+class TestCleaning:
+    def test_document_drops_markup_code_entities_and_urls(self) -> None:
+        from msrkit.discovery import document
+
+        item = _item(0, "")
+        item.title = "How to test RAG"
+        item.body = (
+            "<p>I use &quot;ragas&quot; see https://a.b/c</p>"
+            "<pre><code>npm WARN deprecated</code></pre><li>won&#x27;t work &#x2F;x</li>"
+        )
+        text = document(item)
+        assert text == 'How to test RAG I use "ragas" see won\'t work /x'
+
+    def test_short_documents_are_skipped(self) -> None:
+        short = [_item(100 + i, "") for i in range(3)]
+        for it in short:
+            it.body = "tiny"
+        result = discover(CORPUS + short, set(), n_topics=2, n_clusters=2, min_df=2)
+        assert result.skipped_short == 3
+        assert result.documents == len(CORPUS)
+        assert {a.item_id for a in result.assignments} == {it.id for it in CORPUS}

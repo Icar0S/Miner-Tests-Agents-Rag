@@ -410,3 +410,21 @@ This document records architectural, design, and technical decisions made during
 - **Context:** The researchers asked whether Medium's official API could replace RSS. It cannot. Per Medium's own API documentation, the API exposes only the authenticated user, their publications and contributors, and endpoints to create posts and upload images. It has no endpoint to read, list or search other people's posts, and Medium accepts no new integrations. Self-issued tokens are granted on request, by e-mail, for desktop integrations and plugins. Third-party "Medium APIs" scrape the site and are excluded by §17. The public feeds (`/feed/tag/<tag>`, `/feed/<publication>`) are the only official read access, and each returns only the ~10 latest posts.
 - **Decision:** The protocol lists 15 feeds: nine Medium tags (RAG, retrieval-augmented generation, LLM evaluation and testing, LLM-as-a-judge, AI agents, agentic AI, LLMOps, AI evaluation), three Medium publications and three tool/ML blogs. `collect.yml` gains a daily schedule that collects RSS only. It restores `data/` from the previous run through the Actions cache and saves it again, then publishes `rss_acumulado.csv`, which is consolidated across runs and deduplicated. Each scheduled run extends `window.until` to its own date, because new posts are necessarily later than the data-cutoff; `env_overrides` in each manifest records this.
 - **Consequence:** accumulated RSS items published after the E2 data-cutoff only count for E2 if the cutoff is moved to the end of the collection period. That is a protocol decision for the research team. Until then, the RSS stratum stays exploratory.
+
+---
+
+## ADR-044: Findings of the First Collection with GitHub
+
+- **Context:** The first collection with the researchers' credentials ran as run 36515820085 (29/Sept/2026), capped at 10 items per query and 300 per source. Results: 1,304 records identified and 745 left for screening, 150 GitHub repositories enriched with no errors, and 316 detections. Stack Exchange ran with its key. Bluesky was skipped because its secret is not set.
+- **Findings and decisions:**
+  1. *GitHub cut short.* The 300-item source cap was reached after 51 of about 165 planned GitHub queries. The remaining queries include the code queries (N2) and all CI queries (`{anchor} path:.github/workflows`, N3), which never ran. Only one N3 detection appeared (garak). The collection workflow now leaves the source cap empty by default, so the per-query cap alone shapes the sample. The job timeout was raised to 240 minutes to fit the full plan.
+  2. *Markup in the discovery pass.* LDA topics were dominated by HTML and entities (`quot`, `x2f`, `li`, `pre`, `code`), because Stack Exchange and Hacker News bodies are HTML. The discovery documents now drop code blocks (Markdown and HTML), tags, entities and URLs.
+  3. *Empty documents in k-means.* Repositories known only by their name formed singleton clusters with arbitrary top terms. Documents under 15 words after cleaning are now left out of the discovery pass, and their number is reported (`skipped_short`).
+  4. *Frameworks vs. test tools.* LangChain (40 units), LangGraph and LlamaIndex topped the tool frequency, but they are frameworks of the system under test (`framework-sut` in the gazetteer). They are mined through their own tests, and RQ1/RQ3 must not count them as test tools. The frequency output now shows each entry's gazetteer family.
+- **Preliminary signal (automatic basis, before screening):**
+  - The most frequent methods are LLM-as-a-judge (43 units), golden datasets (30), red teaming (30) and eval regression (26).
+  - The most frequent test tools are Ragas (22), DeepEval (10) and LangSmith (6).
+  - On the oracle ladder, the reference (55%) and pseudo-automatic (45%) rungs dominate.
+  - 69% of the tools and 89% of the methods seen in agent units also appear in RAG units. Trajectory evaluation, SWE-bench, OpenAI Evals, Inspect, LLM Guard and Opik appear only in agent units.
+
+  These are automatic detections, not coded data. They serve the pilot and do not answer the RQs.

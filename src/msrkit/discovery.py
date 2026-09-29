@@ -14,6 +14,7 @@ Both models use a fixed seed, so results are reproducible for a given corpus.
 
 from __future__ import annotations
 
+import html
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -32,8 +33,15 @@ esta este eu foi for há isso isto já lhe mais mas me mesmo meu minha muito na 
 nos o os ou para pela pelas pelo pelos por qual quando que se sem ser seu sua são também
 te tem ter um uma umas uns você vocês
 """.split()  # noqa: SIM905
-# Markup and platform noise that survives in bodies.
-NOISE = ["http", "https", "www", "com", "github", "img", "src", "href", "png", "jpg", "nbsp"]
+# Markup and platform noise that survives in bodies, and contractions whose
+# apostrophe the tokenizer drops ("won't" -> "wont").
+NOISE = """
+http https www com github img src href png jpg nbsp amp quot rel nofollow
+dont wont cant isnt doesnt didnt im ive youre thats theres
+""".split()  # noqa: SIM905
+# Documents shorter than this (after cleaning) are left out: a repository with
+# only a name gives the models nothing to work with and distorts k-means.
+MIN_WORDS = 15
 
 
 def require_sklearn() -> None:
@@ -46,8 +54,14 @@ def require_sklearn() -> None:
 
 
 def document(item: Item) -> str:
-    text = f"{item.title or ''}\n{item.body or ''}"[:MAX_CHARS]
-    return re.sub(r"`{3}.*?`{3}", " ", text, flags=re.S)  # drop fenced code
+    """Title and body as plain prose: no code, markup, entities or URLs."""
+    text = f"{item.title or ''}\n{item.body or ''}"
+    text = re.sub(r"`{3}.*?`{3}", " ", text, flags=re.S)  # fenced code (Markdown)
+    text = re.sub(r"<(pre|code)\b.*?</\1>", " ", text, flags=re.S | re.I)  # code (HTML)
+    text = re.sub(r"<[^>]+>", " ", text)  # remaining tags
+    text = html.unescape(text)  # &quot; &#x2F; ...
+    text = re.sub(r"https?://\S+", " ", text)
+    return " ".join(text.split())[:MAX_CHARS]
 
 
 def known_vocabulary(gazetteer: Gazetteer | None, lexicon: list[str]) -> set[str]:
@@ -92,6 +106,7 @@ class Assignment(BaseModel):
 
 class DiscoveryResult(BaseModel):
     documents: int
+    skipped_short: int = 0  # documents under MIN_WORDS after cleaning
     vocabulary: int
     topics: list[Topic]
     clusters: list[Cluster]
@@ -117,7 +132,11 @@ def discover(
         TfidfVectorizer,
     )
 
-    docs = [document(it) for it in items]
+    pairs = [(it, document(it)) for it in items]
+    kept = [(it, d) for it, d in pairs if len(d.split()) >= MIN_WORDS]
+    skipped_short = len(pairs) - len(kept)
+    items = [it for it, _ in kept]
+    docs = [d for _, d in kept]
     if len(docs) < max(n_topics, n_clusters, 2):
         raise ValueError(f"{len(docs)} documents: need at least as many as topics and clusters")
     stop = sorted(set(ENGLISH_STOP_WORDS) | set(PT_STOPWORDS) | set(NOISE))
@@ -184,6 +203,7 @@ def discover(
     ]
     return DiscoveryResult(
         documents=len(docs),
+        skipped_short=skipped_short,
         vocabulary=len(vocab),
         topics=topics,
         clusters=clusters,

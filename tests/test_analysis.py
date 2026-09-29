@@ -326,3 +326,10 @@ class TestCompare:
         assert "Saturation curve" in r.stdout
         out = tmp_path / "reports/run-x/analysis"
         assert (out / "compare_coding.csv").exists() and (out / "saturation_coding.csv").exists()
+
+
+def test_frequency_reports_gazetteer_family() -> None:
+    units = [Unit(id="a", source="s", tools={"langchain": "N2", "ragas": "N1"})]
+    rows = {r.entry: r for r in frequency(units, {"langchain": "framework-sut"})}
+    assert rows["langchain"].family == "framework-sut"
+    assert rows["ragas"].family == ""

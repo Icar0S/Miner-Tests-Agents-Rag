@@ -18,8 +18,8 @@ on:
         description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
         default: "10"
       limit:
-        description: "Máximo de itens por fonte. Vazio = limite do protocolo."
-        default: "300"
+        description: "Máximo de itens por fonte. Vazio = limite do protocolo (o teto por consulta já limita a amostra)."
+        default: ""
       enrich_limit:
         description: "Máximo de repositórios GitHub enriquecidos (N2/N3)."
         default: "150"
@@ -44,7 +44,7 @@ on:
         default: "10"
       limit:
         type: string
-        default: "300"
+        default: ""
       enrich_limit:
         type: string
         default: "150"
@@ -56,7 +56,7 @@ jobs:
   collect:
     name: Coletar e gerar dataset
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     env:
       PROTOCOL: protocols/v0_rag_agents_testing.yaml
       MSRKIT_SOURCES_PUBLIC: ${{ github.event_name == 'schedule' && 'rss' || inputs.sources }}
@@ -135,8 +135,8 @@ jobs:
       - name: Preliminary analyses (detections basis)
         if: github.event_name != 'schedule'
         run: |
-          msrkit analyze frequency --basis detections --top 30
-          msrkit analyze frequency --basis detections --pairs tool-tool --top 15
+          msrkit analyze frequency --basis detections --top 30 -p "$PROTOCOL"
+          msrkit analyze frequency --basis detections --pairs tool-tool --top 15 -p "$PROTOCOL"
           msrkit analyze oracles --basis detections -p "$PROTOCOL"
           msrkit analyze compare --basis detections -p "$PROTOCOL"
           msrkit analyze topics --status all -p "$PROTOCOL" --topics 12 --clusters 12 \

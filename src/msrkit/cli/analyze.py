@@ -59,8 +59,13 @@ def analyze_frequency(
         "tool-method", "--pairs", help="Co-occurrence: tool-method, tool-tool, method-method"
     ),
     top: int = typer.Option(20, "--top", help="Rows shown"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
 ) -> None:
-    """A1/A2: units per tool and method (by evidence level and system) and co-occurrence."""
+    """A1/A2: units per tool and method (by evidence level and system) and co-occurrence.
+
+    Tools of the `framework-sut` family (LangChain, LlamaIndex...) are frameworks of the
+    system under test, mined through their own tests; the Family column tells them apart.
+    """
     from msrkit.analysis import cooccurrence, frequency, write_csv
 
     run_id = _resolve_run(_unwrap(run_id))
@@ -72,17 +77,22 @@ def analyze_frequency(
     except ValueError as e:
         console.print(f"[red]✗ {e}[/red]")
         raise typer.Exit(1) from None
-    rows = frequency(units)
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    gaz = proto.gazetteer_data if proto is not None else None
+    families = {t.id: t.family for t in gaz.tools} if gaz else {}
+    families.update({m.id: "method" for m in gaz.methods} if gaz else {})
+    rows = frequency(units, families)
     out = _out_dir(run_id)
     write_csv(rows, out / f"frequency_{basis}.csv")
     write_csv(pair_rows, out / f"cooccurrence_{_unwrap(pairs)}_{basis}.csv")
 
     table = Table(title=f"Frequency ({basis}) — {len(units)} units")
-    for col in ("Entry", "Kind", "Units", "N1", "N2", "N3", "rag", "agente"):
+    for col in ("Entry", "Family", "Units", "N1", "N2", "N3", "rag", "agente"):
         table.add_column(col)
     for r in rows[:top]:
         levels = (str(r.n1), str(r.n2), str(r.n3)) if r.kind == "tool" else ("—", "—", "—")
-        table.add_row(r.entry, r.kind, str(r.units), *levels, str(r.rag), str(r.agente))
+        family = r.family or r.kind
+        table.add_row(r.entry, family, str(r.units), *levels, str(r.rag), str(r.agente))
     console.print(table)
     pt = Table(title=f"Co-occurrence {_unwrap(pairs)}")
     for col in ("A", "B", "Together", "Jaccard", "Lift"):
@@ -253,6 +263,7 @@ def analyze_topics(
         "status": status,
         "seed": _unwrap(seed),
         "documents": result.documents,
+        "skipped_short": result.skipped_short,
         "vocabulary": result.vocabulary,
         "candidate_terms": result.candidate_terms,
         "catalog_origin": catalog_origin(gaz) if gaz else None,
