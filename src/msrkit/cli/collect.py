@@ -586,6 +586,12 @@ def run(
                     )
                     partitioned_queries.append(q)
             queries = partitioned_queries
+            if per_query_limit is not None and adapter_cls.policy.searches_each_term:
+                # A per-query cap must hold per term, or the first term takes the
+                # whole sample (sources fetched by tag or feed are left as they are).
+                from msrkit.partition import split_by_term
+
+                queries = [s for q in queries for s in ([q] if q.raw else split_by_term(q))]
             source_entry.planned = [q.model_dump(mode="json") for q in queries]
         if limit is not None:
             for q in queries:

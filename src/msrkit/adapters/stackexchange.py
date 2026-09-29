@@ -126,15 +126,14 @@ class StackExchangeAdapter(BaseAdapter):
         limit = q.limit or 5000
         total_yielded = 0
 
-        # One request per (site, term). Tags go in the same request: the API
-        # documents `tagged` as OR ("at least one will be present"), so the
-        # full tag list narrows each term to the relevant tags (ADR-017).
+        # One request per (site, term, tag filter); see tag_filters (ADR-017, ADR-042).
         terms_to_search: list[str | None] = list(q.terms) or [None]
+        combos = [(t, tag) for t in terms_to_search for tag in self.tag_filters(q)]
 
         seen_ids: set[str] = set()
 
         for site in sites:
-            for term in terms_to_search:
+            for term, tagged in combos:
                 if total_yielded >= limit:
                     return
                 page = 1
@@ -143,7 +142,7 @@ class StackExchangeAdapter(BaseAdapter):
                 while page <= max_pages and total_yielded < limit:
                     page_size = min(self.policy.max_page_size, limit - total_yielded)
                     params = self._build_params(
-                        q, site=site, page=page, pagesize=page_size, term=term
+                        q, site=site, page=page, pagesize=page_size, term=term, tagged=tagged
                     )
                     resp = self._governed_get(f"{_BASE_URL}/search/advanced", params=params)
 
@@ -314,8 +313,12 @@ class StackExchangeAdapter(BaseAdapter):
         page: int,
         pagesize: int,
         term: str | None = None,
+        tagged: str | None | object = ...,
     ) -> dict[str, Any]:
-        """Build Stack Exchange search parameters."""
+        """Build Stack Exchange search parameters.
+
+        `tagged` is one entry of tag_filters(q); left out, the first one is used.
+        """
         query_text = term if term is not None else (" ".join(q.terms) if q.terms else "")
         params: dict[str, Any] = {
             "site": site,
@@ -340,13 +343,10 @@ class StackExchangeAdapter(BaseAdapter):
                 ).timestamp()
             )
 
-        # Tagged filter: ';'-separated list with OR semantics per the API docs
-        # (/search/advanced: "of which at least one will be present").
-        tagged = q.extra.get("tagged", [])
-        if isinstance(tagged, str):
-            tagged = [t for t in tagged.split(";") if t]
-        if tagged:
-            params["tagged"] = ";".join(tagged)
+        if tagged is ...:
+            tagged = self.tag_filters(q)[0]
+        if isinstance(tagged, str) and tagged:
+            params["tagged"] = tagged
 
         # API key
         key = self._env("STACKEXCHANGE_KEY")
@@ -354,6 +354,29 @@ class StackExchangeAdapter(BaseAdapter):
             params["key"] = key
 
         return params
+
+    @staticmethod
+    def tag_filters(q: Query) -> list[str | None]:
+        """Values of `tagged` to search with, by `extra.tagged_mode`.
+
+        - `all` (default): the whole list in one request. The docs describe the
+          list as "at least one will be present", but the first test collection
+          (Sept/2026) got 0 items in 180 requests with five tags, which is what
+          an AND would give (ADR-042).
+        - `any`: one request per tag, an explicit OR (costs one request per tag).
+        - `off`: no tag filter; the terms alone narrow the search.
+        """
+        tags = q.extra.get("tagged", [])
+        if isinstance(tags, str):
+            tags = [t for t in tags.split(";") if t]
+        mode = q.extra.get("tagged_mode", "all")
+        if mode not in ("all", "any", "off"):
+            raise ValueError(f"tagged_mode must be all, any or off, got {mode!r}")
+        if not tags or mode == "off":
+            return [None]
+        if mode == "any":
+            return list(tags)
+        return [";".join(tags)]
 
     def _handle_backoff(self, data: dict[str, Any]) -> None:
         """Honor the backoff field from SE responses."""

@@ -237,8 +237,12 @@ sources:
         - datascience
         - ai
         - pt.stackoverflow   # estrato em português
-      # `tagged` tem semântica OU na API (/search/advanced: "at least one will
-      # be present"). Cada termo é buscado com a lista completa de tags (ADR-017).
+      # Piloto (set/2026): enviar a lista inteira em `tagged` trouxe 0 itens em
+      # 180 requisições, apesar de a documentação descrevê-la como OU; o
+      # comportamento é o de um E (ADR-042). Os termos já são específicos, então
+      # a coleta vai sem filtro de tag (off). Com STACKEXCHANGE_KEY, `any` faz o
+      # OU explícito (uma requisição por tag).
+      tagged_mode: "off"
       tagged:
         - langchain
         - llamaindex

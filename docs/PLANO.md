@@ -120,8 +120,8 @@ Datasets de teste para o piloto (semana 5), antes da coleta oficial.
 | Etapa | Descrição | Status |
 |---|---|---|
 | R1 | **`.env` com parâmetros da busca e grupos de fontes:** janela e léxico (§7.1, §7.5) sobrepondo o protocolo, fontes separadas em prontas, com configuração manual, pagas e inviáveis; valores efetivos no manifesto (ADR-041) | ✅ |
-| R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | 🔄 |
-| R3 | **Primeiros datasets de teste** das fontes públicas, com amostra espalhada pelo léxico | ⏳ |
+| R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | ✅ |
+| R3 | **Primeiros datasets de teste** das fontes públicas. 1ª coleta: 740 identificados, 224 para triagem (HN 204, dev.to 10, HF 10); Stack Exchange 0 com filtro de tags e HF/dev.to cortados no 1º termo, corrigidos (ADR-042); 2ª coleta em andamento | 🔄 |
 
 ## Registro
 

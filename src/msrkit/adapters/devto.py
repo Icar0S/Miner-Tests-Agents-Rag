@@ -61,6 +61,7 @@ class DevToAdapter(BaseAdapter):
         max_pages=None,
         supports_full_text_search=False,
         supports_date_filter=False,
+        searches_each_term=False,  # fetched by tag/feed, filtered locally
         redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="https://dev.to/terms",
         docs_url="https://developers.forem.com/api/v1",

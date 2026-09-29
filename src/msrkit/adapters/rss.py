@@ -58,6 +58,7 @@ class RSSAdapter(BaseAdapter):
         supports_full_text_search=False,
         supports_date_filter=False,
         historical_coverage=False,
+        searches_each_term=False,  # fetched by tag/feed, filtered locally
         redistribution=RedistributionPolicy.METADATA_ONLY,
         tos_url="",
         docs_url="",

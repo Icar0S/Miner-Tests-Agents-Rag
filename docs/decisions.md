@@ -385,3 +385,20 @@ This document records architectural, design, and technical decisions made during
   - `.env.example` carries the E2 values, equal to the protocol, and a test keeps them equal.
 - **Conservative Principle:** the versioned protocol stays the reference for the registered study. `.env` is a convenience for running and exploring, and nothing it changes goes unrecorded.
 - **Related:** `msrkit run --per-query-limit N` caps every query (term or partition), so a test sample spreads over the whole lexicon instead of exhausting the source limit on the first query. The cap is recorded as the truncation reason `item_limit`.
+
+---
+
+## ADR-042: Findings of the First Test Collection (Stack Exchange Tags, Per-Term Cap)
+
+- **Context:** The first test collection ran on GitHub Actions (run 36498904192, 29/Sept/2026), sampling the public sources with at most 10 items per query. 740 records were identified and 224 were left for screening (Hacker News 204, dev.to 10, Hugging Face 10). Two sources misbehaved:
+  - **Stack Exchange:** 180 requests (30 terms × 6 sites) all returned HTTP 200 and 0 items. Every request carried the full tag list `langchain;llamaindex;large-language-model;rag;openai-api` in `tagged`. The documentation describes the list as "at least one will be present", but no results for "LLM evaluation" on Stack Overflow since 2023 is what an AND of five tags gives. This is the check ADR-017 left for the pilot.
+  - **Hugging Face (and dev.to):** each got a single query containing all 30 terms, so the per-query cap of 10 was used up by the first term.
+- **Decision:**
+  - The Stack Exchange adapter takes `tagged_mode`:
+    - `all` sends the list in one request (the previous behavior, kept as the adapter default);
+    - `any` makes an explicit OR with one request per tag;
+    - `off` sends no tag filter.
+
+    The E2 protocol uses `off`, because its terms are already specific and screening filters the rest. `any` becomes affordable with `STACKEXCHANGE_KEY` (10,000 req/day).
+  - With `--per-query-limit`, queries of sources that search each term separately (`SourcePolicy.searches_each_term`) are split into one query per term. dev.to and RSS are fetched by tag or feed and filtered locally, so they keep one query: splitting them would page through every tag since 2023 once per term.
+- **Evidence:** the second test collection (same parameters, `tagged_mode: off`) shows whether Stack Exchange returns items without the tag filter. Its result is recorded in `docs/PLANO.md` (R3).

@@ -187,3 +187,53 @@ class TestRunRecordsEffectiveProtocol:
         queries = next(s for s in manifest["sources"] if s["name"] == "hackernews")["queries"]
         assert queries and all(q["items"] <= 2 for q in queries)
         assert all("item_limit" in q["truncation_reasons"] for q in queries)
+
+
+class TestPilotFixes:
+    def test_stackexchange_tag_modes(self) -> None:
+        from msrkit.adapters.stackexchange import StackExchangeAdapter
+
+        tags = {"tagged": ["rag", "langchain"]}
+        q = Query(source="stackexchange", terms=["x"], extra=tags)
+        assert StackExchangeAdapter.tag_filters(q) == ["rag;langchain"]
+        q_any = q.model_copy(update={"extra": {**tags, "tagged_mode": "any"}})
+        assert StackExchangeAdapter.tag_filters(q_any) == ["rag", "langchain"]
+        q_off = q.model_copy(update={"extra": {**tags, "tagged_mode": "off"}})
+        assert StackExchangeAdapter.tag_filters(q_off) == [None]
+        adapter = StackExchangeAdapter()
+        params = adapter._build_params(q_off, site="stackoverflow", page=1, pagesize=10, term="x")
+        assert "tagged" not in params
+        with pytest.raises(ValueError, match="tagged_mode"):
+            StackExchangeAdapter.tag_filters(
+                q.model_copy(update={"extra": {**tags, "tagged_mode": "some"}})
+            )
+
+    def test_protocol_turns_tags_off(self) -> None:
+        cfg = load_protocol(PROTO, {})
+        assert cfg.sources["stackexchange"].extra["tagged_mode"] == "off"
+
+    def test_per_query_cap_splits_term_searches_only(self, tmp_path: Path, monkeypatch) -> None:
+        from msrkit.adapters.devto import DevToAdapter
+        from msrkit.adapters.huggingface import HuggingFaceAdapter
+
+        seen: dict[str, list[list[str]]] = {"huggingface": [], "devto": []}
+
+        def fake(name: str) -> Any:
+            def search(self: Any, query: Query) -> Any:
+                seen[name].append(list(query.terms))
+                return iter(())
+
+            return search
+
+        monkeypatch.setattr(HuggingFaceAdapter, "search", fake("huggingface"))
+        monkeypatch.setattr(DevToAdapter, "search", fake("devto"))
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        monkeypatch.setenv("MSRKIT_TERMS", "RAG evaluation;agent testing")
+        monkeypatch.setenv("MSRKIT_TERMS_PT", "teste de RAG")
+        monkeypatch.setenv("MSRKIT_SOURCES_PUBLIC", "huggingface,devto")
+        result = runner.invoke(app, ["run", PROTO, "--per-query-limit", "5"])
+        assert result.exit_code == 0, result.stdout
+        hf_terms = seen["huggingface"]
+        assert all(len(t) == 1 for t in hf_terms)  # one query per term (and kind)
+        assert {t[0] for t in hf_terms} == {"RAG evaluation", "agent testing", "teste de RAG"}
+        assert seen["devto"] and all(len(t) == 3 for t in seen["devto"])  # tag fetch kept whole
