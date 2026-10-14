@@ -98,6 +98,10 @@ class HackerNewsAdapter(BaseAdapter):
 
     def partition(self, q: Query) -> list[Query]:
         """Split by term, then by date window until each query fits the 1,000 cap."""
+        if q.limit is not None and q.limit <= (self.policy.max_results_per_query or 1000):
+            from msrkit.partition import split_by_term
+
+            return split_by_term(q)
         return partition_capped(q, self.policy.max_results_per_query, self.estimate)
 
     def search(self, q: Query) -> Iterator[RawItem]:
