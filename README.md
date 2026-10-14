@@ -32,6 +32,8 @@ cp .env.example .env               # termos, janela e fontes (ver "Parâmetros d
 msrkit validate protocols/v0_rag_agents_testing.yaml
 msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 20
 msrkit stats
+msrkit review-tui --coder seu_nome     # triagem interativa visual no terminal (TUI)
+msrkit prisma                          # gera relatório e diagrama PRISMA (incluindo prisma.tikz)
 ```
 
 Prefere não instalar nada no sistema? Use o Docker:
@@ -55,11 +57,11 @@ coleta ──► evidência ──► triagem ──► extração ──► val
 |---|---|---|
 | **1. Coleta** | `validate` → `plan --estimate` → `run` (retomável com `--resume`) → `dedupe` | itens normalizados, manifesto com hashes de cada resposta, duplicatas removidas por URL, conteúdo e quase-duplicata |
 | **2. Evidência** | `enrich` → `extract` | sinais de repositório (CI, dependências, commits, contribuidores) e detecções N1/N2/N3 com trecho de evidência |
-| **3. Triagem** | `screen export` → preencher → `screen import` | decisões por codificador, em lotes fixos ordenados por relevância |
+| **3. Triagem** | `review-tui`, `screen interactive` (ou `screen export` → `screen import`) | triagem interativa com interface TUI (Textual) no terminal, CLI assistido ou via planilha |
 | **4. Extração** | `coding sample` → `coding export` → preencher → `coding import` → `agreement` | formulário do Anexo A e qualidade (§9); κ de Cohen por dimensão na dupla codificação |
 | **5. Validação** | `recall gold.yaml`, `precision sample` → julgar → `precision score` | recall sobre gold set e precisão ponderada por estrato |
 | **6. Análise** | `analyze frequency`, `coverage`, `oracles`, `topics`, `compare` | CSVs em `data/reports/<run>/analysis/` |
-| **7. Publicação** | `prisma`, `package` | fluxo PRISMA e pacote Zenodo com checksums |
+| **7. Publicação** | `prisma`, `package` | fluxo PRISMA (JSON, Markdown e TikZ para LaTeX) e pacote Zenodo com checksums |
 
 As análises aceitam `--basis detections` (automática) ou `--basis coding` (manual, por consenso entre codificadores). O passo a passo com exemplos está no [manual](docs/manual.md#16-fluxo-completo-do-estudo-da-coleta-ao-pacote).
 
@@ -76,10 +78,10 @@ As análises aceitam `--basis detections` (automática) ou `--basis coding` (man
 | Corpus | `dedupe` | três passadas; `--near-threshold` (0,85; `0` desativa) |
 | | `stats`, `export` | resumo da coleta; exporta CSV, JSONL ou DuckDB |
 | Evidência | `enrich`, `extract` | sinais de repositório; detecções com nível de evidência |
-| Revisão | `screen`, `coding`, `agreement` | triagem, formulário de extração, concordância |
+| Revisão | `review-tui`, `screen`, `coding`, `agreement` | triagem interativa no terminal (Textual TUI / Rich CLI), formulário de extração, concordância |
 | Validação | `recall`, `precision` | recall sobre gold set; amostra e cálculo de precisão |
 | Análise | `analyze` | `frequency`, `coverage`, `oracles`, `topics`, `compare` |
-| Publicação | `prisma`, `package` | fluxo PRISMA; pacote Zenodo |
+| Publicação | `prisma`, `package` | fluxo PRISMA (Markdown, JSON e TikZ LaTeX); pacote Zenodo |
 
 `msrkit <comando> --help` lista todas as opções. As flags mais usadas: `--run <id>` escolhe a execução (padrão: a mais recente), `-a/--all` consolida todas as execuções, `-f/--format` e `-o/--output` controlam a exportação.
 

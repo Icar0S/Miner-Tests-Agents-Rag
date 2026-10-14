@@ -329,6 +329,14 @@ def menu() -> None:  # pragma: no cover
         console.print("  [cyan]6[/cyan] - Exportar última coleta em CSV ([dim]export -f csv[/dim])")
         console.print("  [cyan]7[/cyan] - Estatísticas da última coleta ([dim]stats[/dim])")
         console.print("  [cyan]8[/cyan] - Validar arquivo de protocolo ([dim]validate[/dim])")
+        console.print(
+            "  [bold cyan]9[/bold cyan] - [bold]🖥️  Triagem Interativa / TUI[/bold] "
+            "([dim]revisão visual com Textual no terminal[/dim])"
+        )
+        console.print(
+            "  [bold cyan]10[/bold cyan] - [bold]📊 Gerar Fluxo PRISMA 2020[/bold] "
+            "([dim]prisma.md, prisma.json e prisma.tikz para LaTeX[/dim])"
+        )
         console.print("  [cyan]0[/cyan] - Sair")
 
         choice = Prompt.ask("\n[bold green]Digite o número da opção[/bold green]", default="0")
@@ -409,6 +417,39 @@ def menu() -> None:  # pragma: no cover
             stats(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "8":
             validate(protocol=DEFAULT_PROTOCOL, verbose=False)
+        elif choice == "9":
+            mode = Prompt.ask(
+                "Modo de triagem: [1] TUI (Textual terminal) ou [2] Linha a Linha (Rich CLI)",
+                default="1",
+            )
+            coder = Prompt.ask(
+                "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
+                default="revisor",
+            )
+            if mode == "2":
+                from msrkit.cli.review import screen_interactive
+
+                screen_interactive(
+                    coder=coder,
+                    run_id=None,
+                    protocol=DEFAULT_PROTOCOL,
+                    batch=None,
+                    limit=50,
+                )
+            else:
+                from msrkit.cli.review import screen_tui
+
+                screen_tui(
+                    coder=coder,
+                    run_id=None,
+                    protocol=DEFAULT_PROTOCOL,
+                    batch=None,
+                    limit=50,
+                )
+        elif choice == "10":
+            from msrkit.cli.corpus import prisma
+
+            prisma(run_id=None)
         else:
             console.print("[red]Opção inválida![/red]")
 
