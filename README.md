@@ -39,7 +39,8 @@ msrkit prisma                          # gera relatório e diagrama PRISMA (incl
 Prefere não instalar nada no sistema? Use o Docker:
 
 ```bash
-docker compose build && docker compose create msrkit   # só na primeira vez
+docker compose build
+docker compose create msrkit 
 docker start -ai msrkit                                # abre um shell com o msrkit pronto
 ```
 
