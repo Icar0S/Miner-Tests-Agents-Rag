@@ -18,6 +18,7 @@ dependencies = [
     "duckdb>=1.0,<2",
     "PyYAML>=6,<7",
     "feedparser>=6.0,<7",
+    "textual>=0.70",
 ]
 
 [project.scripts]

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Label, ListItem, ListView, Static
 
@@ -92,7 +92,11 @@ class ItemListItem(ListItem):
         self.decision = decision
 
     def compose(self) -> ComposeResult:
-        badge = "[✓]" if self.decision == "include" else ("[✗]" if self.decision == "exclude" else "[ ]")
+        badge = (
+            "[✓]"
+            if self.decision == "include"
+            else ("[✗]" if self.decision == "exclude" else "[ ]")
+        )
         title_snippet = (self.item.title or "Sem título")[:28]
         yield Label(f"{badge} #{self.index} {title_snippet}")
 
@@ -188,10 +192,18 @@ class ScreeningApp(App[None]):
                 with VerticalScroll(id="item-body-scroll"):
                     yield Static("", id="item-body")
                 with Horizontal(id="action-bar"):
-                    yield Button("Incluir (I)", variant="success", id="btn-include", classes="action-btn")
-                    yield Button("Excluir (E)", variant="error", id="btn-exclude", classes="action-btn")
-                    yield Button("Dúvida (U)", variant="warning", id="btn-uncertain", classes="action-btn")
-                    yield Button("Pular (S)", variant="default", id="btn-skip", classes="action-btn")
+                    yield Button(
+                        "Incluir (I)", variant="success", id="btn-include", classes="action-btn"
+                    )
+                    yield Button(
+                        "Excluir (E)", variant="error", id="btn-exclude", classes="action-btn"
+                    )
+                    yield Button(
+                        "Dúvida (U)", variant="warning", id="btn-uncertain", classes="action-btn"
+                    )
+                    yield Button(
+                        "Pular (S)", variant="default", id="btn-skip", classes="action-btn"
+                    )
                     yield Button("Sair (Q)", variant="default", id="btn-quit", classes="action-btn")
         yield Footer()
 
@@ -220,7 +232,9 @@ class ScreeningApp(App[None]):
 
         meta_lbl = self.query_one("#item-meta", Label)
         author_str = f" | Autor: {it.author_handle}" if it.author_handle else ""
-        meta_lbl.update(f"Fonte: [bold]{it.source}[/bold] ({it.kind.value}){author_str} | URL: {it.url}")
+        meta_lbl.update(
+            f"Fonte: [bold]{it.source}[/bold] ({it.kind.value}){author_str} | URL: {it.url}"
+        )
 
         ev_lbl = self.query_one("#item-evidence", Label)
         matched = (

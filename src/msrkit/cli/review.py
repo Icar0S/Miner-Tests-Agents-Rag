@@ -153,7 +153,9 @@ def screen_interactive(
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
     coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
     batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
-    limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of items to screen in this session"),
+    limit: int = typer.Option(
+        25, "--limit", "-l", help="Maximum number of items to screen in this session"
+    ),
 ) -> None:
     """Screen items interactively in the terminal with colored highlighting and rapid keystrokes."""
     from datetime import UTC, datetime
@@ -167,7 +169,9 @@ def screen_interactive(
     run_id = _resolve_run(_unwrap(run_id))
     coder_str = _unwrap(coder).strip()
     if not coder_str:
-        coder_str = Prompt.ask("[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]").strip()
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
         if not coder_str:
             console.print("[red]✗ Coder é obrigatório.[/red]")
             raise typer.Exit(1)
@@ -185,12 +189,19 @@ def screen_interactive(
         pending = [it for it in pending if ranking[it.id].batch == target_batch]
 
     if not pending:
-        console.print(f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]")
+        console.print(
+            f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"
+        )
         return
 
     session_items = pending[:limit]
-    console.print(f"[bold green]Iniciando triagem interativa ({len(session_items)} itens para {coder_str})[/bold green]")
-    console.print("[dim]Comandos: [I]ncluir | [E]xcluir (E1-E6) | [U]ncertain | [S]kip | [Q]uit[/dim]\n")
+    console.print(
+        f"[bold green]Iniciando triagem interativa "
+        f"({len(session_items)} itens para {coder_str})[/bold green]"
+    )
+    console.print(
+        "[dim]Comandos: [I]ncluir | [E]xcluir (E1-E6) | [U]ncertain | [S]kip | [Q]uit[/dim]\n"
+    )
 
     recorded: list[ScreeningDecision] = []
     now = datetime.now(UTC).isoformat()
@@ -198,7 +209,11 @@ def screen_interactive(
     for idx, it in enumerate(session_items, 1):
         rk = ranking.get(it.id)
         b_info = f"Batch {rk.batch} (Rank #{rk.rank}, Escore {rk.score:.1f})" if rk else ""
-        matched_str = ", ".join(it.matched_terms) if it.matched_terms else "nenhum"
+        matched_str = (
+            ", ".join(t.term if hasattr(t, "term") else str(t) for t in it.matched_terms)
+            if it.matched_terms
+            else "nenhum"
+        )
 
         info_lines = [
             f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
@@ -209,16 +224,22 @@ def screen_interactive(
             preview = it.body[:600] + ("..." if len(it.body) > 600 else "")
             info_lines.append(f"\n[dim]{preview}[/dim]")
 
+        title_str = (it.title or "Sem título")[:50]
         panel = Panel(
             "\n".join(info_lines),
-            title=f"[bold cyan]Item {idx}/{len(session_items)} — {it.title or 'Sem título'}[/bold cyan]",
+            title=f"[bold cyan]Item {idx}/{len(session_items)} — {title_str}[/bold cyan]",
             subtitle=f"[dim]{b_info}[/dim]",
             border_style="cyan",
         )
         console.print(panel)
 
+        prompt_label = (
+            "[bold white]Decisão[/bold white] "
+            "([green]I[/green]ncluir, [red]E[/red]xcluir, [yellow]U[/yellow]ncertain, "
+            "[dim]S[/dim]kip, [magenta]Q[/magenta]uit)"
+        )
         choice = Prompt.ask(
-            "[bold white]Decisão[/bold white] ([green]I[/green]ncluir, [red]E[/red]xcluir, [yellow]U[/yellow]ncertain, [dim]S[/dim]kip, [magenta]Q[/magenta]uit)",
+            prompt_label,
             choices=["i", "e", "u", "s", "q", "I", "E", "U", "S", "Q"],
             default="s",
         ).lower()
@@ -257,10 +278,12 @@ def screen_interactive(
             console.print("[yellow]? Marcado como UNCERTAIN.[/yellow]\n")
         elif choice == "e":
             console.print(
-                "[dim]Critérios de Exclusão: 1=E1 (não é teste), 2=E2 (só modelo), 3=E3 (promocional), "
-                "4=E4 (duplicata), 5=E5 (tutorial genérico), 6=E6 (sem manutenção)[/dim]"
+                "[dim]Critérios: 1=E1 (não é teste), 2=E2 (só modelo), 3=E3 (promo), "
+                "4=E4 (duplicata), 5=E5 (tutorial), 6=E6 (sem manutenção)[/dim]"
             )
-            crit_choice = Prompt.ask("Motivo da exclusão (1-6 ou Enter para E1)", default="1").strip()
+            crit_choice = Prompt.ask(
+                "Motivo da exclusão (1-6 ou Enter para E1)", default="1"
+            ).strip()
             crit_id = f"E{crit_choice}" if crit_choice in ("1", "2", "3", "4", "5", "6") else "E1"
             recorded.append(
                 ScreeningDecision(
@@ -277,7 +300,9 @@ def screen_interactive(
 
     if recorded:
         path = append_decisions(_cli.DATA_DIR, run_id, recorded)
-        console.print(f"[bold green]✓ {len(recorded)} decisões gravadas com sucesso em {path.name}[/bold green]")
+        console.print(
+            f"[bold green]✓ {len(recorded)} decisões gravadas em {path.name}[/bold green]"
+        )
     else:
         console.print("[dim]Nenhuma decisão registrada nesta sessão.[/dim]")
 
@@ -295,12 +320,28 @@ def screen_tui(
 
     from msrkit.screening import load_decisions, rank_items
     from msrkit.storage import ItemStorage
-    from msrkit.tui import ScreeningApp
+
+    try:
+        from msrkit.tui import ScreeningApp
+    except ImportError:
+        console.print(
+            "\n[bold yellow]⚠ Biblioteca 'textual' não instalada neste ambiente.[/bold yellow]\n"
+            "[cyan]→ Redirecionando para a triagem interativa nativa (Rich CLI)...[/cyan]\n"
+        )
+        return screen_interactive(
+            coder=coder,
+            run_id=run_id,
+            protocol=protocol,
+            batch=batch,
+            limit=limit,
+        )
 
     run_id = _resolve_run(_unwrap(run_id))
     coder_str = _unwrap(coder).strip()
     if not coder_str:
-        coder_str = Prompt.ask("[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]").strip()
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
         if not coder_str:
             console.print("[red]✗ Coder é obrigatório.[/red]")
             raise typer.Exit(1)
@@ -318,7 +359,9 @@ def screen_tui(
         pending = [it for it in pending if ranking[it.id].batch == target_batch]
 
     if not pending:
-        console.print(f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]")
+        console.print(
+            f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"
+        )
         return
 
     session_items = pending[:limit]
@@ -334,10 +377,14 @@ def screen_tui(
 
 
 # Top-level convenient alias
-app.command(name="review-tui", help="Launch full-screen Textual TUI for literature screening.")(screen_tui)
+app.command(name="review-tui", help="Launch full-screen Textual TUI for literature screening.")(
+    screen_tui
+)
 
 
-coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
+coding_app = typer.Typer(
+    help="Extraction form (Annex A) and quality (§9): export, import, status."
+)
 
 
 app.add_typer(coding_app, name="coding")

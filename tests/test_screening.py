@@ -246,4 +246,3 @@ class TestInteractiveScreening:
         decisions = load_decisions(tmp_path, "run-int")
         assert (items[0].id, "joao") in decisions
         assert decisions[(items[0].id, "joao")].decision == "include"
-

@@ -38,7 +38,7 @@ COPY src/ ./src/
 COPY protocols/ ./protocols/
 
 # Install msrkit inside the container in editable mode (-e) for live volume reloading
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[dev,analysis]"
 
 # Create the data directory mountpoint
 RUN mkdir -p /app/data

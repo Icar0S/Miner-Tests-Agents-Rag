@@ -501,6 +501,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
     { name = "tenacity" },
+    { name = "textual" },
     { name = "typer" },
 ]
 
@@ -539,6 +540,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5,<1" },
     { name = "scikit-learn", marker = "extra == 'analysis'", specifier = ">=1.4,<2" },
     { name = "tenacity", specifier = ">=8.3,<10" },
+    { name = "textual", specifier = ">=0.70" },
     { name = "textual", marker = "extra == 'dev'", specifier = ">=0.70" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.70" },
     { name = "typer", specifier = ">=0.12,<1" },
