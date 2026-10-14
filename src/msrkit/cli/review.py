@@ -220,6 +220,34 @@ def screen_interactive(
             f"[bold]URL:[/bold] {it.url}",
             f"[bold]Termos casados:[/bold] [yellow]{matched_str}[/yellow]",
         ]
+        tech_parts: list[str] = []
+        if it.engagement.stars is not None:
+            tech_parts.append(f"★ {it.engagement.stars} estrelas")
+        if it.engagement.forks is not None:
+            tech_parts.append(f"⑂ {it.engagement.forks} forks")
+        if it.tech.has_ci is not None:
+            ci_val = (
+                "[green]CI/CD: [✓ Sim][/green]"
+                if it.tech.has_ci
+                else "[dim]CI/CD: [✗ Não][/dim]"
+            )
+            tech_parts.append(ci_val)
+        if it.tech.has_tests is not None:
+            tests_val = (
+                "[green]Testes: [✓ Sim][/green]"
+                if it.tech.has_tests
+                else "[dim]Testes: [✗ Não][/dim]"
+            )
+            tech_parts.append(tests_val)
+        if it.tech.contributors is not None:
+            tech_parts.append(f"Contribuidores: {it.tech.contributors}")
+        if it.tech.active_months is not None:
+            tech_parts.append(f"Atividade: {it.tech.active_months}m")
+        if it.tech.tags:
+            tech_parts.append(f"Tags: [cyan]{', '.join(it.tech.tags[:5])}[/cyan]")
+        if tech_parts:
+            info_lines.append(f"[bold]Sinais de Código:[/bold] {' | '.join(tech_parts)}")
+
         if it.body:
             preview = it.body[:600] + ("..." if len(it.body) > 600 else "")
             info_lines.append(f"\n[dim]{preview}[/dim]")
@@ -301,8 +329,16 @@ def screen_interactive(
     if recorded:
         path = append_decisions(_cli.DATA_DIR, run_id, recorded)
         console.print(
-            f"[bold green]✓ {len(recorded)} decisões gravadas em {path.name}[/bold green]"
+            f"[bold green]✓ {len(recorded)} decisões gravadas com sucesso em "
+            f"{path.name}[/bold green]"
         )
+        try:
+            from msrkit.cli.corpus import prisma
+
+            console.print("\n[bold cyan]Atualizando fluxo PRISMA 2020...[/bold cyan]")
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
     else:
         console.print("[dim]Nenhuma decisão registrada nesta sessão.[/dim]")
 
@@ -374,6 +410,12 @@ def screen_tui(
         detections=detections,
     )
     app_tui.run()
+    if app_tui.recorded_decisions:
+        n_dec = len(app_tui.recorded_decisions)
+        console.print(f"\n[bold green]✓ {n_dec} decisões gravadas com sucesso![/bold green]")
+        console.print(
+            f"[bold cyan]✓ PRISMA atualizado em data/reports/{run_id}/prisma.tikz[/bold cyan]\n"
+        )
 
 
 # Top-level convenient alias
@@ -623,3 +665,100 @@ def agreement(
                 writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb)])
     n_dis = sum(len(r.disagreements) for r in results)
     console.print(f"[green]✓ {n_dis} disagreement(s) written to {out_dir}[/green]")
+
+
+@coding_app.command("tui")
+def coding_tui(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    status: str = typer.Option(
+        "include", "--status", help="Items by screening decision: include, all"
+    ),
+    limit: int = typer.Option(50, "--limit", "-l", help="Maximum items to load"),
+) -> None:
+    """Launch full-screen Textual TUI for interactive Annex A data extraction."""
+    from rich.prompt import Prompt
+
+    from msrkit.coding import load_codings, suggestions
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    try:
+        from msrkit.tui import CodingApp
+    except ImportError:
+        console.print(
+            "\n[bold yellow]⚠ Biblioteca 'textual' não instalada neste ambiente.[/bold yellow]\n"
+            "[cyan]→ Use 'msrkit coding export' para preencher a planilha CSV.[/cyan]\n"
+        )
+        return
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
+        if not coder_str:
+            console.print("[red]✗ Coder é obrigatório.[/red]")
+            raise typer.Exit(1)
+
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if not items:
+        console.print(f"[yellow]Nenhum item encontrado na coleta '{run_id}'.[/yellow]")
+        return
+
+    status_str = _unwrap(status)
+    if status_str != "all":
+        decisions = load_decisions(_cli.DATA_DIR, run_id)
+        final = final_decisions(decisions)
+        included_items = [it for it in items if final.get(it.id) == "include"]
+    else:
+        included_items = items
+
+    done = {item_id for (item_id, c) in load_codings(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in included_items if it.id not in done]
+
+    if not pending:
+        if not included_items:
+            console.print(
+                "[yellow]⚠ Nenhum item marcado como 'include' na triagem para esta coleta.[/yellow]"
+            )
+            console.print(
+                "[dim]Dica: realize a triagem primeiro (Opção 9) para incluir itens.[/dim]"
+            )
+        else:
+            console.print(
+                f"[green]✓ Todos os {len(included_items)} itens elegíveis já foram codificados por "
+                f"'{coder_str}'.[/green]"
+            )
+        return
+
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    system_concepts = (
+        tuple(proto.concepts.keys()) if proto and proto.concepts else ("rag", "agente")
+    )
+    detections = _load_detections(run_id)
+    sug_map = suggestions(items, detections, system_concepts)
+
+    session_items = pending[:limit]
+    app_coding = CodingApp(
+        items=session_items,
+        data_dir=_cli.DATA_DIR,
+        run_id=run_id,
+        coder=coder_str,
+        suggestions_map=sug_map,
+    )
+    app_coding.run()
+    if app_coding.recorded_codings:
+        n_cod = len(app_coding.recorded_codings)
+        console.print(f"\n[bold green]✓ {n_cod} itens codificados com sucesso![/bold green]")
+        console.print(
+            f"[bold cyan]✓ PRISMA atualizado em data/reports/{run_id}/prisma.tikz[/bold cyan]\n"
+        )
+
+
+# Top-level convenient alias
+app.command(
+    name="coding-tui", help="Launch full-screen Textual TUI for Annex A data extraction."
+)(coding_tui)

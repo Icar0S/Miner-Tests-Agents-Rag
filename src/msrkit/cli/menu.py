@@ -297,6 +297,65 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
         )
 
 
+def _select_screening_run_id() -> str | None:
+    """Select the target dataset for screening or coding (latest run, consolidated, or specific)."""
+    from rich.prompt import Prompt
+
+    import msrkit.cli as _cli
+    from msrkit.storage import ItemStorage
+
+    storage = ItemStorage(_cli.DATA_DIR)
+    latest_run = _get_latest_run_id()
+    latest_count = (
+        len(storage.read_items(latest_run, prefer_deduped=True)) if latest_run else 0
+    )
+    consolidated_count = len(storage.read_items("consolidated", prefer_deduped=True))
+
+    console.print("\n[bold cyan]─── Escolha a Base de Dados ───[/bold cyan]")
+    if latest_run:
+        console.print(
+            f"  [cyan]1[/cyan] - ⚡ Última coleta minerada "
+            f"([bold]{latest_run}[/bold] · {latest_count} itens)"
+        )
+    else:
+        console.print("  [dim]1 - ⚡ Última coleta minerada (nenhuma encontrada)[/dim]")
+
+    console.print(
+        f"  [cyan]2[/cyan] - 📚 Corpus Consolidado "
+        f"([dim]todas as coletas acumuladas[/dim] · {consolidated_count} itens)"
+    )
+    console.print("  [cyan]3[/cyan] - 🔍 Escolher uma coleta específica do histórico")
+
+    target_choice = Prompt.ask(
+        "\n[bold green]Escolha a base desejada[/bold green]",
+        default="1" if latest_run else "2",
+    )
+
+    if target_choice == "2":
+        return "consolidated"
+    if target_choice == "3":
+        runs = [r for r in storage.list_runs() if r != "consolidated"]
+        if not runs:
+            console.print("[yellow]Nenhuma outra coleta encontrada no histórico.[/yellow]")
+            return latest_run
+        console.print("\n[bold cyan]Coletas Disponíveis:[/bold cyan]")
+        for idx, r in enumerate(runs, 1):
+            count = len(storage.read_items(r, prefer_deduped=True))
+            console.print(f"  [cyan]{idx}[/cyan] - {r} ({count} itens)")
+        idx_choice = Prompt.ask(
+            "\n[bold green]Digite o número da coleta[/bold green]", default="1"
+        )
+        try:
+            chosen_idx = int(idx_choice)
+            if 1 <= chosen_idx <= len(runs):
+                return runs[chosen_idx - 1]
+        except ValueError:
+            pass
+        return latest_run
+
+    return latest_run
+
+
 @app.command(name="menu")
 def menu() -> None:  # pragma: no cover
     """Interactive terminal menu to navigate MSR-Kit easily."""
@@ -334,7 +393,11 @@ def menu() -> None:  # pragma: no cover
             "([dim]revisão visual com Textual no terminal[/dim])"
         )
         console.print(
-            "  [bold cyan]10[/bold cyan] - [bold]📊 Gerar Fluxo PRISMA 2020[/bold] "
+            "  [bold cyan]10[/bold cyan] - [bold]📝 Extração Técnica / Coding TUI (Annex A)[/bold] "
+            "([dim]codificação qualitativa dos itens incluídos[/dim])"
+        )
+        console.print(
+            "  [bold cyan]11[/bold cyan] - [bold]📊 Gerar Fluxo PRISMA 2020[/bold] "
             "([dim]prisma.md, prisma.json e prisma.tikz para LaTeX[/dim])"
         )
         console.print("  [cyan]0[/cyan] - Sair")
@@ -418,6 +481,7 @@ def menu() -> None:  # pragma: no cover
         elif choice == "8":
             validate(protocol=DEFAULT_PROTOCOL, verbose=False)
         elif choice == "9":
+            selected_run = _select_screening_run_id()
             mode = Prompt.ask(
                 "Modo de triagem: [1] TUI (Textual terminal) ou [2] Linha a Linha (Rich CLI)",
                 default="1",
@@ -431,7 +495,7 @@ def menu() -> None:  # pragma: no cover
 
                 screen_interactive(
                     coder=coder,
-                    run_id=None,
+                    run_id=selected_run,
                     protocol=DEFAULT_PROTOCOL,
                     batch=None,
                     limit=50,
@@ -441,12 +505,27 @@ def menu() -> None:  # pragma: no cover
 
                 screen_tui(
                     coder=coder,
-                    run_id=None,
+                    run_id=selected_run,
                     protocol=DEFAULT_PROTOCOL,
                     batch=None,
                     limit=50,
                 )
         elif choice == "10":
+            selected_run = _select_screening_run_id()
+            coder = Prompt.ask(
+                "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
+                default="revisor",
+            )
+            from msrkit.cli.review import coding_tui
+
+            coding_tui(
+                run_id=selected_run,
+                protocol=DEFAULT_PROTOCOL,
+                coder=coder,
+                status="include",
+                limit=50,
+            )
+        elif choice == "11":
             from msrkit.cli.corpus import prisma
 
             prisma(run_id=None)

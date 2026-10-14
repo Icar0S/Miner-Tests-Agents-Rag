@@ -35,13 +35,13 @@ def _get_latest_run_id() -> str | None:
     """Find the most recent run ID in _cli.DATA_DIR/runs or _cli.DATA_DIR/items."""
     runs_dir = _cli.DATA_DIR / "runs"
     if runs_dir.exists():
-        subdirs = [p for p in runs_dir.iterdir() if p.is_dir()]
+        subdirs = [p for p in runs_dir.iterdir() if p.is_dir() and p.name != "consolidated"]
         if subdirs:
             return max(subdirs, key=lambda p: p.stat().st_mtime).name
 
     items_dir = _cli.DATA_DIR / "items"
     if items_dir.exists():
-        subdirs = [p for p in items_dir.iterdir() if p.is_dir()]
+        subdirs = [p for p in items_dir.iterdir() if p.is_dir() and p.name != "consolidated"]
         if subdirs:
             return max(subdirs, key=lambda p: p.stat().st_mtime).name
 
