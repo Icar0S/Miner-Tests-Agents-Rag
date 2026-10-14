@@ -227,9 +227,12 @@ class RedditAdapter(BaseAdapter):
             tags=[subreddit] if subreddit else [],
         )
         permalink = p.get("permalink") or f"/r/{subreddit}/comments/{p.get('id', '')}"
-        if not permalink.startswith("/"):
-            permalink = f"/{permalink}"
-        url = f"https://www.reddit.com{permalink}"
+        if permalink.startswith(("http://", "https://")):
+            url = permalink
+        else:
+            if not permalink.startswith("/"):
+                permalink = f"/{permalink}"
+            url = f"https://www.reddit.com{permalink}"
 
         return Item(
             id=Item.make_id(self.name, p.get("id", "")),

@@ -258,12 +258,15 @@ def write_csv(rows: Sequence[BaseModel], path: Path) -> Path:
         if fields:
             writer.writeheader()
         for row in data:
-            writer.writerow(
-                {
-                    k: "; ".join(f"{a}={b}" for a, b in v.items()) if isinstance(v, dict) else v
-                    for k, v in row.items()
-                }
-            )
+            formatted_row: dict[str, Any] = {}
+            for k, v in row.items():
+                if isinstance(v, dict):
+                    formatted_row[k] = "; ".join(f"{a}={b}" for a, b in v.items())
+                elif isinstance(v, (list, tuple)):
+                    formatted_row[k] = ", ".join(str(x) for x in v)
+                else:
+                    formatted_row[k] = v
+            writer.writerow(formatted_row)
     return path
 
 

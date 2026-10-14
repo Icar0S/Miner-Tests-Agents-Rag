@@ -1136,3 +1136,50 @@ class TestSearchLoopsAndQueryBuilding:
         assert is_bot_author("alice") is False
         assert is_bot_author("john_doe") is False
         assert is_bot_author(None) is False
+
+    def test_reddit_normalize_handles_absolute_permalink(self) -> None:
+        adapter = RedditAdapter()
+        raw = RawItem(
+            source="reddit",
+            native_id="p123",
+            payload={
+                "id": "p123",
+                "title": "Discussion on RAG",
+                "selftext": "Text body",
+                "subreddit": "MachineLearning",
+                "permalink": "https://www.reddit.com/r/MachineLearning/comments/p123/rag_test/",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://www.reddit.com/r/MachineLearning/comments/p123/rag_test/"
+
+    def test_rss_normalize_handles_tag_uri(self) -> None:
+        adapter = RSSAdapter()
+        raw = RawItem(
+            source="rss",
+            native_id="tag:blogger.com,1999:blog-1234",
+            payload={
+                "title": "Blog post",
+                "link": "tag:blogger.com,1999:blog-1234",
+                "feed_url": "https://blog.example/feed.xml",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://blog.example/feed.xml"
+
+    def test_devto_normalize_handles_missing_url(self) -> None:
+        adapter = DevToAdapter()
+        raw = RawItem(
+            source="devto",
+            native_id="456",
+            payload={
+                "id": 456,
+                "title": "Dev.to article without url",
+                "url": "",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://dev.to/articles/456"

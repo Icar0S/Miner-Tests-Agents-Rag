@@ -287,3 +287,38 @@ class TestInteractiveScreening:
         decisions = load_decisions(tmp_path, "run-int")
         assert (items[0].id, "joao") in decisions
         assert decisions[(items[0].id, "joao")].decision == "include"
+
+
+def test_final_decisions_fuzzy_consensus_coder() -> None:
+    from msrkit.screening import ScreeningDecision, final_decisions
+
+    dec1 = ScreeningDecision(
+        item_id="i1",
+        coder="ana",
+        decision="include",
+        criteria_met=["I1"],
+        decided_at="2026-10-14T00:00:00Z",
+        sheet_sha256="test",
+    )
+    dec2 = ScreeningDecision(
+        item_id="i1",
+        coder="bia",
+        decision="exclude",
+        criteria_met=["E1"],
+        decided_at="2026-10-14T00:00:00Z",
+        sheet_sha256="test",
+    )
+    # Disagreement between ana and bia
+    assert final_decisions({("i1", "ana"): dec1, ("i1", "bia"): dec2})["i1"] == "uncertain"
+
+    # Tiebreaker by supervisor_joao
+    dec3 = ScreeningDecision(
+        item_id="i1",
+        coder="supervisor_joao",
+        decision="include",
+        criteria_met=["I1"],
+        decided_at="2026-10-14T00:00:00Z",
+        sheet_sha256="test",
+    )
+    decisions = {("i1", "ana"): dec1, ("i1", "bia"): dec2, ("i1", "supervisor_joao"): dec3}
+    assert final_decisions(decisions)["i1"] == "include"

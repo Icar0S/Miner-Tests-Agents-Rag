@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from msrkit.analysis import (
@@ -23,6 +24,7 @@ from msrkit.analysis import (
     saturation,
     units_from_codings,
     units_from_detections,
+    write_csv,
 )
 from msrkit.cli import app
 from msrkit.coding import CodingRecord, append_codings
@@ -56,10 +58,16 @@ def _item(iid: str, url: str, source: str = "github", concepts: list[str] | None
 
 def _det(item: str, entry: str, level: str = "N1", kind: str = "tool", repo: str | None = None):
     return Detection(
-        item_id=item, source="github", repo=repo, entry_id=entry, entry_type=kind,  # type: ignore[arg-type]
-        level=level, signal="text" if level == "N1" else "ci",  # type: ignore[arg-type]
-        location="x", evidence="e",
-    )  # fmt: skip
+        item_id=item,
+        source="github",
+        repo=repo,
+        entry_id=entry,
+        entry_type=kind,  # type: ignore[arg-type]
+        level=level,
+        signal="text" if level == "N1" else "ci",  # type: ignore[arg-type]
+        location="x",
+        evidence="e",
+    )
 
 
 def _rec(item: str, coder: str, **values: object) -> CodingRecord:
@@ -333,3 +341,24 @@ def test_frequency_reports_gazetteer_family() -> None:
     rows = {r.entry: r for r in frequency(units, {"langchain": "framework-sut"})}
     assert rows["langchain"].family == "framework-sut"
     assert rows["ragas"].family == ""
+
+
+def test_write_csv_formats_lists_tuples_and_dicts(tmp_path: Path) -> None:
+    class SampleRow(BaseModel):
+        name: str
+        tags: list[str]
+        bounds: tuple[float, float]
+        meta: dict[str, int]
+
+    rows = [
+        SampleRow(name="u1", tags=["rag", "eval"], bounds=(0.1, 0.9), meta={"a": 1, "b": 2}),
+    ]
+    csv_file = tmp_path / "sample.csv"
+    write_csv(rows, csv_file)
+
+    with open(csv_file, encoding="utf-8-sig") as fh:
+        parsed = list(csv.DictReader(fh, delimiter=";"))
+    assert len(parsed) == 1
+    assert parsed[0]["tags"] == "rag, eval"
+    assert parsed[0]["bounds"] == "0.1, 0.9"
+    assert parsed[0]["meta"] == "a=1; b=2"

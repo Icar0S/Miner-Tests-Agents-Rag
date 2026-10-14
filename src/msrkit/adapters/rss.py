@@ -180,7 +180,14 @@ class RSSAdapter(BaseAdapter):
             tags = [tags]
 
         matched = match_terms(terms or [], title=p.get("title"), body=p.get("summary"), tags=tags)
-        url = p.get("link") or p.get("feed_url") or f"https://feed.local/{raw.native_id}"
+        raw_link = p.get("link")
+        raw_feed = p.get("feed_url")
+        if raw_link and str(raw_link).startswith(("http://", "https://")):
+            url = str(raw_link)
+        elif raw_feed and str(raw_feed).startswith(("http://", "https://")):
+            url = str(raw_feed)
+        else:
+            url = f"https://feed.local/{raw.native_id or 'entry'}"
 
         return Item(
             id=Item.make_id(self.name, str(raw.native_id)),

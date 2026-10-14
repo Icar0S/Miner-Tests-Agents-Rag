@@ -9,6 +9,7 @@ from pathlib import Path
 from rich.table import Table
 
 from msrkit import __version__
+from msrkit import cli as _cli
 from msrkit.cli._common import (
     DEFAULT_PROTOCOL,
     _get_latest_run_id,
@@ -443,7 +444,9 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             suffix_type = "brutos" if is_raw else "desduplicados"
             suffix_scope = "consolidado" if is_all else f"coleta_{selected_run}"
-            out_file = f"data/resultados_{timestamp}_{suffix_scope}_{suffix_type}.csv"
+            out_file = str(
+                _cli.DATA_DIR / f"resultados_{timestamp}_{suffix_scope}_{suffix_type}.csv"
+            )
             export(
                 run_id=selected_run if not is_all else None,
                 all_runs=is_all,

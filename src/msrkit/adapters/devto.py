@@ -202,11 +202,17 @@ class DevToAdapter(BaseAdapter):
         body = p.get("_body_markdown") or p.get("description")
         matched = match_terms(terms or [], title=p.get("title"), body=body, tags=tags)
 
+        raw_url = p.get("url")
+        if raw_url and str(raw_url).startswith(("http://", "https://")):
+            url = str(raw_url)
+        else:
+            url = f"https://dev.to/articles/{p.get('id', '')}"
+
         return Item(
             id=Item.make_id(self.name, str(p.get("id", ""))),
             source=self.name,
             kind=ItemKind.ARTICLE,
-            url=p.get("url", ""),
+            url=url,  # type: ignore[arg-type]
             title=p.get("title"),
             body=body,
             author_handle=(p.get("user") or {}).get("username"),

@@ -371,7 +371,20 @@ def final_decisions(latest: dict[tuple[str, str], ScreeningDecision]) -> dict[st
         # Check if there is an explicit consensus/tie-breaker decision
         consensus_dec = None
         for coder, dec in coder_decisions.items():
-            if coder.strip().lower() in CONSENSUS_CODERS:
+            c_clean = coder.strip().lower()
+            if c_clean in CONSENSUS_CODERS or any(
+                kw in c_clean
+                for kw in (
+                    "consenso",
+                    "consensus",
+                    "tiebreaker",
+                    "tie-breaker",
+                    "terceiro",
+                    "supervisor",
+                    "resolver",
+                    "desempate",
+                )
+            ):
                 consensus_dec = dec
                 break
         if consensus_dec is not None:

@@ -294,8 +294,16 @@ class DuckDBStorage:
                         body_val,
                         item.body_hash,
                         item.author_handle,
-                        item.created_at.isoformat() if item.created_at else None,
-                        item.updated_at.isoformat() if item.updated_at else None,
+                        (
+                            item.created_at.isoformat()
+                            if item.created_at is not None
+                            else None
+                        ),
+                        (
+                            item.updated_at.isoformat()
+                            if item.updated_at is not None
+                            else None
+                        ),
                         item.provenance.run_id,
                         item.provenance.adapter,
                         item.provenance.query_string,

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+from textual.widgets import Input
 
 from msrkit.models import Item, ItemKind, Provenance, TermHit
 from msrkit.screening import ScreeningCriteria
@@ -48,8 +51,6 @@ def _make_item(idx: int = 1) -> Item:
 
 
 def test_tui_app_mount_and_include(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import asyncio
-
     monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
 
     async def _run() -> None:
@@ -111,8 +112,6 @@ def test_tui_app_mount_and_include(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_coding_app_mount_and_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import asyncio
-
     monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
 
     async def _run() -> None:
@@ -223,3 +222,73 @@ def test_menu_screening_run_selector(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "2")
     sel2 = _select_screening_run_id()
     assert sel2 == "consolidated"
+
+
+def test_screening_app_exclude_and_bounds_safety(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+    async def _run() -> None:
+        item1 = _make_item(1)
+        criteria = ScreeningCriteria(
+            inclusion={"I1": "Teste RAG"},
+            exclusion={"E1": "LLM4Testing"},
+            batch_size=10,
+        )
+        app = ScreeningApp(
+            items=[item1],
+            criteria=criteria,
+            data_dir=tmp_path,
+            run_id="test-run",
+            coder="joao",
+        )
+
+        async with app.run_test() as pilot:
+            assert app.is_running
+            # Exclude item with criterion 1 (E1)
+            await pilot.press("e")
+            await pilot.press("1")
+            assert len(app.recorded_decisions) == 1
+            assert app.recorded_decisions[0].decision == "exclude"
+            assert app.recorded_decisions[0].criteria_met == ["E1"]
+
+            # App is now at the end; pressing i/e/u/s should not raise IndexError
+            await pilot.press("i")
+            await pilot.press("e")
+            await pilot.press("u")
+            await pilot.press("s")
+            assert len(app.recorded_decisions) == 1
+
+            await pilot.press("q")
+
+    asyncio.run(_run())
+
+
+def test_coding_app_tools_deduplication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+    async def _run() -> None:
+        item1 = _make_item(1)
+        app = CodingApp(
+            items=[item1],
+            data_dir=tmp_path,
+            run_id="test-run",
+            coder="joao",
+        )
+
+        async with app.run_test() as pilot:
+            # Set input tools with extra whitespace and duplicate entries
+            tools_inp = app.query_one("#input-tools", Input)
+            tools_inp.value = "  ragas , deepeval , Ragas  ,  deepeval , pytest "
+            await pilot.press("g")
+
+            assert len(app.recorded_codings) == 1
+            tools = app.recorded_codings[0].values.get("ferramentas")
+            assert tools == ["ragas", "deepeval", "pytest"]
+
+            await pilot.press("q")
+
+    asyncio.run(_run())

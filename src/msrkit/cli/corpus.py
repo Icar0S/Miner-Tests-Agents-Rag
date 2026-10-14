@@ -79,11 +79,16 @@ def prisma(
         discards_dir = _cli.DATA_DIR / "runs" / "consolidated"
         discards_dir.mkdir(parents=True, exist_ok=True)
         discard_file = discards_dir / "discarded.jsonl"
+        seen_discards: set[str] = set()
         with discard_file.open("w", encoding="utf-8") as out_df:
             for r in runs:
                 src_df = _cli.DATA_DIR / "runs" / r / "discarded.jsonl"
                 if src_df.exists():
-                    out_df.write(src_df.read_text(encoding="utf-8"))
+                    for line in src_df.read_text(encoding="utf-8").splitlines():
+                        line_str = line.strip()
+                        if line_str and line_str not in seen_discards:
+                            seen_discards.add(line_str)
+                            out_df.write(line_str + "\n")
 
         decisions = load_decisions(_cli.DATA_DIR, "consolidated")
         if not decisions:
@@ -528,14 +533,29 @@ def export(
                     row = item.model_dump(mode="json")
                     row["url"] = str(item.url)
                     row["kind"] = item.kind.value
-                    row["matched_terms"] = (
-                        ", ".join(sorted(set(hit.term for hit in item.matched_terms)))
-                        if item.matched_terms
-                        else ""
-                    )
-                    row["matched_languages"] = ", ".join(
-                        sorted({hit.lang for hit in item.matched_terms if hit.lang})
-                    )
+                    terms_set: set[str] = set()
+                    langs_set: set[str] = set()
+                    for hit in item.matched_terms:
+                        t = (
+                            hit.term
+                            if hasattr(hit, "term")
+                            else (
+                                hit.get("term", str(hit))
+                                if isinstance(hit, dict)
+                                else str(hit)
+                            )
+                        )
+                        if t:
+                            terms_set.add(t)
+                        l_val = (
+                            hit.lang
+                            if hasattr(hit, "lang")
+                            else (hit.get("lang") if isinstance(hit, dict) else None)
+                        )
+                        if l_val:
+                            langs_set.add(l_val)
+                    row["matched_terms"] = ", ".join(sorted(terms_set))
+                    row["matched_languages"] = ", ".join(sorted(langs_set))
                     row["concepts"] = ", ".join(item.concepts)
                     row["stars"] = (
                         item.engagement.stars

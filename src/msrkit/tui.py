@@ -283,7 +283,7 @@ class ScreeningApp(App[None]):
         body_widget.update(it.body or "[dim](Sem corpo de texto disponível)[/dim]")
 
     def action_include_item(self) -> None:
-        if not self.raw_items:
+        if not self.raw_items or self.current_idx >= len(self.raw_items):
             return
         it = self.raw_items[self.current_idx]
         now = datetime.now(UTC).isoformat()
@@ -299,11 +299,11 @@ class ScreeningApp(App[None]):
         self._record_and_advance(it.id, dec, "include")
 
     def action_exclude_item(self) -> None:
-        if not self.raw_items:
+        if not self.raw_items or self.current_idx >= len(self.raw_items):
             return
 
         def handle_modal_result(crit: str | None) -> None:
-            if not crit:
+            if not crit or self.current_idx >= len(self.raw_items):
                 return
             it = self.raw_items[self.current_idx]
             now = datetime.now(UTC).isoformat()
@@ -321,7 +321,7 @@ class ScreeningApp(App[None]):
         self.push_screen(ExclusionModal(), handle_modal_result)
 
     def action_uncertain_item(self) -> None:
-        if not self.raw_items:
+        if not self.raw_items or self.current_idx >= len(self.raw_items):
             return
         it = self.raw_items[self.current_idx]
         now = datetime.now(UTC).isoformat()
@@ -337,6 +337,8 @@ class ScreeningApp(App[None]):
         self._record_and_advance(it.id, dec, "uncertain")
 
     def action_skip_item(self) -> None:
+        if not self.raw_items or self.current_idx >= len(self.raw_items):
+            return
         self._advance()
 
     def action_quit_app(self) -> None:
@@ -351,6 +353,7 @@ class ScreeningApp(App[None]):
         self.exit()
 
     def _record_and_advance(self, item_id: str, decision: ScreeningDecision, mark: str) -> None:
+        self.recorded_decisions = [d for d in self.recorded_decisions if d.item_id != item_id]
         self.recorded_decisions.append(decision)
         self.decisions_map[item_id] = mark
         list_view = self.query_one("#item-list", ListView)
@@ -365,8 +368,8 @@ class ScreeningApp(App[None]):
         self._advance()
 
     def _advance(self) -> None:
-        if self.current_idx + 1 < len(self.raw_items):
-            self.current_idx += 1
+        self.current_idx += 1
+        if self.current_idx < len(self.raw_items):
             list_view = self.query_one("#item-list", ListView)
             list_view.index = self.current_idx
             self._display_item(self.current_idx)
@@ -731,7 +734,14 @@ class CodingApp(App[None]):
             "evidencia_textual": (it.body or it.title or "")[:280],
         }
         if tools_val:
-            vals["ferramentas"] = [t.strip() for t in tools_val.split(",") if t.strip()]
+            seen_tools: set[str] = set()
+            cleaned_tools: list[str] = []
+            for t in tools_val.split(","):
+                cleaned = t.strip()
+                if cleaned and cleaned.lower() not in seen_tools:
+                    seen_tools.add(cleaned.lower())
+                    cleaned_tools.append(cleaned)
+            vals["ferramentas"] = cleaned_tools
 
         rec = CodingRecord(
             item_id=it.id,
@@ -741,6 +751,7 @@ class CodingApp(App[None]):
             coded_at=datetime.now(UTC).isoformat(),
             sheet_sha256="tui_coding",
         )
+        self.recorded_codings = [c for c in self.recorded_codings if c.item_id != it.id]
         self.recorded_codings.append(rec)
         self.codings_map[it.id] = True
 
@@ -770,8 +781,8 @@ class CodingApp(App[None]):
         self.exit()
 
     def _advance(self) -> None:
-        if self.current_idx + 1 < len(self.raw_items):
-            self.current_idx += 1
+        self.current_idx += 1
+        if self.current_idx < len(self.raw_items):
             list_view = self.query_one("#coding-item-list", ListView)
             list_view.index = self.current_idx
             self._display_item(self.current_idx)
