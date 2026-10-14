@@ -133,13 +133,19 @@ def agreement(
     dimensions: list[str] | None = None,
 ) -> list[PairAgreement]:
     """κ per dimension and coder pair. `dimensions` restricts the form fields."""
+    from msrkit.screening import CONSENSUS_CODERS
+
     results: list[PairAgreement] = []
 
     if decisions:
         by_coder: dict[str, dict[str, Any]] = {}
         for (item_id, coder), d in decisions.items():
             by_coder.setdefault(coder, {})[item_id] = d.decision
-        for a, b in combinations(sorted(by_coder), 2):
+        active_coders = [
+            c for c in sorted(by_coder) if c.strip().lower() not in CONSENSUS_CODERS
+        ]
+        coder_list = active_coders if len(active_coders) >= 2 else sorted(by_coder)
+        for a, b in combinations(coder_list, 2):
             pair = _pair("screening", (a, b), by_coder[a], by_coder[b], multi=False)
             if pair:
                 results.append(pair)
@@ -150,8 +156,10 @@ def agreement(
     coded: dict[str, dict[str, dict[str, Any]]] = {}  # coder -> item -> values
     for (item_id, coder), rec in codings.items():
         coded.setdefault(coder, {})[item_id] = rec.values
+    active_coded = [c for c in sorted(coded) if c.strip().lower() not in CONSENSUS_CODERS]
+    coded_list = active_coded if len(active_coded) >= 2 else sorted(coded)
     for f in fields:
-        for a, b in combinations(sorted(coded), 2):
+        for a, b in combinations(coded_list, 2):
             va = {i: v.get(f.name) for i, v in coded[a].items()}
             vb = {i: v.get(f.name) for i, v in coded[b].items()}
             pair = _pair(f.name, (a, b), va, vb, multi=f.type == "multi")

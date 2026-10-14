@@ -319,7 +319,14 @@ def screen_interactive(
             crit_choice = Prompt.ask(
                 "Motivo da exclusão (1-6 ou Enter para E1)", default="1"
             ).strip()
-            crit_id = f"E{crit_choice}" if crit_choice in ("1", "2", "3", "4", "5", "6") else "E1"
+            clean_choice = crit_choice.upper().strip()
+            if clean_choice.startswith("E") and len(clean_choice) > 1:
+                clean_choice = clean_choice[1:]
+            crit_id = (
+                f"E{clean_choice}"
+                if clean_choice in ("1", "2", "3", "4", "5", "6")
+                else "E1"
+            )
             recorded.append(
                 ScreeningDecision(
                     item_id=it.id,
@@ -418,11 +425,14 @@ def screen_tui(
     )
     app_tui.run()
     if app_tui.recorded_decisions:
+        from msrkit.cli.corpus import prisma
+
         n_dec = len(app_tui.recorded_decisions)
         console.print(f"\n[bold green]✓ {n_dec} decisões gravadas com sucesso![/bold green]")
-        console.print(
-            f"[bold cyan]✓ PRISMA atualizado em data/reports/{run_id}/prisma.tikz[/bold cyan]\n"
-        )
+        try:
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
 
 
 # Top-level convenient alias
@@ -684,6 +694,145 @@ def agreement(
     console.print(f"[green]✓ {n_dis} disagreement(s) written to {out_dir}[/green]")
 
 
+@app.command("resolve", help="Apply consensus resolutions from filled disagreements.csv (§15).")
+def resolve_disagreements_cmd(
+    sheet: str | None = typer.Option(
+        None, "--sheet", "-s", help="Path to filled disagreements.csv"
+    ),
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    resolver: str = typer.Option(
+        "consenso", "--resolver", "-r", help="Default resolver coder name"
+    ),
+) -> None:
+    """Apply resolved consensus decisions from disagreements.csv to screening and coding."""
+    import csv
+    import hashlib
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from msrkit.coding import CodingRecord, append_codings, load_codings
+    from msrkit.screening import DECISION_ALIASES, ScreeningDecision, append_decisions
+
+    run_id = _resolve_run(_unwrap(run_id))
+    resolver = _unwrap(resolver).strip() or "consenso"
+    sheet_val = _unwrap(sheet)
+    sheet_path = (
+        Path(sheet_val) if sheet_val else _cli.DATA_DIR / "coding" / run_id / "disagreements.csv"
+    )
+    if not sheet_path.exists():
+        console.print(f"[red]✗ Arquivo de divergências não encontrado: {sheet_path}[/red]")
+        raise typer.Exit(1)
+
+    raw_bytes = sheet_path.read_bytes()
+    sheet_hash = hashlib.sha256(raw_bytes).hexdigest()
+    text = raw_bytes.decode("utf-8-sig")
+    delim = ";" if text.split("\n", 1)[0].count(";") else ","
+    reader = csv.DictReader(text.splitlines(), delimiter=delim)
+
+    screening_resolutions: list[ScreeningDecision] = []
+    coding_resolutions: dict[str, dict[str, Any]] = {}
+    coding_reasons: dict[str, str] = {}
+    skipped_unresolved = 0
+    now = datetime.now(UTC).isoformat()
+
+    for line_no, row in enumerate(reader, start=2):
+        item_id = (row.get("item_id") or "").strip()
+        dimension = (row.get("dimension") or "").strip()
+        consensus_val = (row.get("consensus_value") or "").strip()
+        row_resolver = (row.get("resolved_by") or resolver).strip() or resolver
+        reason = (row.get("reason") or "").strip()
+
+        if not consensus_val:
+            skipped_unresolved += 1
+            continue
+
+        if dimension == "screening":
+            norm_dec = consensus_val.lower()
+            norm_dec = DECISION_ALIASES.get(norm_dec, norm_dec)
+            if norm_dec not in ("include", "exclude", "uncertain"):
+                console.print(
+                    f"[yellow]⚠ Linha {line_no}: decisão inválida '{consensus_val}' para item "
+                    f"{item_id}. Ignorada.[/yellow]"
+                )
+                continue
+            screening_resolutions.append(
+                ScreeningDecision(
+                    item_id=item_id,
+                    coder=row_resolver,
+                    decision=norm_dec,  # type: ignore[arg-type]
+                    criteria_met=[],
+                    reason=reason,
+                    notes=(
+                        f"Resolvido via disagreements.csv "
+                        f"({row.get('coder_a')} × {row.get('coder_b')})"
+                    ),
+                    decided_at=now,
+                    sheet_sha256=sheet_hash,
+                )
+            )
+        else:
+            item_vals = coding_resolutions.setdefault(item_id, {})
+            if "," in consensus_val or ";" in consensus_val:
+                item_vals[dimension] = [
+                    v.strip()
+                    for v in consensus_val.replace(";", ",").split(",")
+                    if v.strip()
+                ]
+            elif consensus_val.lower() in ("true", "sim", "yes", "s", "1"):
+                item_vals[dimension] = True
+            elif consensus_val.lower() in ("false", "não", "nao", "no", "n", "0"):
+                item_vals[dimension] = False
+            else:
+                item_vals[dimension] = consensus_val
+            if reason:
+                coding_reasons[item_id] = reason
+
+    saved_scr = 0
+    if screening_resolutions:
+        append_decisions(_cli.DATA_DIR, run_id, screening_resolutions)
+        saved_scr = len(screening_resolutions)
+
+    saved_cod = 0
+    if coding_resolutions:
+        existing_codings = load_codings(_cli.DATA_DIR, run_id)
+        new_codings: list[CodingRecord] = []
+        for item_id, vals in coding_resolutions.items():
+            base_rec = existing_codings.get((item_id, resolver))
+            merged_vals = dict(base_rec.values) if base_rec else {}
+            merged_vals.update(vals)
+            new_codings.append(
+                CodingRecord(
+                    item_id=item_id,
+                    coder=resolver,
+                    values=merged_vals,
+                    notes=coding_reasons.get(item_id, "Resolvido via disagreements.csv"),
+                    coded_at=now,
+                    sheet_sha256=sheet_hash,
+                )
+            )
+        append_codings(_cli.DATA_DIR, run_id, new_codings)
+        saved_cod = len(new_codings)
+
+    console.print(
+        f"\n[bold green]✓ Resolução concluída:[/bold green] "
+        f"[cyan]{saved_scr}[/cyan] item(ns) de triagem e "
+        f"[cyan]{saved_cod}[/cyan] de codificação gravados como consenso."
+    )
+    if skipped_unresolved:
+        console.print(
+            f"[dim]({skipped_unresolved} linha(s) sem 'consensus_value' foram ignoradas)[/dim]"
+        )
+
+    if saved_scr > 0:
+        try:
+            from msrkit.cli.corpus import prisma
+
+            console.print("\n[bold cyan]Atualizando fluxo PRISMA 2020...[/bold cyan]")
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
+
+
 @coding_app.command("tui")
 def coding_tui(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
@@ -769,11 +918,14 @@ def coding_tui(
     )
     app_coding.run()
     if app_coding.recorded_codings:
+        from msrkit.cli.corpus import prisma
+
         n_cod = len(app_coding.recorded_codings)
         console.print(f"\n[bold green]✓ {n_cod} itens codificados com sucesso![/bold green]")
-        console.print(
-            f"[bold cyan]✓ PRISMA atualizado em data/reports/{run_id}/prisma.tikz[/bold cyan]\n"
-        )
+        try:
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
 
 
 # Top-level convenient alias

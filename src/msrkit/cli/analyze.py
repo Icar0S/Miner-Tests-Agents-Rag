@@ -48,7 +48,9 @@ def _load_units(run_id: str, basis: str) -> list[Any]:
 
 
 def _out_dir(run_id: str) -> Any:
-    return _cli.DATA_DIR / "reports" / run_id / "analysis"
+    out = _cli.DATA_DIR / "reports" / run_id / "analysis"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 @analyze_app.command("frequency")
@@ -252,7 +254,14 @@ def analyze_topics(
             seed=_unwrap(seed),
         )
     except (RuntimeError, ValueError) as e:
-        console.print(f"[red]✗ {e}[/red]")
+        from rich.markup import escape
+
+        console.print(f"[red]✗ {escape(str(e))}[/red]")
+        if status == "include" and "need at least as many as topics" in str(e):
+            console.print(
+                "[yellow]Dica: Poucos itens incluídos na triagem. Use --status all para "
+                "analisar todo o corpus minerado, ou reduza --topics e --clusters.[/yellow]"
+            )
         raise typer.Exit(1) from None
 
     out = _out_dir(run_id)

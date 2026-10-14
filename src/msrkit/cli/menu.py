@@ -426,18 +426,15 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             prisma(run_id=selected_run)
         elif choice == "2":
-            which = Prompt.ask(
-                "Estatísticas de [1] Última coleta + Panorama histórico "
-                "ou [2] Apenas corpus consolidado?",
-                default="1",
+            selected_run = _select_screening_run_id()
+            stats(
+                run_id=selected_run,
+                all_runs=(selected_run == "consolidated"),
+                verbose=False,
             )
-            stats(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "3":
-            which = Prompt.ask(
-                "Exportar [1] Apenas a última coleta ou [2] Consolidado de todas as coletas?",
-                default="1",
-            )
-            is_all = which == "2"
+            selected_run = _select_screening_run_id()
+            is_all = selected_run == "consolidated"
             kind_choice = Prompt.ask(
                 "Deseja exportar [1] Versão desduplicada (se existir) ou [2] Versão bruta?",
                 default="1",
@@ -445,10 +442,10 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             is_raw = kind_choice == "2"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             suffix_type = "brutos" if is_raw else "desduplicados"
-            suffix_scope = "consolidado" if is_all else "coleta"
+            suffix_scope = "consolidado" if is_all else f"coleta_{selected_run}"
             out_file = f"data/resultados_{timestamp}_{suffix_scope}_{suffix_type}.csv"
             export(
-                run_id=None,
+                run_id=selected_run if not is_all else None,
                 all_runs=is_all,
                 fmt="csv",
                 include_body=False,
@@ -503,7 +500,12 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
         if sub in ("1", "2"):
             console.print("\n[bold cyan]Executando Análise de Frequência (A1/A2)...[/bold cyan]")
             try:
-                analyze_frequency(run_id=run_id, basis="detections", pairs="tool-method")
+                analyze_frequency(
+                    run_id=run_id,
+                    basis="detections",
+                    pairs="tool-method",
+                    protocol=protocol_path,
+                )
             except Exception as e:
                 console.print(f"[yellow]Nota em A1/A2: {e}[/yellow]")
 
@@ -634,8 +636,14 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                     batch=[],
                 )
             else:
+                selected_run = _select_screening_run_id()
                 sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
-                screen_import(sheet=sheet_file, run_id=None, protocol=protocol_path, coder="")
+                screen_import(
+                    sheet=sheet_file,
+                    run_id=selected_run,
+                    protocol=protocol_path,
+                    coder="",
+                )
         elif choice == "9":
             sub_choice = Prompt.ask(
                 "Deseja [1] Exportar formulário Anexo A em CSV ou [2] Importar CSV preenchido?",
@@ -657,21 +665,48 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                     double_sample=False,
                 )
             else:
+                selected_run = _select_screening_run_id()
                 sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
-                coding_import(sheet=sheet_file, run_id=None, protocol=protocol_path, coder="")
+                coding_import(
+                    sheet=sheet_file,
+                    run_id=selected_run,
+                    protocol=protocol_path,
+                    coder="",
+                )
         elif choice == "10":
             selected_run = _select_screening_run_id()
-            from msrkit.cli.review import agreement
+            sub_choice = Prompt.ask(
+                "Deseja [1] Calcular índice Kappa e exportar divergências ou "
+                "[2] Aplicar resolução de divergências (disagreements.csv)?",
+                default="1",
+            )
+            if sub_choice == "1":
+                from msrkit.cli.review import agreement
 
-            agreement(run_id=selected_run, protocol=protocol_path, all_fields=False)
+                agreement(run_id=selected_run, protocol=protocol_path, all_fields=False)
+            else:
+                from msrkit.cli.review import resolve_disagreements_cmd
+
+                sheet_file = Prompt.ask(
+                    "Caminho do arquivo disagreements.csv preenchido (ou Enter para padrão)",
+                    default=f"data/coding/{selected_run}/disagreements.csv",
+                )
+                resolve_disagreements_cmd(sheet=sheet_file, run_id=selected_run)
         elif choice == "11":
             selected_run = _select_screening_run_id()
-            gold_file = Prompt.ask(
-                "Arquivo do Gold Set YAML", default="protocols/gold_set.yaml"
+            default_gold = (
+                "protocols/gold_set.yaml"
+                if Path("protocols/gold_set.yaml").exists()
+                else "protocols/gold_set.example.yaml"
             )
+            gold_file = Prompt.ask("Arquivo do Gold Set YAML", default=default_gold)
             from msrkit.cli.validation import recall
 
-            recall(gold=gold_file, run_id=selected_run, all_runs=False)
+            recall(
+                gold=gold_file,
+                run_id=selected_run,
+                all_runs=(selected_run == "consolidated"),
+            )
         elif choice == "12":
             selected_run = _select_screening_run_id()
             sub_choice = Prompt.ask(

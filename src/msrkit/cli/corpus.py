@@ -12,6 +12,7 @@ from rich.table import Table
 
 from msrkit import cli as _cli
 from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
     _get_latest_run_id,
     _get_registry,
     _load_run_protocol,
@@ -240,7 +241,7 @@ def stats(
 
     item_storage = ItemStorage(_cli.DATA_DIR)
 
-    if all_runs:
+    if all_runs or run_id == "consolidated":
         runs = [r for r in item_storage.list_runs() if r != "consolidated"]
         if not runs:
             console.print("[red]✗ No runs found in data directory.[/red]")
@@ -442,7 +443,7 @@ def export(
         console.print(f"[bold]Consolidating items from {len(runs)} historical runs...[/bold]")
         all_items = []
         for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=not raw))
+            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
         if not raw:
             from msrkit.dedupe import deduplicate
 
@@ -601,6 +602,8 @@ def package(
 
         with contextlib.suppress(FileNotFoundError):
             proto_path_str = load_manifest(_cli.DATA_DIR, run_id).protocol_path
+    if not proto_path_str and Path(DEFAULT_PROTOCOL).exists():
+        proto_path_str = DEFAULT_PROTOCOL
     proto_path = Path(proto_path_str) if proto_path_str else None
     extras: list[Path] = []
     proto = _load_run_protocol(run_id, proto_path_str)

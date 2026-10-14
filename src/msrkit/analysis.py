@@ -92,9 +92,19 @@ def units_from_detections(items: list[Item], detections: list[Detection]) -> lis
 
 
 def consensus(records: list[CodingRecord]) -> dict[str, Any]:
-    """Values all coders agree on: unanimous enums/bools, intersection of lists."""
+    """Values all coders agree on: unanimous enums/bools, intersection of lists.
+
+    If a third coder / supervisor (CONSENSUS_CODERS) resolved the item, their
+    record takes precedence over disputed initial codings.
+    """
     if not records:
         return {}
+    from msrkit.screening import CONSENSUS_CODERS
+
+    for r in records:
+        if r.coder.strip().lower() in CONSENSUS_CODERS:
+            return dict(r.values)
+
     out: dict[str, Any] = {}
     for name in records[0].values:
         values = [r.values.get(name) for r in records]

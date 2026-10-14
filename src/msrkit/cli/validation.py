@@ -113,7 +113,6 @@ def recall(
     all_runs: bool = typer.Option(False, "--all", "-a", help="Use items from every run"),
 ) -> None:
     """Recall of the miner on a gold set curated before collection (§10.3, §12.3)."""
-    from msrkit.extract import Detection
     from msrkit.storage import ItemStorage
     from msrkit.validation import load_gold, measure_recall
 
@@ -124,15 +123,9 @@ def recall(
         else [_resolve_run(_unwrap(run_id))]
     )
     items = [it for r in runs for it in storage.read_items(r)]
-    detections: list[Detection] = []
+    detections = []
     for r in runs:
-        path = _cli.DATA_DIR / "extract" / r / "detections.jsonl"
-        if path.exists():
-            detections.extend(
-                Detection.model_validate_json(line)
-                for line in path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            )
+        detections.extend(_load_detections(r))
     try:
         report = measure_recall(load_gold(gold), items, detections)
     except (FileNotFoundError, ValueError) as e:

@@ -186,3 +186,31 @@ class TestAgreementCommands:
                 "reason": "",
             }
         ]
+
+        # Fill resolution and apply with `msrkit resolve`
+        dis_path = tmp_path / "coding/run-k/disagreements.csv"
+        header = (
+            "item_id;dimension;coder_a;value_a;coder_b;value_b;"
+            "consensus_value;resolved_by;reason\n"
+        )
+        dis_path.write_text(
+            f"{header}"
+            f"{target};nivel_evidencia;ana;N1;bia;N2;N2;terceiro;evidencia mais forte\n"
+            f"{target};screening;ana;include;bia;exclude;include;consenso;escopo validado\n",
+            encoding="utf-8-sig",
+        )
+        r = runner.invoke(app, ["resolve", "--run", "run-k"])
+        assert r.exit_code == 0, r.stdout
+        assert "1 item(ns) de triagem" in r.stdout
+
+        from msrkit.analysis import consensus as compute_consensus
+        from msrkit.coding import load_codings
+        from msrkit.screening import final_decisions, load_decisions
+
+        latest_dec = load_decisions(tmp_path, "run-k")
+        assert final_decisions(latest_dec)[target] == "include"
+
+        latest_cod = load_codings(tmp_path, "run-k")
+        recs = [rec for (it, _c), rec in latest_cod.items() if it == target]
+        res_values = compute_consensus(recs)
+        assert res_values.get("nivel_evidencia") == "N2"
