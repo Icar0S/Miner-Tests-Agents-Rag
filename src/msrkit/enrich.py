@@ -19,6 +19,7 @@ the items (`tech.has_ci`, `tech.has_tests`, `tech.contributors`,
 from __future__ import annotations
 
 import base64
+import logging
 import re
 from datetime import UTC, date, datetime
 from pathlib import PurePosixPath
@@ -32,6 +33,8 @@ from msrkit.models import ItemKind, RateLimit
 if TYPE_CHECKING:
     from msrkit.adapters.github import GitHubAdapter
     from msrkit.models import Item
+
+logger = logging.getLogger(__name__)
 
 _API = "https://api.github.com"
 TEST_DIRS = {"tests", "test", "evals", "eval", "evaluation", "__tests__", "spec", "benchmarks"}
@@ -94,14 +97,25 @@ class GitHubEnricher:
         config_files: set[str] | None = None,
         since: date | None = None,
         until: date | None = None,
+        use_graphql: bool = False,
     ) -> None:
         self._adapter = adapter
         self._config_files = {c.lower() for c in (config_files or set())}
         self._since = since
         self._until = until
+        self._use_graphql = use_graphql
 
     def _get(self, sig: RepoSignals, url: str, params: dict[str, Any] | None = None) -> Any:
         resp = self._adapter._governed_get(url, params=params)
+        sig.requests += 1
+        sig.response_sha256.append(self._adapter.last_response_sha256)
+        return resp
+
+    def _post_graphql(self, sig: RepoSignals, query: str, variables: dict[str, Any]) -> Any:
+        resp = self._adapter._governed_post(
+            f"{_API}/graphql",
+            json={"query": query, "variables": variables},
+        )
         sig.requests += 1
         sig.response_sha256.append(self._adapter.last_response_sha256)
         return resp
@@ -113,6 +127,107 @@ class GitHubEnricher:
         except Exception as e:  # recorded, never fatal for the batch
             sig.error = f"{type(e).__name__}: {e}"
         return sig
+
+    def _collect_graphql(
+        self,
+        sig: RepoSignals,
+        default_branch: str,
+        workflow_paths: list[str],
+        manifest_paths: list[str],
+    ) -> bool:
+        """Batch fetch file contents, contributors, and commit months in 1 GraphQL query."""
+        if "/" not in sig.repo:
+            return False
+        owner, name = sig.repo.split("/", 1)
+
+        wf_aliases = {f"wf_{i}": p for i, p in enumerate(workflow_paths[:MAX_WORKFLOWS])}
+        mf_aliases = {f"mf_{i}": p for i, p in enumerate(manifest_paths[:MAX_MANIFESTS])}
+
+        blob_fields: list[str] = []
+        ref = default_branch or "HEAD"
+        for alias, path in {**wf_aliases, **mf_aliases}.items():
+            safe_expr = f"{ref}:{path}"
+            blob_fields.append(
+                f'{alias}: object(expression: "{safe_expr}") {{ ... on Blob {{ text byteSize }} }}'
+            )
+
+        blobs_subquery = "\n    ".join(blob_fields) if blob_fields else ""
+
+        query = f"""
+query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: GitTimestamp) {{
+  repository(owner: $owner, name: $name) {{
+    mentionableUsers {{
+      totalCount
+    }}
+    defaultBranchRef {{
+      target {{
+        ... on Commit {{
+          history(since: $since, until: $until, first: 100) {{
+            nodes {{
+              committedDate
+            }}
+          }}
+        }}
+      }}
+    }}
+    {blobs_subquery}
+  }}
+}}
+"""
+        variables: dict[str, Any] = {"owner": owner, "name": name}
+        if self._since:
+            variables["since"] = f"{self._since.isoformat()}T00:00:00Z"
+        if self._until:
+            variables["until"] = f"{self._until.isoformat()}T23:59:59Z"
+
+        resp = self._post_graphql(sig, query, variables)
+        if resp.status_code != 200:
+            logger.warning("GraphQL request failed with HTTP %d for %s", resp.status_code, sig.repo)
+            return False
+
+        body = resp.json()
+        if not isinstance(body, dict):
+            return False
+        data = body.get("data")
+        if not isinstance(data, dict):
+            return False
+        repo_data = data.get("repository")
+        if not isinstance(repo_data, dict):
+            return False
+
+        # 1. Contributors
+        mentions = repo_data.get("mentionableUsers")
+        if isinstance(mentions, dict):
+            sig.contributors = mentions.get("totalCount")
+
+        # 2. Commit months
+        target = (repo_data.get("defaultBranchRef") or {}).get("target") or {}
+        history = target.get("history") or {}
+        nodes = history.get("nodes") or []
+        months: set[str] = set()
+        for node in nodes:
+            cdate = node.get("committedDate") or ""
+            if len(cdate) >= 7:
+                months.add(cdate[:7])
+        sig.commit_months = sorted(months)
+
+        # 3. Workflows
+        for alias, path in wf_aliases.items():
+            blob = repo_data.get(alias)
+            if isinstance(blob, dict):
+                text = blob.get("text")
+                if text is not None and (blob.get("byteSize") or 0) <= MAX_FILE_BYTES:
+                    sig.workflows[path] = text
+
+        # 4. Manifests
+        for alias, path in mf_aliases.items():
+            blob = repo_data.get(alias)
+            if isinstance(blob, dict):
+                text = blob.get("text")
+                if text is not None and (blob.get("byteSize") or 0) <= MAX_FILE_BYTES:
+                    sig.manifests[path] = text
+
+        return True
 
     def _collect(self, sig: RepoSignals, default_branch: str | None) -> None:
         repo = sig.repo
@@ -145,17 +260,28 @@ class GitHubEnricher:
         sig.config_paths = [p for p in paths if PurePosixPath(p).name.lower() in self._config_files]
         manifest_paths = [p for p in paths if "/" not in p and MANIFEST_RE.match(p)]
 
-        for path in workflow_paths[:MAX_WORKFLOWS]:
-            content = self._file(sig, path, default_branch)
-            if content is not None:
-                sig.workflows[path] = content
-        for path in manifest_paths[:MAX_MANIFESTS]:
-            content = self._file(sig, path, default_branch)
-            if content is not None:
-                sig.manifests[path] = content
+        graphql_ok = False
+        if self._use_graphql:
+            try:
+                graphql_ok = self._collect_graphql(
+                    sig, str(default_branch), workflow_paths, manifest_paths
+                )
+            except Exception as e:
+                logger.debug("GraphQL collection failed for %s, falling back to REST: %s", repo, e)
+                graphql_ok = False
 
-        sig.contributors = self._contributors(sig)
-        sig.commit_months = self._commit_months(sig)
+        if not graphql_ok:
+            for path in workflow_paths[:MAX_WORKFLOWS]:
+                content = self._file(sig, path, default_branch)
+                if content is not None:
+                    sig.workflows[path] = content
+            for path in manifest_paths[:MAX_MANIFESTS]:
+                content = self._file(sig, path, default_branch)
+                if content is not None:
+                    sig.manifests[path] = content
+
+            sig.contributors = self._contributors(sig)
+            sig.commit_months = self._commit_months(sig)
 
     def _file(self, sig: RepoSignals, path: str, ref: str | None) -> str | None:
         resp = self._get(

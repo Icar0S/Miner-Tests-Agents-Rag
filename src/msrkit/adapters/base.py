@@ -220,6 +220,49 @@ class BaseAdapter(ABC):
         """Execute HTTP GET with exponential backoff retry."""
         return self.client.get(url, params=params, headers=headers)
 
+    def _governed_post(
+        self,
+        url: str,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Make a POST request, respecting the rate governor."""
+        if self._governor:
+            self._governor.acquire()
+
+        response = self._request_post_with_retry(url, json_body=json, headers=headers)
+        self._request_count += 1
+        self._last_response_sha256 = self._hash_response(response.content)
+        self._response_hashes.append(self._last_response_sha256)
+
+        if self._governor and response.status_code in (429, 403):
+            retry_after = response.headers.get("Retry-After")
+            remaining = response.headers.get("x-ratelimit-remaining")
+            reset_at = response.headers.get("x-ratelimit-reset")
+
+            self._governor.handle_rate_limit_response(
+                retry_after=float(retry_after) if retry_after else None,
+                remaining=int(remaining) if remaining else None,
+                reset_at=float(reset_at) if reset_at else None,
+            )
+
+        return response
+
+    @retry(
+        retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+        wait=wait_exponential_jitter(initial=1, max=60, jitter=5),
+        stop=stop_after_attempt(5),
+        reraise=True,
+    )
+    def _request_post_with_retry(
+        self,
+        url: str,
+        json_body: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Execute HTTP POST with exponential backoff retry."""
+        return self.client.post(url, json=json_body, headers=headers)
+
     @staticmethod
     def _hash_response(content: bytes) -> str:
         """Compute SHA-256 hash of response content."""

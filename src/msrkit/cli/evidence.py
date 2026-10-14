@@ -24,6 +24,11 @@ def enrich(
     protocol: str | None = typer.Option(
         None, "--protocol", "-p", help="Protocol (defaults to the one in the run manifest)"
     ),
+    graphql: bool = typer.Option(
+        False,
+        "--graphql",
+        help="Use GitHub GraphQL API v4 for batched retrieval (faster, fewer requests)",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Read tree, CI workflows, manifests, contributors and commit months of GitHub repos.
@@ -34,6 +39,7 @@ def enrich(
     run_id = _unwrap(run_id)
     limit = _unwrap(limit)
     protocol = _unwrap(protocol)
+    graphql = _unwrap(graphql)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
@@ -85,7 +91,13 @@ def enrich(
     adapter = GitHubAdapter(
         governor=Governor("github-core", CORE_RATE_LIMIT, state_dir=_cli.DATA_DIR / "governor")
     )
-    enricher = GitHubEnricher(adapter, config_files=config_files, since=since, until=until)
+    enricher = GitHubEnricher(
+        adapter,
+        config_files=config_files,
+        since=since,
+        until=until,
+        use_graphql=bool(graphql),
+    )
     errors = 0
     try:
         with open(out_path, "a", encoding="utf-8") as fh:

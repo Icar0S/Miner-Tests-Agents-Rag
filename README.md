@@ -77,7 +77,7 @@ As análises aceitam `--basis detections` (automática) ou `--basis coding` (man
 | | `fetch` | texto das páginas linkadas (opt-in, respeita robots.txt, fica só local) |
 | Corpus | `dedupe` | três passadas; `--near-threshold` (0,85; `0` desativa) |
 | | `stats`, `export` | resumo da coleta; exporta CSV, JSONL ou DuckDB |
-| Evidência | `enrich`, `extract` | sinais de repositório; detecções com nível de evidência |
+| Evidência | `enrich`, `extract` | sinais de repositório (`--graphql` para lote em query única GraphQL v4); detecções com nível de evidência |
 | Revisão | `review-tui`, `screen`, `coding`, `agreement` | triagem interativa no terminal (Textual TUI / Rich CLI), formulário de extração, concordância |
 | Validação | `recall`, `precision` | recall sobre gold set; amostra e cálculo de precisão |
 | Análise | `analyze` | `frequency`, `coverage`, `oracles`, `topics`, `compare` |

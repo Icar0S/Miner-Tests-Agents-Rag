@@ -127,6 +127,13 @@ class GitHubAdapter(BaseAdapter):
             reason="GitHub token configured. 5,000 req/h, code search available.",
         )
 
+    def graphql(self, query: str, variables: dict[str, Any] | None = None) -> httpx.Response:
+        """Execute a governed GraphQL query against GitHub API v4."""
+        return self._governed_post(
+            f"{_BASE_URL}/graphql",
+            json={"query": query, "variables": variables or {}},
+        )
+
     def estimate(self, q: Query) -> int | None:
         """Largest total_count among the API queries search() will issue.
 
