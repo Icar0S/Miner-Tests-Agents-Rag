@@ -130,10 +130,13 @@ def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
 @app.command()
 def validate(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Validate protocol schema and check credential availability (no network)."""
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
@@ -234,6 +237,9 @@ def validate(
 @app.command()
 def plan(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Filter plan to a single source"
     ),
@@ -250,7 +256,7 @@ def plan(
     (max pages × queries). With --estimate every query is estimated and
     partitioned as `run` would, and the budget follows the estimated totals.
     """
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     source = _unwrap(source)
     estimate = _unwrap(estimate)
     verbose = _unwrap(verbose)
@@ -407,6 +413,9 @@ def _discard_incomplete(
 @app.command()
 def run(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Execute collection for a single source only"
     ),
@@ -422,7 +431,7 @@ def run(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Execute the collection protocol."""
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     source = _unwrap(source)
     limit = _unwrap(limit)
     per_query_limit = _unwrap(per_query_limit)

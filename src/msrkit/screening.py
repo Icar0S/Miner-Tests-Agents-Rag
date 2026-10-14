@@ -122,9 +122,9 @@ class ScreeningDecision(BaseModel):
 class SheetError(ValueError):
     """The sheet has rows that cannot be imported; `problems` lists them."""
 
-    def __init__(self, problems: list[str]) -> None:
+    def __init__(self, problems: list[str], sheet_name: str = "screening sheet") -> None:
         self.problems = problems
-        super().__init__(f"{len(problems)} problem(s) in the screening sheet")
+        super().__init__(f"{len(problems)} problem(s) in the {sheet_name}")
 
 
 BASE_COLUMNS = [
@@ -335,6 +335,15 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
             if line.strip():
                 d = ScreeningDecision.model_validate(json.loads(line))
                 latest[(d.item_id, d.coder)] = d
+    if not latest and run_id == "consolidated":
+        screen_dir = data_dir / "screening"
+        if screen_dir.exists():
+            for p in screen_dir.glob("*/decisions.jsonl"):
+                if p.parent.name != "consolidated":
+                    for line in p.read_text(encoding="utf-8").splitlines():
+                        if line.strip():
+                            d = ScreeningDecision.model_validate(json.loads(line))
+                            latest[(d.item_id, d.coder)] = d
     return latest
 
 

@@ -241,7 +241,7 @@ def stats(
     item_storage = ItemStorage(_cli.DATA_DIR)
 
     if all_runs:
-        runs = item_storage.list_runs()
+        runs = [r for r in item_storage.list_runs() if r != "consolidated"]
         if not runs:
             console.print("[red]✗ No runs found in data directory.[/red]")
             raise typer.Exit(1)
@@ -250,7 +250,7 @@ def stats(
 
         all_items = []
         for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=True))
+            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
         if not all_items:
             console.print("[yellow]No items found across runs.[/yellow]")
@@ -361,13 +361,13 @@ def stats(
         console.print(f"\n[bold]Items file SHA-256:[/bold] {items_hash}")
 
     # Historical Consolidated Overview across all runs
-    runs = item_storage.list_runs()
+    runs = [r for r in item_storage.list_runs() if r != "consolidated"]
     if len(runs) > 1:
         from msrkit.dedupe import deduplicate
 
         all_items = []
         for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=True))
+            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
         if all_items:
             unique_items, duplicates = deduplicate(all_items)
@@ -435,7 +435,7 @@ def export(
     item_storage = ItemStorage(_cli.DATA_DIR)
 
     if all_runs:
-        runs = item_storage.list_runs()
+        runs = [r for r in item_storage.list_runs() if r != "consolidated"]
         if not runs:
             console.print("[red]✗ No runs found in data directory.[/red]")
             raise typer.Exit(1)

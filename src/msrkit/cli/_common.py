@@ -106,6 +106,8 @@ def _load_run_protocol(run_id: str, protocol: str | None) -> Any:
 
         with contextlib.suppress(FileNotFoundError):
             path = load_manifest(_cli.DATA_DIR, run_id).protocol_path
+    if not path and Path(DEFAULT_PROTOCOL).exists():
+        path = DEFAULT_PROTOCOL
     if path and Path(path).exists():
         return load_protocol(path)
     return None
@@ -114,13 +116,23 @@ def _load_run_protocol(run_id: str, protocol: str | None) -> Any:
 def _load_repo_signals(run_id: str) -> dict[str, Any]:
     from msrkit.enrich import RepoSignals
 
-    path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     signals: dict[str, Any] = {}
+    path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 sig = RepoSignals.model_validate_json(line)
                 signals[sig.repo] = sig
+        return signals
+    if run_id == "consolidated":
+        enrich_dir = _cli.DATA_DIR / "enrich"
+        if enrich_dir.exists():
+            for p in enrich_dir.glob("*/github_repos.jsonl"):
+                if p.parent.name != "consolidated":
+                    for line in p.read_text(encoding="utf-8").splitlines():
+                        if line.strip():
+                            sig = RepoSignals.model_validate_json(line)
+                            signals[sig.repo] = sig
     return signals
 
 
@@ -143,13 +155,23 @@ def _load_detections(run_id: str) -> list[Any]:
     from msrkit.extract import Detection
 
     path = _cli.DATA_DIR / "extract" / run_id / "detections.jsonl"
-    if not path.exists():
-        return []
-    return [
-        Detection.model_validate_json(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    if path.exists():
+        return [
+            Detection.model_validate_json(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    if run_id == "consolidated":
+        all_dets: list[Any] = []
+        extract_dir = _cli.DATA_DIR / "extract"
+        if extract_dir.exists():
+            for p in extract_dir.glob("*/detections.jsonl"):
+                if p.parent.name != "consolidated":
+                    for line in p.read_text(encoding="utf-8").splitlines():
+                        if line.strip():
+                            all_dets.append(Detection.model_validate_json(line))
+        return all_dets
+    return []
 
 
 def _cell(value: Any) -> str:

@@ -174,6 +174,15 @@ class TestAgreementCommands:
         with open(tmp_path / "coding/run-k/disagreements.csv", encoding="utf-8-sig") as fh:
             rows = list(csv.DictReader(fh, delimiter=";"))
         assert rows == [
-            {"item_id": target, "dimension": "nivel_evidencia", "coder_a": "ana",
-             "value_a": "N1", "coder_b": "bia", "value_b": "N2"}
-        ]  # fmt: skip
+            {
+                "item_id": target,
+                "dimension": "nivel_evidencia",
+                "coder_a": "ana",
+                "value_a": "N1",
+                "coder_b": "bia",
+                "value_b": "N2",
+                "consensus_value": "",
+                "resolved_by": "",
+                "reason": "",
+            }
+        ]

@@ -317,7 +317,7 @@ def import_form(
             )
         )
     if problems:
-        raise SheetError(problems)
+        raise SheetError(problems, sheet_name="extraction sheet")
     return CodingRecordList(records, skipped=skipped)
 
 
@@ -343,4 +343,13 @@ def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRec
             if line.strip():
                 r = CodingRecord.model_validate(json.loads(line))
                 latest[(r.item_id, r.coder)] = r
+    if not latest and run_id == "consolidated":
+        coding_dir = data_dir / "coding"
+        if coding_dir.exists():
+            for p in coding_dir.glob("*/codings.jsonl"):
+                if p.parent.name != "consolidated":
+                    for line in p.read_text(encoding="utf-8").splitlines():
+                        if line.strip():
+                            r = CodingRecord.model_validate(json.loads(line))
+                            latest[(r.item_id, r.coder)] = r
     return latest

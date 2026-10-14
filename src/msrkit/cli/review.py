@@ -670,13 +670,16 @@ def agreement(
         values.setdefault((item_id, coder), {})["screening"] = d.decision
     with open(out_dir / "disagreements.csv", "w", encoding="utf-8-sig", newline="") as fh:
         writer = csv.writer(fh, delimiter=";")
-        writer.writerow(["item_id", "dimension", "coder_a", "value_a", "coder_b", "value_b"])
+        writer.writerow([
+            "item_id", "dimension", "coder_a", "value_a", "coder_b", "value_b",
+            "consensus_value", "resolved_by", "reason",
+        ])
         for r in results:
             a, b = r.coders
             for item_id in r.disagreements:
                 va = values.get((item_id, a), {}).get(r.dimension)
                 vb = values.get((item_id, b), {}).get(r.dimension)
-                writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb)])
+                writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb), "", "", ""])
     n_dis = sum(len(r.disagreements) for r in results)
     console.print(f"[green]✓ {n_dis} disagreement(s) written to {out_dir}[/green]")
 

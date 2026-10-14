@@ -118,7 +118,11 @@ def recall(
     from msrkit.validation import load_gold, measure_recall
 
     storage = ItemStorage(_cli.DATA_DIR)
-    runs = storage.list_runs() if _unwrap(all_runs) else [_resolve_run(_unwrap(run_id))]
+    runs = (
+        [r for r in storage.list_runs() if r != "consolidated"]
+        if _unwrap(all_runs)
+        else [_resolve_run(_unwrap(run_id))]
+    )
     items = [it for r in runs for it in storage.read_items(r)]
     detections: list[Detection] = []
     for r in runs:

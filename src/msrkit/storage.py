@@ -147,10 +147,11 @@ class ItemStorage:
         items_dir = self.data_dir / "items" / run_id
         if prefer_deduped and (items_dir / "items_deduped.jsonl").exists():
             file_path = items_dir / "items_deduped.jsonl"
-        else:
+        elif (items_dir / "items.jsonl").exists():
             file_path = items_dir / "items.jsonl"
-
-        if not file_path.exists():
+        elif (items_dir / "items_deduped.jsonl").exists():
+            file_path = items_dir / "items_deduped.jsonl"
+        else:
             return []
 
         items = []
@@ -173,12 +174,18 @@ class ItemStorage:
         tmp_path.replace(file_path)
         return file_path
 
-    def list_runs(self) -> list[str]:
+    def list_runs(self, include_consolidated: bool = False) -> list[str]:
         """List all run IDs that contain saved items."""
         items_dir = self.data_dir / "items"
         if not items_dir.exists():
             return []
-        runs = [p.name for p in items_dir.iterdir() if p.is_dir() and (p / "items.jsonl").exists()]
+        runs = [
+            p.name
+            for p in items_dir.iterdir()
+            if p.is_dir()
+            and (p / "items.jsonl").exists()
+            and (include_consolidated or p.name != "consolidated")
+        ]
         return sorted(runs)
 
     def items_hash(self, run_id: str) -> str:
