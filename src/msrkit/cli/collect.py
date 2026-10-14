@@ -569,6 +569,9 @@ def run(
             queries = [Query.model_validate(d) for d in source_entry.planned]
         else:
             queries = config.build_queries(source_name)
+            if limit is not None:
+                for q in queries:
+                    q.limit = limit
             if not adapter_cls.policy.supports_raw_queries and any(q.raw for q in queries):
                 console.print(
                     f"  [yellow]`queries:` ignored: {source_name} "
@@ -617,6 +620,12 @@ def run(
             key = query_key(query)
             if key in done:
                 continue
+            if limit is not None and total_source_items >= limit:
+                console.print(
+                    f"  [dim]Source '{source_name}' limit reached "
+                    f"({total_source_items} items). Skipping remaining queries.[/dim]"
+                )
+                break
             if total_source_items >= config.limits.max_items_per_source:
                 console.print(
                     f"  [dim]Source '{source_name}' item limit reached "
@@ -631,6 +640,8 @@ def run(
                 break
 
             remaining_for_source = config.limits.max_items_per_source - total_source_items
+            if limit is not None:
+                remaining_for_source = min(remaining_for_source, max(0, limit - total_source_items))
             query.limit = min(query.limit or 5000, remaining_for_source)
 
             query_label = f"[{query.kind}] " if query.kind else ""
@@ -696,6 +707,8 @@ def run(
                         )
 
                     if total_source_items >= config.limits.max_items_per_source:
+                        break
+                    if limit is not None and total_source_items >= limit:
                         break
                     if query.limit is not None and raw_items_count >= query.limit:
                         break  # per-query cap, whether or not the adapter enforces it

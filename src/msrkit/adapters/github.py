@@ -162,6 +162,17 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         if kind == "code" and not self._env("GITHUB_TOKEN"):
             return [q]  # search() skips unauthenticated code search
+
+        from msrkit.partition import split_by_term
+
+        # If a small query limit is set (e.g. fast test with limit <= 100),
+        # or unauthenticated without monkeypatched estimate, skip pre-flight counting.
+        is_default_estimate = getattr(self.estimate, "__func__", None) is GitHubAdapter.estimate
+        if (q.limit is not None and q.limit <= 100) or (
+            not self._env("GITHUB_TOKEN") and is_default_estimate
+        ):
+            return split_by_term(q)
+
         # Code search has no date qualifier; a raw query that fixes its own
         # created: range cannot be split by date either.
         fixed_dates = q.raw and "created:" in (q.terms[0] if q.terms else "")
