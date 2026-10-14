@@ -596,7 +596,7 @@ def coding_status(
     console.print(f"Coded items: {len(coders_by_item)} · double-coded: {double}")
 
 
-@app.command()
+@app.command(hidden=True)
 def agreement(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),

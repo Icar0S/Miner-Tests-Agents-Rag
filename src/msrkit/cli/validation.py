@@ -20,7 +20,7 @@ from msrkit.cli._common import (
 precision_app = typer.Typer(help="Extraction precision on a stratified sample (§12.3).")
 
 
-app.add_typer(precision_app, name="precision")
+app.add_typer(precision_app, name="precision", hidden=True)
 
 
 @precision_app.command("sample")
@@ -106,7 +106,7 @@ def precision_score_cmd(
     out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
 
 
-@app.command()
+@app.command(hidden=True)
 def recall(
     gold: str = typer.Argument(..., help="Gold set YAML (see msrkit.validation)"),
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),

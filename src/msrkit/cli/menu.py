@@ -16,8 +16,8 @@ from msrkit.cli._common import (
     app,
     console,
 )
-from msrkit.cli.collect import plan, run, sources, validate
-from msrkit.cli.corpus import dedupe, export, stats
+from msrkit.cli.collect import run
+from msrkit.cli.corpus import dedupe, export
 
 
 def _toggle_source_in_protocol(protocol_path: str, source_name: str, new_state: bool) -> bool:
@@ -267,10 +267,10 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     console.print()
     do_dedupe = Prompt.ask(
         "[bold cyan]Deseja executar a desduplicação agora e gerar também "
-        "a planilha desduplicada?[/bold cyan] [s/N]",
-        default="N",
+        "a planilha desduplicada?[/bold cyan] [S/n]",
+        default="S",
     )
-    if do_dedupe.strip().lower() in ("s", "sim", "y", "yes"):
+    if do_dedupe.strip().lower() in ("s", "sim", "y", "yes", ""):
         console.print("\n[bold]1. Desduplicando itens coletados...[/bold]")
         dedupe(run_id=latest_run, verbose=False)
         dedup_csv = f"data/resultados_{timestamp}_desduplicados.csv"
@@ -293,7 +293,36 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
             "Todos os achados brutos continuam preservados.[/dim]"
         )
         console.print(
-            "[dim]Dica: Você pode desduplicar a qualquer momento através da opção 5 do menu.[/dim]"
+            "[dim]Dica: Você pode desduplicar a qualquer momento nas Opções Avançadas.[/dim]"
+        )
+
+    console.print("\n[bold cyan]─── 4. Extração Léxica & Ranqueamento ───[/bold cyan]")
+    try:
+        from msrkit.cli.evidence import extract
+
+        extract(run_id=latest_run, protocol=protocol_path, top=10, verbose=False)
+        console.print(
+            "[bold green]✓ Termos casados e fila ordenada por relevância![/bold green]"
+        )
+    except Exception as e:
+        console.print(f"[dim](Nota na extração automática: {e})[/dim]")
+
+    console.print(
+        f"\n[bold green]✓ Coleta e preparação concluídas para a rodada {latest_run}![/bold green]"
+    )
+    go_screen = Prompt.ask(
+        "\n[bold cyan]Deseja iniciar a Triagem Interativa (TUI) agora?[/bold cyan] [S/n]",
+        default="S",
+    )
+    if go_screen.strip().lower() in ("s", "sim", "y", "yes", ""):
+        from msrkit.cli.review import screen_tui
+
+        screen_tui(
+            run_id=latest_run,
+            protocol=protocol_path,
+            coder="revisor",
+            batch=None,
+            limit=50,
         )
 
 
@@ -356,95 +385,46 @@ def _select_screening_run_id() -> str | None:
     return latest_run
 
 
-@app.command(name="menu")
-def menu() -> None:  # pragma: no cover
-    """Interactive terminal menu to navigate MSR-Kit easily."""
-    from rich.panel import Panel
+def _results_menu(protocol_path: str) -> None:  # pragma: no cover
+    """Submenu for PRISMA 2020 flow, statistical analysis, and reports."""
     from rich.prompt import Prompt
 
+    from msrkit.cli.corpus import export, prisma, stats
+
     while True:
-        console.print()
+        console.print("\n[bold cyan]─── 📊 Resultados da Pesquisa & PRISMA 2020 ───[/bold cyan]")
         console.print(
-            Panel.fit(
-                f"[bold cyan]MSR-Kit[/bold cyan] [dim]v{__version__}[/dim]\n"
-                "[italic]Mining grey literature through official APIs[/italic]",
-                border_style="cyan",
-            )
-        )
-        console.print("\n[bold]Escolha uma ação:[/bold]")
-        console.print(
-            "  [bold cyan]1[/bold cyan] - [bold]🎯 Iniciar Mineração[/bold] "
-            "([dim]escolher fonte e quantidade flexível[/dim])"
+            "  [cyan]1[/cyan] - [bold]Gerar / Atualizar Fluxo PRISMA 2020[/bold] "
+            "(prisma.tikz e prisma.md)"
         )
         console.print(
-            "  [bold cyan]2[/bold cyan] - [bold]⚙️  Gerenciar Fontes[/bold] "
-            "([dim]ativar/desativar com base na disponibilidade[/dim])"
+            "  [cyan]2[/cyan] - [bold]Estatísticas da coleta / Panorama histórico[/bold] (stats)"
         )
         console.print(
-            "  [cyan]3[/cyan] - Status detalhado das fontes e políticas ([dim]sources[/dim])"
-        )
-        console.print("  [cyan]4[/cyan] - Simulação de planejamento / Dry-Run ([dim]plan[/dim])")
-        console.print("  [cyan]5[/cyan] - Desduplicar última coleta ([dim]dedupe[/dim])")
-        console.print("  [cyan]6[/cyan] - Exportar última coleta em CSV ([dim]export -f csv[/dim])")
-        console.print("  [cyan]7[/cyan] - Estatísticas da última coleta ([dim]stats[/dim])")
-        console.print("  [cyan]8[/cyan] - Validar arquivo de protocolo ([dim]validate[/dim])")
-        console.print(
-            "  [bold cyan]9[/bold cyan] - [bold]🖥️  Triagem Interativa / TUI[/bold] "
-            "([dim]revisão visual com Textual no terminal[/dim])"
+            "  [cyan]3[/cyan] - [bold]Exportar dados para planilha CSV ou DuckDB[/bold] (export)"
         )
         console.print(
-            "  [bold cyan]10[/bold cyan] - [bold]📝 Extração Técnica / Coding TUI (Annex A)[/bold] "
-            "([dim]codificação qualitativa dos itens incluídos[/dim])"
+            "  [cyan]4[/cyan] - [bold]Análises estatísticas do artigo (RQ1-RQ3 / A1-A6)[/bold] "
+            "(analyze)"
         )
-        console.print(
-            "  [bold cyan]11[/bold cyan] - [bold]📊 Gerar Fluxo PRISMA 2020[/bold] "
-            "([dim]prisma.md, prisma.json e prisma.tikz para LaTeX[/dim])"
-        )
-        console.print("  [cyan]0[/cyan] - Sair")
+        console.print("  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
 
-        choice = Prompt.ask("\n[bold green]Digite o número da opção[/bold green]", default="0")
-
+        choice = Prompt.ask(
+            "\n[bold green]Escolha uma opção de resultados[/bold green]", default="0"
+        )
         if choice == "0":
-            console.print("[dim]Encerrado.[/dim]")
             break
         if choice == "1":
-            _interactive_mining_menu(DEFAULT_PROTOCOL)
+            selected_run = _select_screening_run_id()
+            prisma(run_id=selected_run)
         elif choice == "2":
-            _manage_sources_menu(DEFAULT_PROTOCOL)
-        elif choice == "3":
-            sources(md=False, verbose=False)
-        elif choice == "4":
-            plan(protocol=DEFAULT_PROTOCOL, source=None, verbose=False)
-        elif choice == "5":
             which = Prompt.ask(
-                "Desduplicar [1] Apenas a última coleta ou [2] Todas as coletas históricas?",
+                "Estatísticas de [1] Última coleta + Panorama histórico "
+                "ou [2] Apenas corpus consolidado?",
                 default="1",
             )
-            is_all = which == "2"
-            dedupe(run_id=None, all_runs=is_all, verbose=False)
-
-            exp_prompt = Prompt.ask(
-                "\n[bold cyan]Deseja exportar a planilha CSV desduplicada agora?[/bold cyan] [S/n]",
-                default="S",
-            )
-            if exp_prompt.strip().lower() in ("s", "sim", "y", "yes", ""):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                suffix = "consolidado_desduplicado" if is_all else "desduplicados"
-                out_file = f"data/resultados_{timestamp}_{suffix}.csv"
-                export(
-                    run_id=None,
-                    all_runs=is_all,
-                    fmt="csv",
-                    include_body=False,
-                    output=out_file,
-                    raw=False,
-                    verbose=False,
-                )
-                console.print(
-                    f"[bold green]✓ Planilha salva em:[/bold green] "
-                    f"[bold cyan]{out_file}[/bold cyan]"
-                )
-        elif choice == "6":
+            stats(run_id=None, all_runs=(which == "2"), verbose=False)
+        elif choice == "3":
             which = Prompt.ask(
                 "Exportar [1] Apenas a última coleta ou [2] Consolidado de todas as coletas?",
                 default="1",
@@ -471,16 +451,224 @@ def menu() -> None:  # pragma: no cover
             console.print(
                 f"[bold green]✓ Planilha salva em:[/bold green] [bold cyan]{out_file}[/bold cyan]"
             )
-        elif choice == "7":
+        elif choice == "4":
+            selected_run = _select_screening_run_id()
+            from msrkit.cli.analyze import analyze_frequency
+
+            console.print(
+                "\n[bold cyan]Executando Análise de Frequência e Ferramentas (A1)...[/bold cyan]"
+            )
+            try:
+                analyze_frequency(run_id=selected_run, basis="detections", pairs="tool-method")
+            except Exception as e:
+                console.print(f"[yellow]Nota na análise: {e}[/yellow]")
+                console.print(
+                    "[dim]Dica: certifique-se de ter executado a extração técnica "
+                    "(Anexo A) primeiro.[/dim]"
+                )
+
+
+def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
+    """Submenu for advanced tools: sources, CSV sheets, agreement, audit & Zenodo."""
+    from rich.prompt import Prompt
+
+    from msrkit.cli.collect import plan, sources, validate
+    from msrkit.cli.corpus import dedupe, package
+    from msrkit.cli.evidence import enrich, extract
+
+    while True:
+        console.print("\n[bold cyan]─── 🛠️  Opções Avançadas & Auditoria ───[/bold cyan]")
+        console.print("\n[bold]Diagnóstico e Fontes:[/bold]")
+        console.print("  [cyan]1[/cyan] - Gerenciar fontes e chaves de API (ativar/desativar)")
+        console.print("  [cyan]2[/cyan] - Status detalhado das fontes e políticas (sources)")
+        console.print("  [cyan]3[/cyan] - Simulação de planejamento / Dry-Run (plan)")
+        console.print("  [cyan]4[/cyan] - Validar arquivo YAML de protocolo (validate)")
+
+        console.print("\n[bold]Processamento e Planilhas Excel / CSV:[/bold]")
+        console.print("  [cyan]5[/cyan] - Desduplicar itens coletados manualmente (dedupe)")
+        console.print("  [cyan]6[/cyan] - Enriquecer repositórios GitHub com CI e testes (enrich)")
+        console.print("  [cyan]7[/cyan] - Executar extração léxica do gazetteer (extract)")
+        console.print("  [cyan]8[/cyan] - Exportar / Importar triagem em planilha CSV (screen)")
+        console.print("  [cyan]9[/cyan] - Exportar / Importar Anexo A em planilha CSV (coding)")
+
+        console.print("\n[bold]Auditoria Metodológica e Publicação:[/bold]")
+        console.print(
+            "  [cyan]10[/cyan] - Concordância entre avaliadores: Cohen's Kappa (§15) (agreement)"
+        )
+        console.print(
+            "  [cyan]11[/cyan] - Validar busca contra o Gold Set de referência (§10) (recall)"
+        )
+        console.print(
+            "  [cyan]12[/cyan] - Avaliar precisão da extração em amostra (§12) (precision)"
+        )
+        console.print("  [cyan]13[/cyan] - Gerar pacote reprodutível para o Zenodo (package)")
+        console.print("\n  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
+
+        choice = Prompt.ask("\n[bold green]Escolha uma opção avançada[/bold green]", default="0")
+        if choice == "0":
+            break
+        if choice == "1":
+            _manage_sources_menu(protocol_path)
+        elif choice == "2":
+            sources(md=False, verbose=False)
+        elif choice == "3":
+            plan(protocol=protocol_path, source=None, verbose=False)
+        elif choice == "4":
+            validate(protocol=protocol_path, verbose=False)
+        elif choice == "5":
             which = Prompt.ask(
-                "Estatísticas de [1] Última coleta + Panorama histórico "
-                "ou [2] Apenas corpus consolidado?",
+                "Desduplicar [1] Apenas a última coleta ou [2] Todas as coletas históricas?",
                 default="1",
             )
-            stats(run_id=None, all_runs=(which == "2"), verbose=False)
+            dedupe(run_id=None, all_runs=(which == "2"), verbose=False)
+        elif choice == "6":
+            selected_run = _select_screening_run_id()
+            enrich(
+                run_id=selected_run,
+                limit=50,
+                protocol=protocol_path,
+                graphql=False,
+                verbose=False,
+            )
+        elif choice == "7":
+            selected_run = _select_screening_run_id()
+            extract(run_id=selected_run, protocol=protocol_path, top=25, verbose=False)
         elif choice == "8":
-            validate(protocol=DEFAULT_PROTOCOL, verbose=False)
+            sub_choice = Prompt.ask(
+                "Deseja [1] Exportar planilha CSV ou [2] Importar CSV preenchido?", default="1"
+            )
+            from msrkit.cli.review import screen_export, screen_import
+
+            if sub_choice == "1":
+                selected_run = _select_screening_run_id()
+                coder = Prompt.ask("Nome do avaliador", default="revisor")
+                screen_export(
+                    run_id=selected_run,
+                    protocol=protocol_path,
+                    coder=coder,
+                    output=None,
+                    pending_only=True,
+                    order="relevance",
+                    batch=[],
+                )
+            else:
+                sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
+                screen_import(sheet=sheet_file, run_id=None, protocol=protocol_path, coder="")
         elif choice == "9":
+            sub_choice = Prompt.ask(
+                "Deseja [1] Exportar formulário Anexo A em CSV ou [2] Importar CSV preenchido?",
+                default="1",
+            )
+            from msrkit.cli.review import coding_export, coding_import
+
+            if sub_choice == "1":
+                selected_run = _select_screening_run_id()
+                coder = Prompt.ask("Nome do avaliador", default="revisor")
+                coding_export(
+                    run_id=selected_run,
+                    protocol=protocol_path,
+                    coder=coder,
+                    output=None,
+                    status="include",
+                    prefill=False,
+                    pending_only=True,
+                    double_sample=False,
+                )
+            else:
+                sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
+                coding_import(sheet=sheet_file, run_id=None, protocol=protocol_path, coder="")
+        elif choice == "10":
+            selected_run = _select_screening_run_id()
+            from msrkit.cli.review import agreement
+
+            agreement(run_id=selected_run, protocol=protocol_path, all_fields=False)
+        elif choice == "11":
+            selected_run = _select_screening_run_id()
+            gold_file = Prompt.ask(
+                "Arquivo do Gold Set YAML", default="protocols/gold_set.yaml"
+            )
+            from msrkit.cli.validation import recall
+
+            recall(gold=gold_file, run_id=selected_run, all_runs=False)
+        elif choice == "12":
+            selected_run = _select_screening_run_id()
+            sub_choice = Prompt.ask(
+                "Deseja [1] Gerar amostra estratificada (.csv) ou "
+                "[2] Calcular precisão de planilha avaliada?",
+                default="1",
+            )
+            if sub_choice == "1":
+                from msrkit.cli.validation import precision_sample_cmd
+
+                precision_sample_cmd(run_id=selected_run, n=50, seed=20260928)
+            else:
+                sheet_file = Prompt.ask("Caminho do arquivo CSV avaliado")
+                from msrkit.cli.validation import precision_score_cmd
+
+                precision_score_cmd(sheet=sheet_file, run_id=selected_run)
+        elif choice == "13":
+            selected_run = _select_screening_run_id()
+            creator_name = Prompt.ask(
+                "Nome do autor/criador para Zenodo (ex: Lima, Matheus)", default=""
+            )
+            creators = [creator_name] if creator_name else []
+            package(
+                run_id=selected_run,
+                protocol=protocol_path,
+                output=None,
+                gold=None,
+                creator=creators,
+                keep_authors=False,
+            )
+
+
+@app.command(name="menu")
+def menu() -> None:  # pragma: no cover
+    """Interactive terminal menu to navigate MSR-Kit easily."""
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+
+    while True:
+        console.print()
+        console.print(
+            Panel.fit(
+                f"[bold cyan]MSR-Kit[/bold cyan] [dim]v{__version__}[/dim]\n"
+                "[italic]Mining grey literature through official APIs[/italic]",
+                border_style="cyan",
+            )
+        )
+        console.print("\n[bold]Fluxo Principal da Pesquisa:[/bold]")
+        console.print(
+            "  [bold cyan]1[/bold cyan] - [bold]🎯 1. Minerar & Preparar[/bold] "
+            "([dim]coleta guiada + deduplicação + extração automática de sinais[/dim])"
+        )
+        console.print(
+            "  [bold cyan]2[/bold cyan] - [bold]🖥️  2. Triagem Interativa / TUI[/bold] "
+            "([dim]revisão visual com Textual: [I] Incluir ou [E] Excluir[/dim])"
+        )
+        console.print(
+            "  [bold cyan]3[/bold cyan] - [bold]📝 3. Extração Técnica (Annex A)[/bold] "
+            "([dim]codificação qualitativa de oráculos, ferramentas e evidências[/dim])"
+        )
+        console.print(
+            "  [bold cyan]4[/bold cyan] - [bold]📊 4. Resultados do Artigo & PRISMA[/bold] "
+            "([dim]PRISMA 2020 TikZ, estatísticas e análises do estudo[/dim])"
+        )
+        console.print("  ────────────────────────────────────────────────────")
+        console.print(
+            "  [bold cyan]5[/bold cyan] - [bold]🛠️  Opções Avançadas & Auditoria[/bold] "
+            "([dim]fontes, planilhas Excel, métricas Kappa e Zenodo[/dim])"
+        )
+        console.print("  [cyan]0[/cyan] - Sair")
+
+        choice = Prompt.ask("\n[bold green]Digite o número da opção[/bold green]", default="0")
+
+        if choice == "0":
+            console.print("[dim]Encerrado.[/dim]")
+            break
+        if choice == "1":
+            _interactive_mining_menu(DEFAULT_PROTOCOL)
+        elif choice == "2":
             selected_run = _select_screening_run_id()
             mode = Prompt.ask(
                 "Modo de triagem: [1] TUI (Textual terminal) ou [2] Linha a Linha (Rich CLI)",
@@ -510,7 +698,7 @@ def menu() -> None:  # pragma: no cover
                     batch=None,
                     limit=50,
                 )
-        elif choice == "10":
+        elif choice == "3":
             selected_run = _select_screening_run_id()
             coder = Prompt.ask(
                 "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
@@ -525,10 +713,10 @@ def menu() -> None:  # pragma: no cover
                 status="include",
                 limit=50,
             )
-        elif choice == "11":
-            from msrkit.cli.corpus import prisma
-
-            prisma(run_id=None)
+        elif choice == "4":
+            _results_menu(DEFAULT_PROTOCOL)
+        elif choice == "5":
+            _advanced_menu(DEFAULT_PROTOCOL)
         else:
             console.print("[red]Opção inválida![/red]")
 

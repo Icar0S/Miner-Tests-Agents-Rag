@@ -512,7 +512,7 @@ def export(
     console.print(f"[green]✓ Exported {len(items)} items to {out_path}[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def package(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),

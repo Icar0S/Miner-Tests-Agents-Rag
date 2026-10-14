@@ -781,7 +781,7 @@ def run(
     console.print(f"\n[green]✓ Run complete. Manifest: {manifest_path}[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def normalize(
     run_id: str | None = typer.Option(
         None, "--run", help="Run ID to reprocess (defaults to latest)"
@@ -887,7 +887,7 @@ def normalize(
     console.print(f"[green]✓ Normalized {total_items} items from raw data[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def fetch(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     source: list[str] = typer.Option(  # noqa: B008
