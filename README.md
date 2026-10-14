@@ -29,11 +29,18 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[dev]"            # acrescente ,analysis para LDA/k-means
 cp .env.example .env               # termos, janela e fontes (ver "Parâmetros da busca e fontes")
 
-msrkit validate protocols/v0_rag_agents_testing.yaml
+msrkit                             # abre diretamente o menu interativo guiado
+```
+
+O comando `msrkit` conduz todo o fluxo de pesquisa passo a passo (mineração, deduplicação, extração léxica, triagem visual TUI, codificação Anexo A e resultados PRISMA).
+
+Caso prefira executar tarefas diretamente via linha de comando ou em automações de CI:
+```bash
 msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 20
-msrkit stats
 msrkit review-tui --coder seu_nome     # triagem interativa visual no terminal (TUI)
+msrkit coding-tui --coder seu_nome     # extração técnica do Anexo A (TUI)
 msrkit prisma                          # gera relatório e diagrama PRISMA (incluindo prisma.tikz)
+msrkit --help                          # lista todos os comandos disponíveis para automação
 ```
 
 Prefere não instalar nada no sistema? Use o Docker:
@@ -41,10 +48,10 @@ Prefere não instalar nada no sistema? Use o Docker:
 ```bash
 docker compose build
 docker compose create msrkit 
-docker start -ai msrkit                                # abre um shell com o msrkit pronto
+docker start -ai msrkit                                # abre o msrkit pronto no terminal
 ```
 
-O container monta `./data`, `./protocols` e `./src`: os resultados aparecem na sua pasta `data/` e mudanças no código valem sem rebuild. Para navegar por opções numeradas em vez de comandos, use `msrkit menu`.
+O container monta `./data`, `./protocols` e `./src`: os resultados aparecem na sua pasta `data/` e mudanças no código valem sem rebuild. Ao iniciar, o `msrkit` abre diretamente o menu interativo.
 
 ## Fluxo do estudo
 

@@ -55,8 +55,9 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         None,
         "--version",
@@ -71,6 +72,11 @@ def main(
 
     # Search parameters and credentials from ./.env (existing variables win).
     load_dotenv(Path(".env"))
+
+    if ctx.invoked_subcommand is None:
+        from msrkit.cli.menu import menu
+
+        menu()
 
 
 # Register the commands (order = order in --help). Imported last: the command

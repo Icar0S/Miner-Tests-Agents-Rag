@@ -19,7 +19,7 @@ app = typer.Typer(
     name="msrkit",
     help="MSR-Kit: Mining grey literature through official APIs.",
     epilog="💡 Dica: Digite 'msrkit menu' para navegar de forma interativa com menu visual.",
-    no_args_is_help=True,
+    no_args_is_help=False,
 )
 console = Console()
 
