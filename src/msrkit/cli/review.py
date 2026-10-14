@@ -282,6 +282,61 @@ def screen_interactive(
         console.print("[dim]Nenhuma decisão registrada nesta sessão.[/dim]")
 
 
+@screen_app.command("tui")
+def screen_tui(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
+    limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of items to load"),
+) -> None:
+    """Launch full-screen Textual TUI for interactive screening with keyboard shortcuts."""
+    from rich.prompt import Prompt
+
+    from msrkit.screening import load_decisions, rank_items
+    from msrkit.storage import ItemStorage
+    from msrkit.tui import ScreeningApp
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask("[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]").strip()
+        if not coder_str:
+            console.print("[red]✗ Coder é obrigatório.[/red]")
+            raise typer.Exit(1)
+
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    detections = _load_detections(run_id)
+    ranking = rank_items(items, detections, criteria.batch_size)
+
+    done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in items if it.id not in done]
+
+    target_batch = _unwrap(batch)
+    if target_batch is not None:
+        pending = [it for it in pending if ranking[it.id].batch == target_batch]
+
+    if not pending:
+        console.print(f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]")
+        return
+
+    session_items = pending[:limit]
+    app_tui = ScreeningApp(
+        items=session_items,
+        criteria=criteria,
+        data_dir=_cli.DATA_DIR,
+        run_id=run_id,
+        coder=coder_str,
+        detections=detections,
+    )
+    app_tui.run()
+
+
+# Top-level convenient alias
+app.command(name="review-tui", help="Launch full-screen Textual TUI for literature screening.")(screen_tui)
+
+
 coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
 
 
