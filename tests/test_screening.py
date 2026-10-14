@@ -96,6 +96,25 @@ class TestSheet:
             ("it0", "include", ["I1", "I2"]),
             ("it1", "exclude", ["E5"]),
         ]
+        assert decisions.skipped == ["line 4 (it2)"]
+
+    def test_import_sheet_portuguese_aliases(self, tmp_path: Path) -> None:
+        path = tmp_path / "pt.csv"
+        export_sheet(_items(), CRIT, path, coder="ana")
+        _fill(
+            path,
+            {
+                "it0": {"I1": "x", "I2": "x", "decision": "incluir"},
+                "it1": {"E5": "x", "decision": "excluir"},
+                "it2": {"decision": "incerteza"},
+            },
+        )
+        decisions = import_sheet(path, CRIT, {"it0", "it1", "it2"})
+        assert [(d.item_id, d.decision) for d in decisions] == [
+            ("it0", "include"),
+            ("it1", "exclude"),
+            ("it2", "uncertain"),
+        ]
 
     def test_inconsistent_rows_block_the_whole_import(self, tmp_path: Path) -> None:
         path = tmp_path / "s.csv"
@@ -131,6 +150,28 @@ class TestSheet:
             ("b", "bia"): d("b", "bia", "exclude"),
         }
         assert final_decisions(latest) == {"a": "include", "b": "uncertain"}
+
+    def test_final_decision_consensus_resolves_disagreement(self) -> None:
+        from msrkit.screening import ScreeningDecision
+
+        def d(item: str, coder: str, dec: str) -> ScreeningDecision:
+            return ScreeningDecision(
+                item_id=item,
+                coder=coder,
+                decision=dec,  # type: ignore[arg-type]
+                decided_at="t",
+                sheet_sha256="h",
+            )
+
+        latest = {
+            ("a", "ana"): d("a", "ana", "include"),
+            ("a", "bia"): d("a", "bia", "exclude"),
+            ("a", "consensus"): d("a", "consensus", "include"),
+            ("b", "ana"): d("b", "ana", "include"),
+            ("b", "bia"): d("b", "bia", "exclude"),
+            ("b", "consenso"): d("b", "consenso", "exclude"),
+        }
+        assert final_decisions(latest) == {"a": "include", "b": "exclude"}
 
 
 class TestScreenCommands:

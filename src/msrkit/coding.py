@@ -36,6 +36,7 @@ from msrkit.extract import LEVEL_RANK
 from msrkit.screening import DELIMITER, TRUE_MARKS, SheetError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from msrkit.extract import Detection
@@ -121,6 +122,20 @@ class CodingRecord(BaseModel):
     notes: str = ""
     coded_at: str
     sheet_sha256: str
+
+
+class CodingRecordList(list["CodingRecord"]):
+    """List of coding records with audit metadata on skipped rows."""
+
+    skipped: list[str] = []
+
+    def __init__(
+        self,
+        iterable: Sequence[CodingRecord] = (),
+        skipped: list[str] | None = None,
+    ) -> None:
+        super().__init__(iterable)
+        self.skipped = skipped or []
 
 
 # -- automatic suggestions --------------------------------------------------
@@ -255,7 +270,7 @@ def import_form(
     known_ids: set[str],
     gazetteer: Gazetteer | None = None,
     default_coder: str = "",
-) -> list[CodingRecord]:
+) -> CodingRecordList:
     """Parse and validate a filled coding sheet. Rows with no field filled are skipped.
 
     Raises SheetError listing every invalid row, so nothing is half-imported.
@@ -270,10 +285,13 @@ def import_form(
     now = datetime.now(UTC).isoformat()
     records: list[CodingRecord] = []
     problems: list[str] = []
+    skipped: list[str] = []
     for line_no, row in enumerate(reader, start=2):
-        if not any((row.get(f.name) or "").strip() for f in form.fields):
-            continue
         item_id = (row.get("item_id") or "").strip()
+        if not any((row.get(f.name) or "").strip() for f in form.fields):
+            if item_id:
+                skipped.append(f"line {line_no} ({item_id})")
+            continue
         coder = (row.get("coder") or default_coder).strip()
         where = f"line {line_no} ({item_id or 'no item_id'})"
         if item_id not in known_ids:
@@ -300,7 +318,7 @@ def import_form(
         )
     if problems:
         raise SheetError(problems)
-    return records
+    return CodingRecordList(records, skipped=skipped)
 
 
 def codings_path(data_dir: Path, run_id: str) -> Path:

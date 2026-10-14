@@ -115,6 +115,13 @@ def screen_import(
             console.print(f"  - {problem}")
         raise typer.Exit(1) from None
     path = append_decisions(_cli.DATA_DIR, run_id, decisions)
+    skipped = getattr(decisions, "skipped", [])
+    if skipped:
+        sample_str = ", ".join(skipped[:5]) + ("..." if len(skipped) > 5 else "")
+        console.print(
+            f"[yellow]⚠ {len(skipped)} linha(s) ignorada(s) por falta de decisão: "
+            f"{sample_str}[/yellow]"
+        )
     console.print(f"[green]✓ {len(decisions)} decisions recorded in {path}[/green]")
 
 
@@ -527,6 +534,13 @@ def coding_import(
             console.print(f"  - {problem}")
         raise typer.Exit(1) from None
     path = append_codings(_cli.DATA_DIR, run_id, records)
+    skipped = getattr(records, "skipped", [])
+    if skipped:
+        sample_str = ", ".join(skipped[:5]) + ("..." if len(skipped) > 5 else "")
+        console.print(
+            f"[yellow]⚠ {len(skipped)} linha(s) ignorada(s) por falta de dados: "
+            f"{sample_str}[/yellow]"
+        )
     console.print(f"[green]✓ {len(records)} coded items recorded in {path}[/green]")
 
 

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from msrkit.extract import Detection
@@ -36,8 +37,65 @@ if TYPE_CHECKING:
 
 Decision = Literal["include", "exclude", "uncertain"]
 DECISIONS = ("include", "exclude", "uncertain")
+
+# Multilingual decision aliases (PT/EN)
+DECISION_ALIASES: dict[str, Decision] = {
+    "include": "include",
+    "inc": "include",
+    "incluir": "include",
+    "inclusao": "include",
+    "inclusão": "include",
+    "aceito": "include",
+    "aceita": "include",
+    "aceitar": "include",
+    "sim": "include",
+    "s": "include",
+    "exclude": "exclude",
+    "exc": "exclude",
+    "excluir": "exclude",
+    "exclusao": "exclude",
+    "exclusão": "exclude",
+    "rejeitado": "exclude",
+    "rejeitada": "exclude",
+    "rejeitar": "exclude",
+    "nao": "exclude",
+    "não": "exclude",
+    "n": "exclude",
+    "uncertain": "uncertain",
+    "incerteza": "uncertain",
+    "duvida": "uncertain",
+    "dúvida": "uncertain",
+    "indeciso": "uncertain",
+}
+
+# Coders whose decisions represent consensus / tie-breakers
+CONSENSUS_CODERS = {
+    "consensus",
+    "consenso",
+    "tiebreaker",
+    "tie-breaker",
+    "terceiro_revisor",
+    "third_coder",
+    "final",
+    "desempate",
+}
+
 TRUE_MARKS = {"x", "s", "sim", "y", "yes", "1", "true", "✓"}
 DELIMITER = ";"
+
+
+class DecisionList(list["ScreeningDecision"]):
+    """List of screening decisions with audit metadata on skipped rows."""
+
+    skipped: list[str] = []
+
+    def __init__(
+        self,
+        iterable: Sequence[ScreeningDecision] = (),
+        skipped: list[str] | None = None,
+    ) -> None:
+        super().__init__(iterable)
+        self.skipped = skipped or []
 
 
 class ScreeningCriteria(BaseModel):
@@ -195,7 +253,7 @@ def import_sheet(
     criteria: ScreeningCriteria,
     known_ids: set[str],
     default_coder: str = "",
-) -> list[ScreeningDecision]:
+) -> DecisionList:
     """Parse and validate a filled sheet. Rows without a decision are skipped.
 
     Raises SheetError listing every invalid row, so nothing is half-imported.
@@ -209,11 +267,15 @@ def import_sheet(
     now = datetime.now(UTC).isoformat()
     decisions: list[ScreeningDecision] = []
     problems: list[str] = []
+    skipped: list[str] = []
     for line_no, row in enumerate(reader, start=2):
-        decision = (row.get("decision") or "").strip().lower()
-        if not decision:
-            continue
         item_id = (row.get("item_id") or "").strip()
+        raw_dec = (row.get("decision") or "").strip().lower()
+        if not raw_dec:
+            if item_id:
+                skipped.append(f"line {line_no} ({item_id})")
+            continue
+        decision = DECISION_ALIASES.get(raw_dec, raw_dec)
         coder = (row.get("coder") or default_coder).strip()
         where = f"line {line_no} ({item_id or 'no item_id'})"
         if item_id not in known_ids:
@@ -248,7 +310,7 @@ def import_sheet(
         )
     if problems:
         raise SheetError(problems)
-    return decisions
+    return DecisionList(decisions, skipped=skipped)
 
 
 def decisions_path(data_dir: Path, run_id: str) -> Path:
@@ -277,10 +339,23 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
 
 
 def final_decisions(latest: dict[tuple[str, str], ScreeningDecision]) -> dict[str, Decision]:
-    """One decision per item: agreed decision, or `uncertain` when coders disagree."""
-    by_item: dict[str, set[Decision]] = {}
-    for (item_id, _coder), d in latest.items():
-        by_item.setdefault(item_id, set()).add(d.decision)
-    return {
-        item_id: next(iter(ds)) if len(ds) == 1 else "uncertain" for item_id, ds in by_item.items()
-    }
+    """One decision per item: consensus coder decision, or agreed decision, or `uncertain`."""
+    by_item: dict[str, dict[str, Decision]] = {}
+    for (item_id, coder), d in latest.items():
+        by_item.setdefault(item_id, {})[coder] = d.decision
+
+    out: dict[str, Decision] = {}
+    for item_id, coder_decisions in by_item.items():
+        # Check if there is an explicit consensus/tie-breaker decision
+        consensus_dec = None
+        for coder, dec in coder_decisions.items():
+            if coder.strip().lower() in CONSENSUS_CODERS:
+                consensus_dec = dec
+                break
+        if consensus_dec is not None:
+            out[item_id] = consensus_dec
+            continue
+
+        distinct = set(coder_decisions.values())
+        out[item_id] = next(iter(distinct)) if len(distinct) == 1 else "uncertain"
+    return out

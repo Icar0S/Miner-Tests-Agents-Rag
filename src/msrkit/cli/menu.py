@@ -536,9 +536,10 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
             console.print("\n[bold cyan]Executando Descoberta de Tópicos (A5)...[/bold cyan]")
             try:
                 analyze_topics(run_id=run_id, protocol=protocol_path, status="all")
-            except Exception as e:
+            except (Exception, SystemExit):
                 console.print(
-                    f"[yellow]Nota em A5: {e} (requer extra 'scikit-learn')[/yellow]"
+                    "[yellow]Nota em A5: descoberta de tópicos requer 'scikit-learn' "
+                    '(pip install -e ".[analysis]").[/yellow]'
                 )
 
         if sub == "1":
