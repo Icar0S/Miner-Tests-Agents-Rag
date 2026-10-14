@@ -46,17 +46,23 @@ _TRACKING_PARAMS = {
 def canonicalize_url(url: str) -> str:
     """Canonicalize a URL for deduplication.
 
-    - Lowercase the scheme and host
+    - Normalize scheme to https (http -> https)
+    - Lowercase the scheme and host, stripping 'www.'
     - Remove tracking parameters (utm_*, ref, source, etc.)
     - Remove trailing slash (except for root paths)
+    - Strip '.git' from repository URLs (GitHub, GitLab, HuggingFace)
     - Sort remaining query parameters
     """
     parsed = urlparse(url)
 
-    # Lowercase scheme and host
+    # Normalize scheme (http -> https) and lowercase host
     scheme = parsed.scheme.lower()
+    if scheme == "http":
+        scheme = "https"
     host = parsed.hostname or ""
     host = host.lower()
+    if host.startswith("www."):
+        host = host[4:]
     port = f":{parsed.port}" if parsed.port and parsed.port not in (80, 443) else ""
 
     # Clean query parameters
@@ -70,6 +76,11 @@ def canonicalize_url(url: str) -> str:
         path = "/"
     elif path != "/" and path.endswith("/"):
         path = path.rstrip("/")
+
+    # Strip .git suffix for git forge repositories
+    git_forges = ("github.com", "gitlab.com", "huggingface.co")
+    if host in git_forges and path.endswith(".git"):
+        path = path[:-4]
 
     return urlunparse((scheme, f"{host}{port}", path, "", sorted_query, ""))
 

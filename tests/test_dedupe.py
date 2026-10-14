@@ -54,6 +54,15 @@ class TestCanonicalizeUrl:
         url2 = "https://example.com/search?q=test&page=2"
         assert canonicalize_url(url1) == canonicalize_url(url2)
 
+    def test_scheme_normalization_and_www(self) -> None:
+        assert canonicalize_url("http://www.example.com/path") == "https://example.com/path"
+
+    def test_git_suffix_stripping(self) -> None:
+        assert (
+            canonicalize_url("https://github.com/owner/repo.git")
+            == "https://github.com/owner/repo"
+        )
+
 
 class TestContentHash:
     """Tests for content-based hashing."""

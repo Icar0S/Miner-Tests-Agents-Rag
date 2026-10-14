@@ -315,12 +315,16 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
         default="S",
     )
     if go_screen.strip().lower() in ("s", "sim", "y", "yes", ""):
+        coder = Prompt.ask(
+            "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
+            default="revisor",
+        )
         from msrkit.cli.review import screen_tui
 
         screen_tui(
             run_id=latest_run,
             protocol=protocol_path,
-            coder="revisor",
+            coder=coder,
             batch=None,
             limit=50,
         )
@@ -339,6 +343,10 @@ def _select_screening_run_id() -> str | None:
         len(storage.read_items(latest_run, prefer_deduped=True)) if latest_run else 0
     )
     consolidated_count = len(storage.read_items("consolidated", prefer_deduped=True))
+
+    if not latest_run and consolidated_count == 0:
+        console.print("\n[yellow]⚠ Nenhuma coleta minerada encontrada na pasta data/.[/yellow]")
+        return None
 
     console.print("\n[bold cyan]─── Escolha a Base de Dados ───[/bold cyan]")
     if latest_run:
@@ -453,19 +461,92 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             )
         elif choice == "4":
             selected_run = _select_screening_run_id()
-            from msrkit.cli.analyze import analyze_frequency
+            if not selected_run:
+                console.print(
+                    "\n[yellow]⚠ Nenhuma coleta minerada encontrada para análise.[/yellow]"
+                )
+                continue
+            _statistical_analyses_menu(selected_run, protocol_path)
 
+
+def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None:  # pragma: no cover
+    """Submenu for statistical analyses A1-A6 supporting RQ1-RQ5."""
+    from rich.prompt import Prompt
+
+    from msrkit.cli.analyze import (
+        analyze_compare,
+        analyze_coverage,
+        analyze_frequency,
+        analyze_oracles,
+        analyze_topics,
+    )
+
+    while True:
+        console.print(
+            "\n[bold cyan]─── 📈 Análises Estatísticas do Estudo (A1–A6) ───[/bold cyan]"
+        )
+        console.print(f"[dim]Base de dados ativa: {run_id}[/dim]\n")
+        console.print(
+            "  [bold cyan]1[/bold cyan] - 🚀 [bold]Todas as Análises em Lote (A1–A6)[/bold]"
+        )
+        console.print("  [cyan]2[/cyan] - A1/A2: Frequência de Ferramentas & Métodos (RQ1/RQ3)")
+        console.print("  [cyan]3[/cyan] - A3: Cobertura de Modos de Falha (RQ4)")
+        console.print("  [cyan]4[/cyan] - A4: Escada de Oráculos & Teste H2 (RQ2)")
+        console.print("  [cyan]5[/cyan] - A6: Comparação RAG vs Agentes & Saturação (RQ5)")
+        console.print("  [cyan]6[/cyan] - A5: Descoberta de Tópicos e Clusters (LDA / k-means)")
+        console.print("  [cyan]0[/cyan] - ↩ Voltar")
+
+        sub = Prompt.ask("\n[bold green]Escolha uma opção de análise[/bold green]", default="1")
+        if sub == "0":
+            break
+
+        if sub in ("1", "2"):
+            console.print("\n[bold cyan]Executando Análise de Frequência (A1/A2)...[/bold cyan]")
+            try:
+                analyze_frequency(run_id=run_id, basis="detections", pairs="tool-method")
+            except Exception as e:
+                console.print(f"[yellow]Nota em A1/A2: {e}[/yellow]")
+
+        if sub in ("1", "3"):
+            console.print("\n[bold cyan]Executando Cobertura de Falhas (A3)...[/bold cyan]")
+            try:
+                analyze_coverage(run_id=run_id, protocol=protocol_path)
+            except Exception as e:
+                console.print(
+                    f"[yellow]Nota em A3: {e} (requer formulário Anexo A codificado)[/yellow]"
+                )
+
+        if sub in ("1", "4"):
+            console.print("\n[bold cyan]Executando Escada de Oráculos (A4)...[/bold cyan]")
+            try:
+                analyze_oracles(run_id=run_id, basis="detections", protocol=protocol_path)
+            except Exception as e:
+                console.print(f"[yellow]Nota em A4: {e}[/yellow]")
+
+        if sub in ("1", "5"):
             console.print(
-                "\n[bold cyan]Executando Análise de Frequência e Ferramentas (A1)...[/bold cyan]"
+                "\n[bold cyan]Executando Comparação RAG vs Agentes (A6)...[/bold cyan]"
             )
             try:
-                analyze_frequency(run_id=selected_run, basis="detections", pairs="tool-method")
+                analyze_compare(run_id=run_id, basis="detections", protocol=protocol_path)
             except Exception as e:
-                console.print(f"[yellow]Nota na análise: {e}[/yellow]")
+                console.print(f"[yellow]Nota em A6: {e}[/yellow]")
+
+        if sub in ("1", "6"):
+            console.print("\n[bold cyan]Executando Descoberta de Tópicos (A5)...[/bold cyan]")
+            try:
+                analyze_topics(run_id=run_id, protocol=protocol_path, status="all")
+            except Exception as e:
                 console.print(
-                    "[dim]Dica: certifique-se de ter executado a extração técnica "
-                    "(Anexo A) primeiro.[/dim]"
+                    f"[yellow]Nota em A5: {e} (requer extra 'scikit-learn')[/yellow]"
                 )
+
+        if sub == "1":
+            console.print(
+                "\n[bold green]✓ Bateria de análises concluída! "
+                "CSVs em data/reports/[/bold green]"
+            )
+            break
 
 
 def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
@@ -670,6 +751,12 @@ def menu() -> None:  # pragma: no cover
             _interactive_mining_menu(DEFAULT_PROTOCOL)
         elif choice == "2":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                console.print(
+                    "\n[yellow]⚠ Nenhuma coleta minerada encontrada.[/yellow]\n"
+                    "[dim]Execute a opção '1 - Minerar & Preparar' primeiro.[/dim]"
+                )
+                continue
             mode = Prompt.ask(
                 "Modo de triagem: [1] TUI (Textual terminal) ou [2] Linha a Linha (Rich CLI)",
                 default="1",
@@ -678,41 +765,53 @@ def menu() -> None:  # pragma: no cover
                 "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
                 default="revisor",
             )
-            if mode == "2":
-                from msrkit.cli.review import screen_interactive
+            try:
+                if mode == "2":
+                    from msrkit.cli.review import screen_interactive
 
-                screen_interactive(
-                    coder=coder,
-                    run_id=selected_run,
-                    protocol=DEFAULT_PROTOCOL,
-                    batch=None,
-                    limit=50,
-                )
-            else:
-                from msrkit.cli.review import screen_tui
+                    screen_interactive(
+                        coder=coder,
+                        run_id=selected_run,
+                        protocol=DEFAULT_PROTOCOL,
+                        batch=None,
+                        limit=50,
+                    )
+                else:
+                    from msrkit.cli.review import screen_tui
 
-                screen_tui(
-                    coder=coder,
-                    run_id=selected_run,
-                    protocol=DEFAULT_PROTOCOL,
-                    batch=None,
-                    limit=50,
-                )
+                    screen_tui(
+                        coder=coder,
+                        run_id=selected_run,
+                        protocol=DEFAULT_PROTOCOL,
+                        batch=None,
+                        limit=50,
+                    )
+            except Exception as e:
+                console.print(f"[yellow]Retorno da triagem: {e}[/yellow]")
         elif choice == "3":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                console.print(
+                    "\n[yellow]⚠ Nenhuma coleta minerada encontrada.[/yellow]\n"
+                    "[dim]Execute a opção '1 - Minerar & Preparar' primeiro.[/dim]"
+                )
+                continue
             coder = Prompt.ask(
                 "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
                 default="revisor",
             )
-            from msrkit.cli.review import coding_tui
+            try:
+                from msrkit.cli.review import coding_tui
 
-            coding_tui(
-                run_id=selected_run,
-                protocol=DEFAULT_PROTOCOL,
-                coder=coder,
-                status="include",
-                limit=50,
-            )
+                coding_tui(
+                    run_id=selected_run,
+                    protocol=DEFAULT_PROTOCOL,
+                    coder=coder,
+                    status="include",
+                    limit=50,
+                )
+            except Exception as e:
+                console.print(f"[yellow]Retorno da extração: {e}[/yellow]")
         elif choice == "4":
             _results_menu(DEFAULT_PROTOCOL)
         elif choice == "5":

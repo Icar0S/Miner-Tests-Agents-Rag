@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
@@ -40,19 +41,79 @@ def prisma(
     run_id = _resolve_run(_unwrap(run_id))
     storage = ItemStorage(_cli.DATA_DIR)
     manifest = None
-    with contextlib.suppress(FileNotFoundError):
-        manifest = load_manifest(_cli.DATA_DIR, run_id)
+
+    if run_id == "consolidated":
+        runs = [r for r in storage.list_runs() if r != "consolidated"]
+        raw_items = [it for r in runs for it in storage.read_items(r, prefer_deduped=False)]
+        pool_items = storage.read_items("consolidated", prefer_deduped=True)
+        if not pool_items:
+            from msrkit.dedupe import deduplicate
+
+            pool_items, _ = deduplicate(raw_items)
+
+        combined_sources: dict[str, Any] = {}
+        for r in runs:
+            with contextlib.suppress(FileNotFoundError):
+                m = load_manifest(_cli.DATA_DIR, r)
+                for s in m.sources:
+                    if s.name not in combined_sources:
+                        combined_sources[s.name] = s.model_copy(deep=True)
+                    else:
+                        combined_sources[s.name].queries.extend(s.queries)
+        if combined_sources:
+            from datetime import UTC, datetime
+
+            from msrkit import __version__
+            from msrkit.models import Manifest
+
+            manifest = Manifest(
+                run_id="consolidated",
+                msrkit_version=__version__,
+                protocol_path="consolidated",
+                protocol_sha256="",
+                started_at=datetime.now(UTC),
+                sources=list(combined_sources.values()),
+            )
+
+        discards_dir = _cli.DATA_DIR / "runs" / "consolidated"
+        discards_dir.mkdir(parents=True, exist_ok=True)
+        discard_file = discards_dir / "discarded.jsonl"
+        with discard_file.open("w", encoding="utf-8") as out_df:
+            for r in runs:
+                src_df = _cli.DATA_DIR / "runs" / r / "discarded.jsonl"
+                if src_df.exists():
+                    out_df.write(src_df.read_text(encoding="utf-8"))
+
+        decisions = load_decisions(_cli.DATA_DIR, "consolidated")
+        if not decisions:
+            for r in runs:
+                decisions.update(load_decisions(_cli.DATA_DIR, r))
+
+        codings = dict(load_codings(_cli.DATA_DIR, "consolidated"))
+        if not codings:
+            for r in runs:
+                codings.update(load_codings(_cli.DATA_DIR, r))
+        coded_ids = {item_id for (item_id, _c) in codings}
+    else:
+        with contextlib.suppress(FileNotFoundError):
+            manifest = load_manifest(_cli.DATA_DIR, run_id)
+        raw_items = storage.read_items(run_id)
+        pool_items = storage.read_items(run_id, prefer_deduped=True)
+        discard_file = _cli.DATA_DIR / "runs" / run_id / "discarded.jsonl"
+        decisions = load_decisions(_cli.DATA_DIR, run_id)
+        coded_ids = {item_id for (item_id, _c) in load_codings(_cli.DATA_DIR, run_id)}
+
     report_path = _cli.DATA_DIR / "items" / run_id / "dedupe_report.json"
     report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
     flow = build_flow(
         run_id,
         manifest,
-        storage.read_items(run_id),
-        storage.read_items(run_id, prefer_deduped=True),
+        raw_items,
+        pool_items,
         report,
-        _cli.DATA_DIR / "runs" / run_id / "discarded.jsonl",
-        load_decisions(_cli.DATA_DIR, run_id),
-        {item_id for (item_id, _c) in load_codings(_cli.DATA_DIR, run_id)},
+        discard_file,
+        decisions,
+        coded_ids,
     )
     out_dir = _cli.DATA_DIR / "reports" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)

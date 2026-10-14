@@ -725,7 +725,8 @@ def coding_tui(
                 "[yellow]⚠ Nenhum item marcado como 'include' na triagem para esta coleta.[/yellow]"
             )
             console.print(
-                "[dim]Dica: realize a triagem primeiro (Opção 9) para incluir itens.[/dim]"
+                "[dim]Dica: realize a triagem primeiro (Opção 2 - Triagem) "
+                "para incluir itens.[/dim]"
             )
         else:
             console.print(
