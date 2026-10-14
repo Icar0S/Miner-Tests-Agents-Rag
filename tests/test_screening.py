@@ -227,3 +227,23 @@ class TestRanking:
         ItemStorage(tmp_path).save_items(_items(), "run-o")
         r = CliRunner().invoke(app, ["screen", "export", "--run", "run-o", "--order", "x"])
         assert r.exit_code == 1
+
+
+class TestInteractiveScreening:
+    def test_interactive_screening_records_decisions(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        items = _items(2)
+        ItemStorage(tmp_path).save_items(items, "run-int")
+        # Simula resposta interativa: item 1 -> 'i' (incluir), item 2 -> 'q' (sair)
+        r = CliRunner().invoke(
+            app,
+            ["screen", "interactive", "--run", "run-int", "--coder", "joao", "-p", PROTO],
+            input="i\nq\n",
+        )
+        assert r.exit_code == 0, r.stdout
+        assert "Iniciando triagem interativa" in r.stdout
+        assert "1 decisões gravadas com sucesso" in r.stdout
+        decisions = load_decisions(tmp_path, "run-int")
+        assert (items[0].id, "joao") in decisions
+        assert decisions[(items[0].id, "joao")].decision == "include"
+

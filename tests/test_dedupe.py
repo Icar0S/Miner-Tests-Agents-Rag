@@ -263,3 +263,17 @@ class TestNearDuplicates:
         same_url = self._item(2, "other body", url="https://dev.to/a/1/")
         report = deduplicate_report([a, same_url], near_threshold=None)
         assert report.reasons == {"n2": "url"}
+
+    def test_duplicate_items_with_same_id_count_accurately(self) -> None:
+        from msrkit.dedupe import deduplicate_report
+
+        a = self._item(1, self.BASE)
+        # Itens com mesmo ID que compartilham URL ou hash
+        dup1 = self._item(2, "other body 1", url="https://dev.to/a/1/")
+        dup2 = self._item(2, "other body 2", url="https://dev.to/a/1/")
+        report = deduplicate_report([a, dup1, dup2], near_threshold=None)
+        assert len(report.unique) == 1
+        assert len(report.duplicates) == 2
+        # A contagem deve somar exatamente 2, sem ser diminuída por colisão de chave
+        assert sum(report.counts().values()) == 2
+        assert report.counts()["url"] == 2

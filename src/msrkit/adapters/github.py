@@ -50,6 +50,20 @@ _KIND_ENDPOINT = {
 }
 
 
+def is_bot_author(author: str | None) -> bool:
+    """Return True if the author handle matches automated bot accounts."""
+    if not author:
+        return False
+    lower = author.lower()
+    return (
+        lower.endswith("[bot]")
+        or lower.endswith("-bot")
+        or lower in {"dependabot", "renovate", "github-actions", "snyk-bot", "stale"}
+        or "dependabot" in lower
+        or "renovate" in lower
+    )
+
+
 @register
 class GitHubAdapter(BaseAdapter):
     """GitHub adapter using the REST search API."""
@@ -225,6 +239,22 @@ class GitHubAdapter(BaseAdapter):
                             native_id = str(item.get("id", ""))
                         if not native_id or native_id in seen_ids:
                             continue
+
+                        # Filter out automated bot-generated items (e.g. Dependabot, Renovate)
+                        author = (
+                            (item.get("user") or {}).get("login")
+                            if kind == "issue"
+                            else (item.get("owner") or {}).get("login")
+                        )
+                        if is_bot_author(author):
+                            self._record_discard(
+                                native_id=native_id,
+                                title=item.get("title") or item.get("name") or "",
+                                url=item.get("html_url") or "",
+                                reason="bot_author",
+                            )
+                            continue
+
                         seen_ids.add(native_id)
                         yield self._make_raw_item(
                             source=self.name,

@@ -1124,3 +1124,15 @@ class TestSearchLoopsAndQueryBuilding:
         raw_items = list(adapter.search(q))
         assert len(raw_items) == 1
         assert raw_items[0].native_id == "2"
+
+    def test_github_is_bot_author_detection(self) -> None:
+        from msrkit.adapters.github import is_bot_author
+
+        assert is_bot_author("dependabot[bot]") is True
+        assert is_bot_author("renovate[bot]") is True
+        assert is_bot_author("github-actions[bot]") is True
+        assert is_bot_author("snyk-bot") is True
+        assert is_bot_author("custom-bot") is True
+        assert is_bot_author("alice") is False
+        assert is_bot_author("john_doe") is False
+        assert is_bot_author(None) is False

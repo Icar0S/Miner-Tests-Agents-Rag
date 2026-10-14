@@ -119,6 +119,8 @@ class TestFlow:
         assert flow.included_by_source == {"github": 1}
 
     def test_missing_dedupe_is_na_not_zero(self, tmp_path: Path) -> None:
+        from msrkit.prisma import render_tikz
+
         items = _setup(tmp_path)
         flow = build_flow("r", None, items, items, None, tmp_path / "none.jsonl", {}, set())
         assert flow.duplicates is None
@@ -126,6 +128,9 @@ class TestFlow:
         md = render_markdown(flow)
         assert "Duplicates: n/a" in md
         assert "flowchart TD" in md
+        tikz = render_tikz(flow)
+        assert r"\begin{tikzpicture}" in tikz
+        assert r"Identificação" in tikz
 
 
 class TestPrismaCommand:
@@ -146,3 +151,4 @@ class TestPrismaCommand:
         data = json.loads((tmp_path / "reports/run-p/prisma.json").read_text())
         assert data["coded"] == 1
         assert (tmp_path / "reports/run-p/prisma.md").exists()
+        assert (tmp_path / "reports/run-p/prisma.tikz").exists()

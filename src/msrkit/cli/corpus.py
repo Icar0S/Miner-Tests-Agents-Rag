@@ -32,7 +32,7 @@ def prisma(
     Writes data/reports/<run_id>/prisma.json and prisma.md (with a Mermaid diagram).
     """
     from msrkit.coding import load_codings
-    from msrkit.prisma import build_flow, render_markdown
+    from msrkit.prisma import build_flow, render_markdown, render_tikz
     from msrkit.provenance import load_manifest
     from msrkit.screening import load_decisions
     from msrkit.storage import ItemStorage
@@ -59,6 +59,8 @@ def prisma(
     (out_dir / "prisma.json").write_text(flow.model_dump_json(indent=2), encoding="utf-8")
     markdown = render_markdown(flow)
     (out_dir / "prisma.md").write_text(markdown, encoding="utf-8")
+    tikz = render_tikz(flow)
+    (out_dir / "prisma.tikz").write_text(tikz, encoding="utf-8")
     dup = "n/a" if flow.duplicates is None else sum(flow.duplicates.values())
     console.print(
         f"Identified {flow.total_identified} → filtered {sum(flow.filtered.values())}, "

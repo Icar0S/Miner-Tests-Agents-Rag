@@ -147,6 +147,141 @@ def screen_status(
     console.print(f"Pending (no decision): {total - len(final)}")
 
 
+@screen_app.command("interactive")
+def screen_interactive(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
+    limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of items to screen in this session"),
+) -> None:
+    """Screen items interactively in the terminal with colored highlighting and rapid keystrokes."""
+    from datetime import UTC, datetime
+
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+
+    from msrkit.screening import ScreeningDecision, append_decisions, load_decisions, rank_items
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask("[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]").strip()
+        if not coder_str:
+            console.print("[red]✗ Coder é obrigatório.[/red]")
+            raise typer.Exit(1)
+
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    detections = _load_detections(run_id)
+    ranking = rank_items(items, detections, criteria.batch_size)
+
+    done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in items if it.id not in done]
+
+    target_batch = _unwrap(batch)
+    if target_batch is not None:
+        pending = [it for it in pending if ranking[it.id].batch == target_batch]
+
+    if not pending:
+        console.print(f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]")
+        return
+
+    session_items = pending[:limit]
+    console.print(f"[bold green]Iniciando triagem interativa ({len(session_items)} itens para {coder_str})[/bold green]")
+    console.print("[dim]Comandos: [I]ncluir | [E]xcluir (E1-E6) | [U]ncertain | [S]kip | [Q]uit[/dim]\n")
+
+    recorded: list[ScreeningDecision] = []
+    now = datetime.now(UTC).isoformat()
+
+    for idx, it in enumerate(session_items, 1):
+        rk = ranking.get(it.id)
+        b_info = f"Batch {rk.batch} (Rank #{rk.rank}, Escore {rk.score:.1f})" if rk else ""
+        matched_str = ", ".join(it.matched_terms) if it.matched_terms else "nenhum"
+
+        info_lines = [
+            f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
+            f"[bold]URL:[/bold] {it.url}",
+            f"[bold]Termos casados:[/bold] [yellow]{matched_str}[/yellow]",
+        ]
+        if it.body:
+            preview = it.body[:600] + ("..." if len(it.body) > 600 else "")
+            info_lines.append(f"\n[dim]{preview}[/dim]")
+
+        panel = Panel(
+            "\n".join(info_lines),
+            title=f"[bold cyan]Item {idx}/{len(session_items)} — {it.title or 'Sem título'}[/bold cyan]",
+            subtitle=f"[dim]{b_info}[/dim]",
+            border_style="cyan",
+        )
+        console.print(panel)
+
+        choice = Prompt.ask(
+            "[bold white]Decisão[/bold white] ([green]I[/green]ncluir, [red]E[/red]xcluir, [yellow]U[/yellow]ncertain, [dim]S[/dim]kip, [magenta]Q[/magenta]uit)",
+            choices=["i", "e", "u", "s", "q", "I", "E", "U", "S", "Q"],
+            default="s",
+        ).lower()
+
+        if choice == "q":
+            console.print("[yellow]Sessão de triagem interrompida pelo usuário.[/yellow]")
+            break
+        elif choice == "s":
+            console.print("[dim]Item pulado.[/dim]\n")
+            continue
+        elif choice == "i":
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="include",
+                    criteria_met=["I1"],
+                    reason="Incluído via triagem interativa",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print("[green]✓ Marcado como INCLUÍDO.[/green]\n")
+        elif choice == "u":
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="uncertain",
+                    criteria_met=[],
+                    reason="Dúvida para terceiro avaliador",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print("[yellow]? Marcado como UNCERTAIN.[/yellow]\n")
+        elif choice == "e":
+            console.print(
+                "[dim]Critérios de Exclusão: 1=E1 (não é teste), 2=E2 (só modelo), 3=E3 (promocional), "
+                "4=E4 (duplicata), 5=E5 (tutorial genérico), 6=E6 (sem manutenção)[/dim]"
+            )
+            crit_choice = Prompt.ask("Motivo da exclusão (1-6 ou Enter para E1)", default="1").strip()
+            crit_id = f"E{crit_choice}" if crit_choice in ("1", "2", "3", "4", "5", "6") else "E1"
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="exclude",
+                    criteria_met=[crit_id],
+                    reason=f"Excluído por {crit_id}",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print(f"[red]✗ Marcado como EXCLUÍDO ({crit_id}).[/red]\n")
+
+    if recorded:
+        path = append_decisions(_cli.DATA_DIR, run_id, recorded)
+        console.print(f"[bold green]✓ {len(recorded)} decisões gravadas com sucesso em {path.name}[/bold green]")
+    else:
+        console.print("[dim]Nenhuma decisão registrada nesta sessão.[/dim]")
+
+
 coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
 
 

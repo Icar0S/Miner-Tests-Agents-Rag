@@ -127,28 +127,47 @@ class DedupeReport(BaseModel):
     duplicates: list[Any]
     # duplicate item id -> "url" | "content" | "near:<similarity>:<kept item id>"
     reasons: dict[str, str] = {}
+    duplicate_reasons: list[str] = []
 
     def counts(self) -> dict[str, int]:
         out = {"url": 0, "content": 0, "near": 0}
-        for reason in self.reasons.values():
-            out[reason.split(":", 1)[0]] += 1
+        source = self.duplicate_reasons if self.duplicate_reasons else list(self.reasons.values())
+        for reason in source:
+            kind = reason.split(":", 1)[0]
+            if kind in out:
+                out[kind] += 1
+            else:
+                out[kind] = 1
         return out
 
 
 def deduplicate_report(items: list[Item], near_threshold: float | None = 0.85) -> DedupeReport:
     """Three-pass deduplication; `near_threshold=None` disables pass 3."""
     unique, duplicates = _exact_passes(items)
-    reasons = {d.id: r for d, r in duplicates}
-    dups = [d for d, _ in duplicates]
+    reasons: dict[str, str] = {}
+    dup_reasons_list: list[str] = []
+    dups: list[Item] = []
+    for d, r in duplicates:
+        dups.append(d)
+        reasons[d.id] = r
+        dup_reasons_list.append(r)
+
     if near_threshold is not None:
         unique, near = _near_pass(unique, near_threshold)
         for item, reason in near:
             dups.append(item)
             reasons[item.id] = reason
+            dup_reasons_list.append(reason)
+
     logger.info(
         "Deduplication: %d input → %d unique + %d duplicates", len(items), len(unique), len(dups)
     )
-    return DedupeReport(unique=unique, duplicates=dups, reasons=reasons)
+    return DedupeReport(
+        unique=unique,
+        duplicates=dups,
+        reasons=reasons,
+        duplicate_reasons=dup_reasons_list,
+    )
 
 
 def _near_pass(items: list[Item], threshold: float) -> tuple[list[Item], list[tuple[Item, str]]]:
