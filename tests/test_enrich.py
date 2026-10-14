@@ -254,3 +254,30 @@ def test_core_rate_limit_is_under_quota_and_above_search_rate():
     search = GitHubAdapter.policy.rate_limit
     assert per_hour < 5000  # core REST quota with a token
     assert per_hour > search.requests * 3600 / search.per_seconds
+
+
+def test_repo_of_case_insensitivity():
+    item = _item("https://github.com/AcmeCorp/RAG-Agent")
+    assert repo_of(item) == "acmecorp/rag-agent"
+
+
+def test_empty_repo_handling(monkeypatch):
+    adapter = GitHubAdapter()
+
+    def _empty_fake_get(url: str, params=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = {}
+        if url.endswith("/repos/acme/empty"):
+            resp.json.return_value = {"default_branch": None}
+        elif url.endswith("/commits"):
+            resp.json.return_value = {"message": "Git Repository is empty."}
+        else:
+            resp.status_code = 404
+        return resp
+
+    monkeypatch.setattr(adapter, "_governed_get", _empty_fake_get)
+    enricher = GitHubEnricher(adapter)
+    sig = enricher.enrich("acme/empty")
+    assert sig.error == "empty repository (no default branch)"
+

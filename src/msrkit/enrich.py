@@ -80,7 +80,7 @@ def repo_of(item: Item) -> str | None:
     parts = [p for p in urlparse(str(item.url)).path.split("/") if p]
     if len(parts) < 2:
         return None
-    return f"{parts[0]}/{parts[1]}"
+    return f"{parts[0]}/{parts[1]}".lower()
 
 
 def _is_test_path(path: str) -> bool:
@@ -238,6 +238,9 @@ query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: 
                 return
             default_branch = resp.json().get("default_branch")
         sig.default_branch = default_branch
+        if not default_branch:
+            sig.error = "empty repository (no default branch)"
+            return
 
         resp = self._get(
             sig, f"{_API}/repos/{repo}/git/trees/{quote(str(default_branch))}", {"recursive": "1"}
@@ -305,7 +308,8 @@ query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: 
         if resp.status_code != 200:
             return None
         last = re.search(r'[?&]page=(\d+)>; rel="last"', resp.headers.get("link", ""))
-        return int(last.group(1)) if last else len(resp.json())
+        data = resp.json()
+        return int(last.group(1)) if last else (len(data) if isinstance(data, list) else 0)
 
     def _commit_months(self, sig: RepoSignals) -> list[str]:
         params: dict[str, Any] = {"per_page": 100}
@@ -319,7 +323,11 @@ query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: 
             if resp.status_code != 200:
                 break
             commits = resp.json()
+            if not isinstance(commits, list):
+                break
             for c in commits:
+                if not isinstance(c, dict):
+                    continue
                 stamp = ((c.get("commit") or {}).get("committer") or {}).get("date") or ""
                 if len(stamp) >= 7:
                     months.add(stamp[:7])

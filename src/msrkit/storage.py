@@ -151,6 +151,17 @@ class ItemStorage:
             file_path = items_dir / "items.jsonl"
         elif (items_dir / "items_deduped.jsonl").exists():
             file_path = items_dir / "items_deduped.jsonl"
+        elif run_id == "consolidated":
+            runs = [r for r in self.list_runs() if r != "consolidated"]
+            all_items = []
+            for r in runs:
+                all_items.extend(self.read_items(r, prefer_deduped=prefer_deduped))
+            if prefer_deduped and all_items:
+                from msrkit.dedupe import deduplicate
+
+                unique_items, _ = deduplicate(all_items)
+                return unique_items
+            return all_items
         else:
             return []
 
@@ -183,7 +194,7 @@ class ItemStorage:
             p.name
             for p in items_dir.iterdir()
             if p.is_dir()
-            and (p / "items.jsonl").exists()
+            and ((p / "items.jsonl").exists() or (p / "items_deduped.jsonl").exists())
             and (include_consolidated or p.name != "consolidated")
         ]
         return sorted(runs)

@@ -102,3 +102,33 @@ class TestDeterminism:
         ids1 = [_normalize_raw(r).id for r in raw_items]
         ids2 = [_normalize_raw(r).id for r in raw_items]
         assert ids1 == ids2
+
+
+class TestStorageFeatures:
+    def test_list_runs_with_deduped_only(self, tmp_path: Path, raw_items: list[RawItem]) -> None:
+        storage = ItemStorage(tmp_path)
+        items = [_normalize_raw(raw) for raw in raw_items]
+        # Save items directly as items_deduped.jsonl in run-a
+        run_dir = tmp_path / "items" / "run-a"
+        run_dir.mkdir(parents=True)
+        (run_dir / "items_deduped.jsonl").write_text(
+            "\n".join(it.model_dump_json() for it in items) + "\n"
+        )
+        assert storage.list_runs() == ["run-a"]
+        loaded = storage.read_items("run-a", prefer_deduped=True)
+        assert len(loaded) == len(items)
+
+    def test_read_items_consolidated_fallback(
+        self, tmp_path: Path, raw_items: list[RawItem]
+    ) -> None:
+        storage = ItemStorage(tmp_path)
+        items1 = [_normalize_raw(raw_items[0])]
+        items2 = [_normalize_raw(raw_items[1])]
+        storage.save_items(items1, "run-1")
+        storage.save_items(items2, "run-2")
+
+        # Without static items/consolidated/, read_items aggregates automatically
+        consolidated = storage.read_items("consolidated", prefer_deduped=True)
+        assert len(consolidated) == 2
+        assert {it.id for it in consolidated} == {items1[0].id, items2[0].id}
+

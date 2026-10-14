@@ -166,8 +166,12 @@ class HackerNewsAdapter(BaseAdapter):
         title = p.get("title") or p.get("story_title")
         body = p.get("comment_text") or p.get("story_text")
 
-        # Build URL
-        url = p.get("url") or f"https://news.ycombinator.com/item?id={p.get('objectID', '')}"
+        # Build URL with safe HTTP/HTTPS scheme check
+        raw_url = p.get("url")
+        if raw_url and (raw_url.startswith("http://") or raw_url.startswith("https://")):
+            url = raw_url
+        else:
+            url = f"https://news.ycombinator.com/item?id={p.get('objectID', '')}"
 
         created_at = None
         created_at_i = p.get("created_at_i")
@@ -180,7 +184,7 @@ class HackerNewsAdapter(BaseAdapter):
             id=Item.make_id(self.name, str(p.get("objectID", ""))),
             source=self.name,
             kind=kind,
-            url=url,  # type: ignore[arg-type]
+            url=url,
             title=title,
             body=body,
             author_handle=p.get("author"),

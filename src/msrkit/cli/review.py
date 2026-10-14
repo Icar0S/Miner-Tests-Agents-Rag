@@ -730,8 +730,8 @@ def resolve_disagreements_cmd(
     reader = csv.DictReader(text.splitlines(), delimiter=delim)
 
     screening_resolutions: list[ScreeningDecision] = []
-    coding_resolutions: dict[str, dict[str, Any]] = {}
-    coding_reasons: dict[str, str] = {}
+    coding_resolutions: dict[tuple[str, str], dict[str, Any]] = {}
+    coding_reasons: dict[tuple[str, str], str] = {}
     skipped_unresolved = 0
     now = datetime.now(UTC).isoformat()
 
@@ -771,7 +771,7 @@ def resolve_disagreements_cmd(
                 )
             )
         else:
-            item_vals = coding_resolutions.setdefault(item_id, {})
+            item_vals = coding_resolutions.setdefault((item_id, row_resolver), {})
             if "," in consensus_val or ";" in consensus_val:
                 item_vals[dimension] = [
                     v.strip()
@@ -785,7 +785,7 @@ def resolve_disagreements_cmd(
             else:
                 item_vals[dimension] = consensus_val
             if reason:
-                coding_reasons[item_id] = reason
+                coding_reasons[(item_id, row_resolver)] = reason
 
     saved_scr = 0
     if screening_resolutions:
@@ -796,16 +796,16 @@ def resolve_disagreements_cmd(
     if coding_resolutions:
         existing_codings = load_codings(_cli.DATA_DIR, run_id)
         new_codings: list[CodingRecord] = []
-        for item_id, vals in coding_resolutions.items():
-            base_rec = existing_codings.get((item_id, resolver))
+        for (item_id, row_res), vals in coding_resolutions.items():
+            base_rec = existing_codings.get((item_id, row_res))
             merged_vals = dict(base_rec.values) if base_rec else {}
             merged_vals.update(vals)
             new_codings.append(
                 CodingRecord(
                     item_id=item_id,
-                    coder=resolver,
+                    coder=row_res,
                     values=merged_vals,
-                    notes=coding_reasons.get(item_id, "Resolvido via disagreements.csv"),
+                    notes=coding_reasons.get((item_id, row_res), "Resolvido via disagreements.csv"),
                     coded_at=now,
                     sheet_sha256=sheet_hash,
                 )

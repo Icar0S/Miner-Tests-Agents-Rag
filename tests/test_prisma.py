@@ -77,9 +77,14 @@ def _manifest() -> Manifest:
 
 def _dec(item: str, coder: str, decision: str, crit: list[str] | None = None):
     return ScreeningDecision(
-        item_id=item, coder=coder, decision=decision, criteria_met=crit or [],  # type: ignore[arg-type]
-        reason="r", decided_at="t", sheet_sha256="h",
-    )  # fmt: skip
+        item_id=item,
+        coder=coder,
+        decision=decision,  # type: ignore[arg-type]
+        criteria_met=crit or [],
+        reason="r",
+        decided_at="t",
+        sheet_sha256="h",
+    )
 
 
 def _setup(tmp_path: Path) -> list[Item]:
@@ -152,3 +157,34 @@ class TestPrismaCommand:
         assert data["coded"] == 1
         assert (tmp_path / "reports/run-p/prisma.md").exists()
         assert (tmp_path / "reports/run-p/prisma.tikz").exists()
+
+    def test_tikz_and_mermaid_escaping(self) -> None:
+        from msrkit.prisma import PrismaFlow, _latex_escape, render_mermaid, render_tikz
+
+        assert _latex_escape("rag_agent & testing % #1 $val {ok}") == (
+            r"rag\_agent \& testing \% \#1 \$val \{ok\}"
+        )
+        flow = PrismaFlow(
+            run_id="r1",
+            identified={"google_scholar": 10, 'quote_"source"': 5},
+            not_retrieved_estimate={},
+            truncated_queries=0,
+            filtered={"out_of_scope": 2},
+            after_filters=8,
+            duplicates=None,
+            screened=8,
+            excluded=3,
+            exclusion_reasons={'reason_"x"_with_underscore': 3},
+            uncertain=0,
+            pending=0,
+            included=5,
+            coded=2,
+        )
+        tikz = render_tikz(flow)
+        assert r"google\_scholar" in tikz
+        assert r"reason\_'x'\_with\_underscore" in tikz or r"reason\_" in tikz
+
+        mermaid = render_mermaid(flow)
+        assert '"quote_\'source\'"' not in mermaid  # inner double quotes replaced by single
+        assert "reason_'x'_with_underscore" in mermaid
+

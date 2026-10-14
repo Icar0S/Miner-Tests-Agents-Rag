@@ -336,14 +336,8 @@ def append_codings(data_dir: Path, run_id: str, records: list[CodingRecord]) -> 
 
 def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRecord]:
     """Latest coding per (item_id, coder)."""
-    path = codings_path(data_dir, run_id)
     latest: dict[tuple[str, str], CodingRecord] = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                r = CodingRecord.model_validate(json.loads(line))
-                latest[(r.item_id, r.coder)] = r
-    if not latest and run_id == "consolidated":
+    if run_id == "consolidated":
         coding_dir = data_dir / "coding"
         if coding_dir.exists():
             for p in coding_dir.glob("*/codings.jsonl"):
@@ -352,4 +346,18 @@ def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRec
                         if line.strip():
                             r = CodingRecord.model_validate(json.loads(line))
                             latest[(r.item_id, r.coder)] = r
+        path = codings_path(data_dir, "consolidated")
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    r = CodingRecord.model_validate(json.loads(line))
+                    latest[(r.item_id, r.coder)] = r
+        return latest
+
+    path = codings_path(data_dir, run_id)
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = CodingRecord.model_validate(json.loads(line))
+                latest[(r.item_id, r.coder)] = r
     return latest

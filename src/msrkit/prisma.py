@@ -166,11 +166,41 @@ def render_markdown(flow: PrismaFlow) -> str:
     return "\n".join(lines)
 
 
+def _latex_escape(text: str) -> str:
+    """Escape LaTeX special characters for safe rendering in TikZ nodes."""
+    specials = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    res = text.replace("\\", specials["\\"])
+    for char, replacement in specials.items():
+        if char != "\\":
+            res = res.replace(char, replacement)
+    return res
+
+
+def _mermaid_escape(text: str) -> str:
+    """Sanitize strings for Mermaid node text by replacing double quotes."""
+    return text.replace('"', "'")
+
+
 def render_mermaid(flow: PrismaFlow) -> str:
     dup = "n/a" if flow.duplicates is None else str(sum(flow.duplicates.values()))
     filtered = sum(flow.filtered.values())
-    per_source = "<br/>".join(f"{s}: {n}" for s, n in flow.identified.items())
-    excl = "<br/>".join(f"{r}: {n}" for r, n in flow.exclusion_reasons.items())
+    per_source = "<br/>".join(
+        f"{_mermaid_escape(s)}: {n}" for s, n in flow.identified.items()
+    )
+    excl = "<br/>".join(
+        f"{_mermaid_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items()
+    )
     return "\n".join(
         [
             "flowchart TD",
@@ -193,9 +223,10 @@ def render_tikz(flow: PrismaFlow) -> str:
     """Render PRISMA 2020 flow diagram as a standalone LaTeX TikZ snippet."""
     dup = "n/a" if flow.duplicates is None else str(sum(flow.duplicates.values()))
     filtered = sum(flow.filtered.values())
-    per_source = ", ".join(f"{s}: {n}" for s, n in flow.identified.items())
+    per_source = ", ".join(f"{_latex_escape(s)}: {n}" for s, n in flow.identified.items())
     excl_reasons = (
-        ", ".join(f"{r}: {n}" for r, n in flow.exclusion_reasons.items()) or "critérios E1--E6"
+        ", ".join(f"{_latex_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items())
+        or "critérios E1--E6"
     )
 
     box_style = (

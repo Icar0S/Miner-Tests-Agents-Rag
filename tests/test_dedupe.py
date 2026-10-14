@@ -63,6 +63,12 @@ class TestCanonicalizeUrl:
             == "https://github.com/owner/repo"
         )
 
+    def test_git_forge_case_insensitivity(self) -> None:
+        assert (
+            canonicalize_url("https://GitHub.com/LangChain-AI/LangChain.git")
+            == "https://github.com/langchain-ai/langchain"
+        )
+
 
 class TestContentHash:
     """Tests for content-based hashing."""

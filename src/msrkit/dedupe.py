@@ -77,10 +77,16 @@ def canonicalize_url(url: str) -> str:
     elif path != "/" and path.endswith("/"):
         path = path.rstrip("/")
 
-    # Strip .git suffix for git forge repositories
+    # Strip .git suffix and lowercase owner/repo for git forge repositories
     git_forges = ("github.com", "gitlab.com", "huggingface.co")
-    if host in git_forges and path.endswith(".git"):
-        path = path[:-4]
+    if host in git_forges:
+        if path.endswith(".git"):
+            path = path[:-4]
+        parts = path.split("/")
+        if len(parts) >= 3:
+            parts[1] = parts[1].lower()
+            parts[2] = parts[2].lower()
+            path = "/".join(parts)
 
     return urlunparse((scheme, f"{host}{port}", path, "", sorted_query, ""))
 

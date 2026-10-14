@@ -74,8 +74,13 @@ CONSENSUS_CODERS = {
     "consenso",
     "tiebreaker",
     "tie-breaker",
+    "terceiro",
     "terceiro_revisor",
+    "terceiro_avaliador",
     "third_coder",
+    "third_reviewer",
+    "supervisor",
+    "resolver",
     "final",
     "desempate",
 }
@@ -328,14 +333,8 @@ def append_decisions(data_dir: Path, run_id: str, decisions: list[ScreeningDecis
 
 def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], ScreeningDecision]:
     """Latest decision per (item_id, coder)."""
-    path = decisions_path(data_dir, run_id)
     latest: dict[tuple[str, str], ScreeningDecision] = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                d = ScreeningDecision.model_validate(json.loads(line))
-                latest[(d.item_id, d.coder)] = d
-    if not latest and run_id == "consolidated":
+    if run_id == "consolidated":
         screen_dir = data_dir / "screening"
         if screen_dir.exists():
             for p in screen_dir.glob("*/decisions.jsonl"):
@@ -344,6 +343,20 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
                         if line.strip():
                             d = ScreeningDecision.model_validate(json.loads(line))
                             latest[(d.item_id, d.coder)] = d
+        path = decisions_path(data_dir, "consolidated")
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    d = ScreeningDecision.model_validate(json.loads(line))
+                    latest[(d.item_id, d.coder)] = d
+        return latest
+
+    path = decisions_path(data_dir, run_id)
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                d = ScreeningDecision.model_validate(json.loads(line))
+                latest[(d.item_id, d.coder)] = d
     return latest
 
 
