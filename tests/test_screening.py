@@ -81,6 +81,26 @@ class TestSheet:
         assert [r["batch"] for r in rows] == ["1", "1", "2"]
         assert rows[0]["coder"] == "ana"
 
+    def test_export_blind_masks_scores_and_terms(self, tmp_path: Path) -> None:
+        path = tmp_path / "blind.csv"
+        items = _items(2)
+        items[0].concepts = ["rag", "teste"]
+        items[0].matched_terms = [TermHit(term="rag", field="title", context="rag")]
+        ranking = {
+            "it0": rank_items(items, None, batch_size=2)["it0"],
+            "it1": rank_items(items, None, batch_size=2)["it1"],
+        }
+        export_sheet(items, CRIT, path, coder="ana", ranking=ranking, blind=True)
+        with open(path, encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh, delimiter=";"))
+        assert rows[0]["score"] == ""
+        assert rows[0]["evidence"] == ""
+        assert rows[0]["concepts"] == ""
+        assert rows[0]["matched_terms"] == ""
+        assert rows[0]["rank"] == ""
+        assert rows[0]["title"] == "Item 0"
+        assert rows[0]["coder"] == "ana"
+
     def test_import_roundtrip_and_blank_rows_skipped(self, tmp_path: Path) -> None:
         path = tmp_path / "s.csv"
         export_sheet(_items(), CRIT, path, coder="ana")
@@ -213,6 +233,61 @@ class TestScreenCommands:
         )
         assert "1 items written" in r.stdout  # already-decided items are skipped
 
+    def test_export_blind_and_random_cli(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        ItemStorage(tmp_path).save_items(_items(5), "run-blind")
+        runner = CliRunner()
+        sheet = tmp_path / "blind_sheet.csv"
+        r = runner.invoke(
+            app,
+            [
+                "screen",
+                "export",
+                "--run",
+                "run-blind",
+                "-p",
+                PROTO,
+                "--coder",
+                "helena",
+                "--order",
+                "random",
+                "--blind",
+                "-o",
+                str(sheet),
+            ],
+        )
+        assert r.exit_code == 0, r.stdout
+        assert "blind: yes" in r.stdout
+        with open(sheet, encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh, delimiter=";"))
+        assert len(rows) == 5
+        assert all(r["score"] == "" and r["matched_terms"] == "" for r in rows)
+
+    def test_export_blind_forces_random_order(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        items = _items(5)
+        ItemStorage(tmp_path).save_items(items, "run-blind-force")
+        sheet = tmp_path / "blind_forced.csv"
+        # Sem passar --order, o padrão é 'relevance', mas --blind deve forçar 'random'
+        r = CliRunner().invoke(
+            app,
+            [
+                "screen",
+                "export",
+                "--run",
+                "run-blind-force",
+                "--coder",
+                "helena",
+                "--blind",
+                "-o",
+                str(sheet),
+            ],
+        )
+        assert r.exit_code == 0, r.stdout
+        assert "ordenação por relevância forçada para 'random'" in r.stdout
+        assert "order: random" in r.stdout
+        assert "blind: yes" in r.stdout
+
 
 class TestRanking:
     def _ranked_items(self) -> list[Item]:
@@ -287,6 +362,34 @@ class TestInteractiveScreening:
         decisions = load_decisions(tmp_path, "run-int")
         assert (items[0].id, "joao") in decisions
         assert decisions[(items[0].id, "joao")].decision == "include"
+
+    def test_interactive_screening_blind(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        items = _items(2)
+        items[0].matched_terms = [TermHit(term="rag", field="title", context="rag")]
+        ItemStorage(tmp_path).save_items(items, "run-blind-int")
+        r = CliRunner().invoke(
+            app,
+            [
+                "screen",
+                "interactive",
+                "--run",
+                "run-blind-int",
+                "--coder",
+                "helena",
+                "-p",
+                PROTO,
+                "--blind",
+            ],
+            input="i\nq\n",
+        )
+        assert r.exit_code == 0, r.stdout
+        assert "Modo Cego Ativado" in r.stdout
+        assert "Scores e Sinais Ocultados" in r.stdout
+        assert "Escore" not in r.stdout
+        assert "Termos casados:" not in r.stdout
+        decisions = load_decisions(tmp_path, "run-blind-int")
+        assert (items[0].id, "helena") in decisions or (items[1].id, "helena") in decisions
 
 
 def test_final_decisions_fuzzy_consensus_coder() -> None:

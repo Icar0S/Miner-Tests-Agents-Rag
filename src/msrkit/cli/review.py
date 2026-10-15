@@ -37,41 +37,63 @@ def screen_export(
         True, "--pending-only/--all", help="Skip items this coder already decided"
     ),
     order: str = typer.Option(
-        "relevance", "--order", help="relevance (fixed ranked batches) or collected"
+        "relevance", "--order", help="relevance (fixed ranked batches), collected or random"
     ),
     batch: list[int] = typer.Option(  # noqa: B008
         [], "--batch", "-b", help="Export only these batch numbers (repeatable)"
     ),
+    blind: bool = typer.Option(
+        False, "--blind", help="Mask score, terms, concepts and rank to prevent confirmation bias"
+    ),
+    seed: int = typer.Option(42, "--seed", help="Random seed when --order random is used"),
 ) -> None:
     """Write a screening sheet (CSV) with one column per eligibility criterion.
 
     By default items are ranked by relevance (matched terms, concepts, evidence
     level from `msrkit extract`, CI/tests) and cut into fixed batches over the
     whole run (§11), so batch numbers stay stable across coders and re-exports.
+    With --blind, automated scores, matched terms, and ranking are masked.
     """
+    import random
+
     from msrkit.screening import Ranked, export_sheet, load_decisions, rank_items
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
     coder = _unwrap(coder)
     order = _unwrap(order)
+    blind_val = _unwrap(blind)
+    if blind_val and order == "relevance":
+        console.print(
+            "[yellow]⚠ Modo cego ativado: ordenação por relevância forçada para 'random' "
+            "para evitar vazamento de ranking.[/yellow]"
+        )
+        order = "random"
     batches = set(_unwrap(batch) or [])
-    if order not in ("relevance", "collected"):
-        console.print("[red]✗ --order must be 'relevance' or 'collected'.[/red]")
+    if order not in ("relevance", "collected", "random"):
+        console.print("[red]✗ --order must be 'relevance', 'collected' or 'random'.[/red]")
         raise typer.Exit(1)
     criteria = _screening_criteria(run_id, _unwrap(protocol))
     items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
     detections = _load_detections(run_id) if order == "relevance" else []
-    ranking = (
-        rank_items(items, detections, criteria.batch_size)
-        if order == "relevance"
-        else {
+    if order == "relevance":
+        ranking = rank_items(items, detections, criteria.batch_size)
+    elif order == "random":
+        rng = random.Random(_unwrap(seed))
+        rng.shuffle(items)
+        ranking = {
             it.id: Ranked(
                 item_id=it.id, rank=i + 1, batch=i // max(criteria.batch_size, 1) + 1, score=0
             )
             for i, it in enumerate(items)
         }
-    )
+    else:
+        ranking = {
+            it.id: Ranked(
+                item_id=it.id, rank=i + 1, batch=i // max(criteria.batch_size, 1) + 1, score=0
+            )
+            for i, it in enumerate(items)
+        }
     if _unwrap(pending_only) and coder:
         done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder}
         items = [it for it in items if it.id not in done]
@@ -80,11 +102,12 @@ def screen_export(
     out = Path(
         _unwrap(output) or _cli.DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv"
     )
-    n = export_sheet(items, criteria, out, coder=coder, ranking=ranking)
+    n = export_sheet(items, criteria, out, coder=coder, ranking=ranking, blind=_unwrap(blind))
     total_batches = max((r.batch for r in ranking.values()), default=0)
+    extra_info = f"order: {order}" + ("; blind: yes" if _unwrap(blind) else "")
     console.print(
         f"[green]✓ {n} items written to {out}[/green] "
-        f"(order: {order}; {total_batches} batches of {criteria.batch_size})"
+        f"({extra_info}; {total_batches} batches of {criteria.batch_size})"
     )
     if order == "relevance" and not detections:
         console.print(
@@ -163,6 +186,12 @@ def screen_interactive(
     limit: int = typer.Option(
         25, "--limit", "-l", help="Maximum number of items to screen in this session"
     ),
+    blind: bool = typer.Option(
+        False,
+        "--blind",
+        help="Mask score, terms, signals and randomize order to prevent confirmation bias",
+    ),
+    seed: int = typer.Option(42, "--seed", help="Random seed when --blind is used"),
 ) -> None:
     """Screen items interactively in the terminal with colored highlighting and rapid keystrokes."""
     from datetime import UTC, datetime
@@ -195,6 +224,13 @@ def screen_interactive(
     if target_batch is not None:
         pending = [it for it in pending if ranking[it.id].batch == target_batch]
 
+    blind_val = _unwrap(blind)
+    if blind_val:
+        import random
+
+        rng = random.Random(_unwrap(seed))
+        rng.shuffle(pending)
+
     if not pending:
         console.print(
             f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"
@@ -202,9 +238,10 @@ def screen_interactive(
         return
 
     session_items = pending[:limit]
+    blind_tag = " [cyan](Modo Cego Ativado)[/cyan]" if blind_val else ""
     console.print(
         f"[bold green]Iniciando triagem interativa "
-        f"({len(session_items)} itens para {coder_str})[/bold green]"
+        f"({len(session_items)} itens para {coder_str}){blind_tag}[/bold green]"
     )
     console.print(
         "[dim]Comandos: [I]ncluir | [E]xcluir (E1-E6) | [U]ncertain | [S]kip | [Q]uit[/dim]\n"
@@ -214,46 +251,54 @@ def screen_interactive(
     now = datetime.now(UTC).isoformat()
 
     for idx, it in enumerate(session_items, 1):
-        rk = ranking.get(it.id)
-        b_info = f"Batch {rk.batch} (Rank #{rk.rank}, Escore {rk.score:.1f})" if rk else ""
-        matched_str = (
-            ", ".join(t.term if hasattr(t, "term") else str(t) for t in it.matched_terms)
-            if it.matched_terms
-            else "nenhum"
-        )
+        if not blind_val:
+            rk = ranking.get(it.id)
+            b_info = f"Batch {rk.batch} (Rank #{rk.rank}, Escore {rk.score:.1f})" if rk else ""
+            matched_str = (
+                ", ".join(t.term if hasattr(t, "term") else str(t) for t in it.matched_terms)
+                if it.matched_terms
+                else "nenhum"
+            )
 
-        info_lines = [
-            f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
-            f"[bold]URL:[/bold] {it.url}",
-            f"[bold]Termos casados:[/bold] [yellow]{matched_str}[/yellow]",
-        ]
-        tech_parts: list[str] = []
-        if it.engagement.stars is not None:
-            tech_parts.append(f"★ {it.engagement.stars} estrelas")
-        if it.engagement.forks is not None:
-            tech_parts.append(f"⑂ {it.engagement.forks} forks")
-        if it.tech.has_ci is not None:
-            ci_val = (
-                "[green]CI/CD: [✓ Sim][/green]"
-                if it.tech.has_ci
-                else "[dim]CI/CD: [✗ Não][/dim]"
-            )
-            tech_parts.append(ci_val)
-        if it.tech.has_tests is not None:
-            tests_val = (
-                "[green]Testes: [✓ Sim][/green]"
-                if it.tech.has_tests
-                else "[dim]Testes: [✗ Não][/dim]"
-            )
-            tech_parts.append(tests_val)
-        if it.tech.contributors is not None:
-            tech_parts.append(f"Contribuidores: {it.tech.contributors}")
-        if it.tech.active_months is not None:
-            tech_parts.append(f"Atividade: {it.tech.active_months}m")
-        if it.tech.tags:
-            tech_parts.append(f"Tags: [cyan]{', '.join(it.tech.tags[:5])}[/cyan]")
-        if tech_parts:
-            info_lines.append(f"[bold]Sinais de Código:[/bold] {' | '.join(tech_parts)}")
+            info_lines = [
+                f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
+                f"[bold]URL:[/bold] {it.url}",
+                f"[bold]Termos casados:[/bold] [yellow]{matched_str}[/yellow]",
+            ]
+            tech_parts: list[str] = []
+            if it.engagement.stars is not None:
+                tech_parts.append(f"★ {it.engagement.stars} estrelas")
+            if it.engagement.forks is not None:
+                tech_parts.append(f"⑂ {it.engagement.forks} forks")
+            if it.tech.has_ci is not None:
+                ci_val = (
+                    "[green]CI/CD: [✓ Sim][/green]"
+                    if it.tech.has_ci
+                    else "[dim]CI/CD: [✗ Não][/dim]"
+                )
+                tech_parts.append(ci_val)
+            if it.tech.has_tests is not None:
+                tests_val = (
+                    "[green]Testes: [✓ Sim][/green]"
+                    if it.tech.has_tests
+                    else "[dim]Testes: [✗ Não][/dim]"
+                )
+                tech_parts.append(tests_val)
+            if it.tech.contributors is not None:
+                tech_parts.append(f"Contribuidores: {it.tech.contributors}")
+            if it.tech.active_months is not None:
+                tech_parts.append(f"Atividade: {it.tech.active_months}m")
+            if it.tech.tags:
+                tech_parts.append(f"Tags: [cyan]{', '.join(it.tech.tags[:5])}[/cyan]")
+            if tech_parts:
+                info_lines.append(f"[bold]Sinais de Código:[/bold] {' | '.join(tech_parts)}")
+        else:
+            b_info = "[bold cyan][Modo Cego — Scores e Sinais Ocultados][/bold cyan]"
+            info_lines = [
+                f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
+                f"[bold]URL:[/bold] {it.url}",
+                "[dim][Termos casados, escores e popularidade ocultados para triagem cega][/dim]",
+            ]
 
         if it.body:
             preview = it.body[:600] + ("..." if len(it.body) > 600 else "")

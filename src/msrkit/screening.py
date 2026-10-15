@@ -228,12 +228,14 @@ def export_sheet(
     coder: str = "",
     extra_columns: dict[str, dict[str, str]] | None = None,
     ranking: dict[str, Ranked] | None = None,
+    blind: bool = False,
 ) -> int:
     """Write the screening sheet; returns the number of rows.
 
     With `ranking` (see rank_items), rows follow the ranking and carry its fixed
     batch numbers; without it, items keep the given order in batches of
-    `criteria.batch_size`.
+    `criteria.batch_size`. If `blind` is True, automated score, evidence,
+    matched_terms, concepts, and rank are masked to prevent confirmation bias.
     """
     extra_columns = extra_columns or {}
     if ranking is not None:
@@ -250,15 +252,17 @@ def export_sheet(
             row = {
                 "item_id": item.id,
                 "batch": ranked.batch if ranked else idx // max(criteria.batch_size, 1) + 1,
-                "rank": ranked.rank if ranked else idx + 1,
-                "score": ranked.score if ranked else "",
-                "evidence": ranked.evidence if ranked else "",
+                "rank": "" if blind else (ranked.rank if ranked else idx + 1),
+                "score": "" if blind else (ranked.score if ranked else ""),
+                "evidence": "" if blind else (ranked.evidence if ranked else ""),
                 "source": item.source,
                 "kind": item.kind.value,
                 "url": str(item.url),
                 "title": item.title or "",
-                "concepts": ", ".join(item.concepts),
-                "matched_terms": ", ".join(sorted({h.term for h in item.matched_terms})),
+                "concepts": "" if blind else ", ".join(item.concepts),
+                "matched_terms": (
+                    "" if blind else ", ".join(sorted({h.term for h in item.matched_terms}))
+                ),
                 "has_ci": "" if item.tech.has_ci is None else str(item.tech.has_ci).lower(),
                 "contributors": "" if item.tech.contributors is None else item.tech.contributors,
                 "coder": coder,

@@ -1,0 +1,184 @@
+# ==========================================================================
+# Gold set de validação do minerador — Protocolo E2 v2, §10.3 (instrumento V1)
+# ==========================================================================
+# ~50 artefatos conhecidos de literatura cinza sobre teste de RAG e agentes,
+# curados MANUALMENTE e ANTES da coleta. Serve para medir o recall do minerador:
+# `msrkit recall protocols/gold_set.yaml --all`.
+#
+# Campos:
+# - url: repositório (github.com/owner/repo — qualquer item dele conta) ou URL
+#   exata de um post, thread, artigo, card.
+# - tools: ferramentas do gazetteer (ids) que o artefato comprovadamente usa;
+#   mede também o recall do extrator.
+# - note: por que o artefato está no gold set e estrato que representa.
+# ==========================================================================
+version: "1"
+
+entries:
+  # ---- 1. Ferramentas e Frameworks Principais de Avaliação RAG ----
+  - url: https://github.com/explodinggradients/ragas
+    tools: [ragas]
+    note: "Repositório canônico do Ragas (framework de avaliação de RAG)"
+  - url: https://github.com/confident-ai/deepeval
+    tools: [deepeval]
+    note: "Repositório canônico do DeepEval (testes unitários e CI de LLM/RAG)"
+  - url: https://github.com/promptfoo/promptfoo
+    tools: [promptfoo]
+    note: "Repositório canônico do Promptfoo (harness de teste e regressão de prompt/RAG)"
+  - url: https://github.com/truera/trulens
+    tools: [trulens]
+    note: "Repositório canônico do TruLens (avaliação com feedback functions / RAG triad)"
+  - url: https://github.com/Arize-ai/phoenix
+    tools: [arize-phoenix]
+    note: "Repositório do Arize Phoenix (tracing e avaliação de RAG e agentes)"
+  - url: https://github.com/langfuse/langfuse
+    tools: [langfuse]
+    note: "Repositório do Langfuse (observabilidade, tracing e evals de LLM/RAG)"
+  - url: https://github.com/langchain-ai/langsmith-sdk
+    tools: [langsmith]
+    note: "SDK do LangSmith para teste de regressão e avaliação de runs"
+  - url: https://github.com/UKGovernmentBEIS/inspect_ai
+    tools: [inspect-ai]
+    note: "Framework de avaliação e teste de modelos/sistemas da UK AISI"
+  - url: https://github.com/Giskard-AI/giskard
+    tools: [giskard]
+    note: "Giskard (framework de teste de qualidade, alucinações e vieses em LLM)"
+  - url: https://github.com/uptrain-ai/uptrain
+    tools: [uptrain]
+    note: "UpTrain (avaliação contínua e métricas de resposta em RAG)"
+  - url: https://github.com/braintrustdata/autoevals
+    tools: [autoevals]
+    note: "Autoevals da Braintrust (avaliadores heurísticos e baseados em modelo)"
+  - url: https://github.com/relari-ai/continuous-eval
+    tools: [continuous-eval]
+    note: "Continuous-Eval (métrica de avaliação granular para pipelines de RAG)"
+  - url: https://github.com/amazon-science/RAGChecker
+    tools: [ragchecker]
+    note: "RAGChecker (framework de diagnóstico fino de RAG da Amazon)"
+  - url: https://github.com/EleutherAI/lm-evaluation-harness
+    tools: [lm-eval-harness]
+    note: "lm-evaluation-harness da EleutherAI (harness de referência em LLMs)"
+  - url: https://github.com/openai/evals
+    tools: [openai-evals]
+    note: "OpenAI Evals (framework da OpenAI para benchmark e regressão de prompts)"
+
+  # ---- 2. Guardrails, Red Teaming e Segurança ----
+  - url: https://github.com/guardrails-ai/guardrails
+    tools: [guardrails-ai]
+    note: "Guardrails AI (especificação e asserção de restrições em saídas de LLM)"
+  - url: https://github.com/NVIDIA/NeMo-Guardrails
+    tools: [nemo-guardrails]
+    note: "NeMo Guardrails da NVIDIA (trilhos programáveis de controle de fluxo e segurança)"
+  - url: https://github.com/NVIDIA/garak
+    tools: [garak]
+    note: "Garak da NVIDIA (scanner de vulnerabilidades, jailbreaks e injeção de prompt)"
+  - url: https://github.com/Azure/PyRIT
+    tools: [pyrit]
+    note: "PyRIT da Microsoft (Python Risk Identification Tool para red teaming de IA)"
+  - url: https://github.com/protectai/llm-guard
+    tools: [llm-guard]
+    note: "LLM Guard da Protect AI (sanitização e scanner de entrada/saída de LLMs)"
+
+  # ---- 3. Agentes: Benchmarks e Test Harnesses ----
+  - url: https://github.com/THUDM/AgentBench
+    tools: [agentbench]
+    note: "AgentBench da Tsinghua (benchmark multi-ambiente para agentes LLM)"
+  - url: https://github.com/sierra-research/tau-bench
+    tools: [tau-bench]
+    note: "τ-bench da Sierra (benchmark de agentes orientados a objetivos com regras estritas)"
+  - url: https://github.com/SWE-bench/SWE-bench
+    tools: [swe-bench]
+    note: "SWE-bench (benchmark de resolução de issues reais do GitHub por agentes)"
+  - url: https://github.com/ShishirPatil/gorilla
+    tools: [bfcl]
+    note: "Berkeley Function Calling Leaderboard / Gorilla (avaliação de tool calling em agentes)"
+  - url: https://github.com/ethz-spylab/agentdojo
+    tools: [agentdojo]
+    note: "AgentDojo do ETH Zürich (ambiente e benchmark de robustez de agentes sob ataque)"
+  - url: https://github.com/langchain-ai/agentevals
+    tools: [agentevals]
+    note: "AgentEvals da LangChain (avaliação de trajetórias e chamadas de ferramenta de agentes)"
+  - url: https://github.com/web-arena-x/webarena
+    tools: [webarena]
+    note: "WebArena (ambiente dinâmico de teste de agentes em tarefas web)"
+
+  # ---- 4. Recuperação e Índices (Componente Retriever de RAG) ----
+  - url: https://github.com/AmenRa/ranx
+    tools: [ranx]
+    note: "Ranx (benchmark e avaliação de ranking e fusão de ranqueamento em busca)"
+  - url: https://github.com/terrierteam/ir_measures
+    tools: [ir-measures]
+    note: "ir_measures (cálculo padronizado de métricas de recuperação de informação)"
+  - url: https://github.com/cvangysel/pytrec_eval
+    tools: [pytrec-eval]
+    note: "pytrec_eval (bindings Python para trec_eval padrão TREC)"
+  - url: https://github.com/beir-cellar/beir
+    tools: [beir]
+    note: "BEIR (benchmark heterogêneo de avaliação de recuperação densa e esparsa)"
+  - url: https://github.com/embeddings-benchmark/mteb
+    tools: [mteb]
+    note: "MTEB (Massive Text Embedding Benchmark para modelos de embedding e busca)"
+
+  # ---- 5. Repositórios de Aplicação e Sistemas Sob Teste com Suítes Identificáveis ----
+  - url: https://github.com/Addepto/contextcheck
+    tools: [ragas]
+    note: "ContextCheck (ferramenta de teste de RAG da Addepto construída com Ragas)"
+  - url: https://github.com/athina-ai/rag-cookbooks
+    tools: [ragas]
+    note: "Receitas práticas e testes de pipeline RAG da Athina AI"
+  - url: https://github.com/run-llama/llama_index
+    tools: [llamaindex]
+    note: "LlamaIndex (framework com módulos internos de avaliação `llama_index.core.evaluation`)"
+  - url: https://github.com/langchain-ai/langchain
+    tools: [langchain]
+    note: "LangChain (framework com suítes de teste de integração e mocks para chains)"
+  - url: https://github.com/langchain-ai/langgraph
+    tools: [langgraph]
+    note: "LangGraph (framework de agentes cíclicos com testes de estado e checkpointing)"
+  - url: https://github.com/deepset-ai/haystack
+    tools: [haystack]
+    note: "Haystack da Deepset (pipeline com módulos de teste de componentes de pipeline)"
+  - url: https://github.com/microsoft/autogen
+    tools: [autogen]
+    note: "AutoGen da Microsoft (testes de orquestração multiagente e conversa entre agentes)"
+  - url: https://github.com/crewAIInc/crewAI
+    tools: [crewai]
+    note: "CrewAI (testes de delegação de tarefas e execução sequencial/hierárquica de agentes)"
+  - url: https://github.com/stanfordnlp/dspy
+    tools: [dspy]
+    note: "DSPy de Stanford (otimização e asserções programáticas para pipelines LM)"
+  - url: https://github.com/microsoft/semantic-kernel
+    tools: [semantic-kernel]
+    note: "Semantic Kernel da Microsoft (testes de planejamento e plugins de agentes)"
+
+  # ---- 6. Literatura Cinza Discursiva: Comunidades Técnicas e Q&A ----
+  # Hacker News (Discussões fundamentais sobre avaliação de RAG e agentes)
+  - url: https://news.ycombinator.com/item?id=39279569
+    note: "HN Thread: Discussão sobre métricas práticas de RAG evaluation"
+  - url: https://news.ycombinator.com/item?id=38532593
+    note: "HN Thread: Avaliação de alucinações e faithfulness em RAG"
+  - url: https://news.ycombinator.com/item?id=48379087
+    note: "HN Thread: Discussão sobre avaliação de trajetórias e falhas em agentes"
+  - url: https://news.ycombinator.com/item?id=47045551
+    note: "HN Thread: LLM-as-a-judge versus ground truth assertions"
+  - url: https://news.ycombinator.com/item?id=37722744
+    tools: [promptfoo]
+    note: "HN Thread: Lançamento do Promptfoo como harness de teste de LLMs"
+
+  # Stack Overflow / Stack Exchange (Perguntas técnicas sobre oráculos e testes de RAG/agente)
+  - url: https://stackoverflow.com/questions/77409418
+    note: "SO: How to evaluate retrieval performance in a RAG system"
+  - url: https://stackoverflow.com/questions/77622694
+    note: "SO: Automated unit and regression testing for LangChain / LlamaIndex agents"
+  - url: https://datascience.stackexchange.com/questions/124505
+    note: "DS StackExchange: Generating golden datasets for RAG retrieval evaluation"
+
+  # dev.to (Artigos técnicos da comunidade com implementações de teste de RAG)
+  - url: https://dev.to/agentanalytics/langfuse-typescript-rag-evaluation-with-retrieval-and-answer-regression-tests-5fb0
+    tools: [langfuse]
+    note: "dev.to: Avaliação de RAG em TypeScript com testes de regressão e Langfuse"
+  - url: https://dev.to/ramya_perumal/rag-hallucination-detection-2k60
+    note: "dev.to: Detecção de alucinações e avaliação de precisão em RAG"
+  - url: https://dev.to/abdullah_sethi_a9ac97879e/i-built-a-rag-evaluation-tool-that-catches-failures-ragas-misses-2jcc
+    tools: [ragas]
+    note: "dev.to: Estudo comparativo de ferramentas de avaliação de RAG"

@@ -107,8 +107,7 @@ de pesquisa:
 - **Cassettes de busca (V3):** gravar os 5 casos com `MSRKIT_RECORD=1 pytest
   tests/test_cassettes.py` numa máquina com acesso às APIs (o ambiente de desenvolvimento
   só alcança este repositório; o caso `enrich` já está gravado).
-- **Gold set (V1):** curar `protocols/gold_set.yaml` antes da coleta, a partir de
-  `gold_set.example.yaml`.
+- **Gold set (V1):** curado em `protocols/gold_set.yaml` (53 artefatos cobrindo ferramentas de avaliação RAG, benchmarks de agentes, guardrails, métricas de recuperação e discussões da comunidade).
 - **Piloto:** calibrar `--near-threshold`, conferir a semântica OU de `tagged` no Stack
   Exchange, decidir a inclusão do Hacker News e revisar os pesos da ordenação (ADR-027).
 - **Zenodo (V4):** informar os criadores (`--creator`) e confirmar a licença do pacote.

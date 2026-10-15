@@ -395,3 +395,56 @@ def test_units_from_codings_scalar_strings_no_splintering() -> None:
     assert "pytest" in unit.tools
     assert unit.methods == ["fuzzing"]
     assert unit.failure_modes == ["FP1"]
+
+
+def test_frequency_open_vs_anchored_channels() -> None:
+    item_open = _item("r1", "https://github.com/org/repo1")
+    item_open.provenance.query_string = "window:2023-01-01..2026-08-31 RAG testing"
+    det_open = _det("r1", "ragas", "N1")
+
+    item_anchored = _item("r2", "https://github.com/org/repo2")
+    item_anchored.provenance.query_string = '"from ragas import" language:Python'
+    det_anchored = _det("r2", "ragas", "N2")
+
+    units = units_from_detections([item_open, item_anchored], [det_open, det_anchored])
+    assert len(units) == 2
+
+    all_rows = {r.entry: r for r in frequency(units, channel="all")}
+    assert all_rows["ragas"].units == 2
+    assert all_rows["ragas"].open_units == 1
+    assert all_rows["ragas"].anchored_units == 1
+
+    open_rows = {r.entry: r for r in frequency(units, channel="open")}
+    assert open_rows["ragas"].units == 1
+    assert open_rows["ragas"].open_units == 1
+
+    anchored_rows = {r.entry: r for r in frequency(units, channel="anchored")}
+    assert anchored_rows["ragas"].units == 1
+    assert anchored_rows["ragas"].anchored_units == 1
+
+
+def test_cli_frequency_channel_option(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+    item1 = _item("r1", "https://github.com/org/repo1")
+    item1.provenance.query_string = "window:2023-01-01..2026-08-31 RAG testing"
+    ItemStorage(tmp_path).save_items([item1], "run-ch")
+    det1 = Detection(
+        item_id="r1",
+        source="github",
+        entry_id="ragas",
+        entry_type="tool",
+        level="N1",
+        signal="text",
+        location="x",
+        evidence="e",
+    )
+    det_dir = tmp_path / "extract" / "run-ch"
+    det_dir.mkdir(parents=True, exist_ok=True)
+    with open(det_dir / "detections.jsonl", "w", encoding="utf-8") as fh:
+        fh.write(det1.model_dump_json() + "\n")
+
+    runner = CliRunner()
+    r = runner.invoke(app, ["analyze", "frequency", "--run", "run-ch", "--channel", "open"])
+    assert r.exit_code == 0, r.stdout
+    assert "OPEN" in r.stdout
+    assert "Open" in r.stdout

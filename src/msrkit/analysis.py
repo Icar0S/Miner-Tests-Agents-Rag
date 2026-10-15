@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import math
+import re
 from collections import Counter
 from itertools import combinations
 from typing import TYPE_CHECKING, Any, Literal
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 
     from msrkit.coding import CodingRecord
     from msrkit.extract import Detection
+    from msrkit.gazetteer import Gazetteer
     from msrkit.models import Item
 
 Basis = Literal["detections", "coding"]
@@ -56,19 +58,67 @@ class Unit(BaseModel):
     item_ids: list[str] = []
     systems: list[str] = []  # subset of SYSTEMS
     tools: dict[str, str] = {}  # tool id -> best evidence level
+    tool_channels: dict[str, list[str]] = {}  # tool id -> distinct channels: "open", "anchored"
     methods: list[str] = []
     failure_modes: list[str] = []
     oracle: str | None = None
     aggregation: str | None = None
 
 
+def is_anchored_query(
+    query_string: str,
+    tool_id: str,
+    tool_entry: Any = None,
+) -> bool:
+    """Check if query_string was an anchor-directed search specifically targeting tool_id."""
+    if not query_string:
+        return False
+    q_lower = query_string.lower()
+    t_id_lower = tool_id.lower()
+
+    if tool_entry is not None:
+        for r in getattr(tool_entry, "repos", []):
+            if f"repo:{r.lower()}" in q_lower:
+                return True
+        for cfg in getattr(tool_entry, "config_files", []):
+            if cfg.lower() in q_lower:
+                return True
+        for imp in getattr(tool_entry, "python_imports", []):
+            if f"import {imp.lower()}" in q_lower or f"from {imp.lower()} import" in q_lower:
+                return True
+        token_raw = getattr(tool_entry, "search_token", None) or getattr(tool_entry, "id", "")
+        token = str(token_raw or "")
+        token_lower = token.lower()
+        if "path:.github/workflows" in q_lower and re.search(
+            rf"(?<![\w-]){re.escape(token_lower)}(?![\w-])", q_lower
+        ):
+            return True
+
+    if f"import {t_id_lower}" in q_lower or f"from {t_id_lower} import" in q_lower:
+        return True
+    return bool("repo:" in q_lower and t_id_lower in q_lower)
+
+
+def _add_channel(channels_dict: dict[str, list[str]], tool: str, channel: str) -> None:
+    lst = channels_dict.setdefault(tool, [])
+    if channel not in lst:
+        lst.append(channel)
+
+
 def _unit_key(item: Item) -> str:
     return repo_of(item) or item.id
 
 
-def units_from_detections(items: list[Item], detections: list[Detection]) -> list[Unit]:
+def units_from_detections(
+    items: list[Item],
+    detections: list[Detection],
+    gazetteer: Gazetteer | None = None,
+) -> list[Unit]:
     units: dict[str, Unit] = {}
     item_unit: dict[str, str] = {}
+    item_map = {it.id: it for it in items}
+    tools_by_id = {t.id: t for t in gazetteer.tools} if gazetteer else {}
+
     for it in items:
         key = _unit_key(it)
         unit = units.setdefault(key, Unit(id=key, source=it.source))
@@ -84,10 +134,19 @@ def units_from_detections(items: list[Item], detections: list[Detection]) -> lis
             current = unit.tools.get(d.entry_id)
             if current is None or LEVEL_RANK[d.level] > LEVEL_RANK[current]:
                 unit.tools[d.entry_id] = d.level
+
+            item = item_map.get(d.item_id)
+            q_str = item.provenance.query_string if item else ""
+            tool_entry = tools_by_id.get(d.entry_id)
+            channel = "anchored" if is_anchored_query(q_str, d.entry_id, tool_entry) else "open"
+            _add_channel(unit.tool_channels, d.entry_id, channel)
         elif d.entry_id not in unit.methods:
             unit.methods.append(d.entry_id)
     for unit in units.values():
         unit.methods.sort()
+        for t in unit.tools:
+            if t not in unit.tool_channels:
+                unit.tool_channels[t] = ["open"]
     return sorted(units.values(), key=lambda u: u.id)
 
 
@@ -121,13 +180,16 @@ def consensus(records: list[CodingRecord]) -> dict[str, Any]:
 
 
 def units_from_codings(
-    items: list[Item], codings: dict[tuple[str, str], CodingRecord]
+    items: list[Item],
+    codings: dict[tuple[str, str], CodingRecord],
+    gazetteer: Gazetteer | None = None,
 ) -> list[Unit]:
     """One unit per coded item, merged per repository (union of coded values)."""
     by_item: dict[str, list[CodingRecord]] = {}
     for (item_id, _coder), rec in sorted(codings.items()):
         by_item.setdefault(item_id, []).append(rec)
     item_map = {it.id: it for it in items}
+    tools_by_id = {t.id: t for t in gazetteer.tools} if gazetteer else {}
     units: dict[str, Unit] = {}
 
     def _as_list(v: Any) -> list[Any]:
@@ -145,18 +207,26 @@ def units_from_codings(
         unit.item_ids.append(item_id)
         unit.systems = sorted(set(unit.systems) | set(_as_list(values.get(FIELD_SYSTEM))))
         level = values.get(FIELD_LEVEL)
+        q_str = item.provenance.query_string
         for tool in _as_list(values.get(FIELD_TOOLS)):
             current = unit.tools.get(tool)
             if level and (current is None or LEVEL_RANK[level] > LEVEL_RANK[current]):
                 unit.tools[tool] = level
             elif current is None:
                 unit.tools[tool] = "N1"
+            tool_entry = tools_by_id.get(tool)
+            channel = "anchored" if is_anchored_query(q_str, tool, tool_entry) else "open"
+            _add_channel(unit.tool_channels, tool, channel)
         unit.methods = sorted(set(unit.methods) | set(_as_list(values.get(FIELD_METHODS))))
         unit.failure_modes = sorted(
             set(unit.failure_modes) | set(_as_list(values.get(FIELD_FAILURES)))
         )
         unit.oracle = unit.oracle or values.get(FIELD_ORACLE)
         unit.aggregation = unit.aggregation or values.get(FIELD_AGGREGATION)
+    for unit in units.values():
+        for t in unit.tools:
+            if t not in unit.tool_channels:
+                unit.tool_channels[t] = ["open"]
     return sorted(units.values(), key=lambda u: u.id)
 
 
@@ -173,18 +243,32 @@ class FrequencyRow(BaseModel):
     n3: int = 0
     rag: int = 0  # units labelled rag (a hybrid unit counts in both)
     agente: int = 0
+    open_units: int = 0  # units discovered via open/neutral channels
+    anchored_units: int = 0  # units retrieved via anchored/targeted code searches
     sources: dict[str, int] = {}
 
 
-def frequency(units: list[Unit], families: dict[str, str] | None = None) -> list[FrequencyRow]:
+def frequency(
+    units: list[Unit],
+    families: dict[str, str] | None = None,
+    channel: Literal["all", "open", "anchored"] = "all",
+) -> list[FrequencyRow]:
     families = families or {}
     rows: dict[tuple[str, str], FrequencyRow] = {}
     for u in units:
-        entries: list[tuple[str, Literal["tool", "method"], str | None]] = [
-            (t, "tool", lv) for t, lv in u.tools.items()
+        entries: list[tuple[str, Literal["tool", "method"], str | None, list[str]]] = [
+            (t, "tool", lv, u.tool_channels.get(t, ["open"])) for t, lv in u.tools.items()
         ]
-        entries += [(m, "method", None) for m in u.methods]
-        for entry, kind, level in entries:
+        entries += [(m, "method", None, ["open"]) for m in u.methods]
+        for entry, kind, level, channels in entries:
+            is_open = "open" in channels
+            is_anchored = "anchored" in channels
+
+            if channel == "open" and not is_open:
+                continue
+            if channel == "anchored" and not is_anchored:
+                continue
+
             row = rows.setdefault(
                 (kind, entry),
                 FrequencyRow(entry=entry, kind=kind, units=0, family=families.get(entry, "")),
@@ -194,6 +278,10 @@ def frequency(units: list[Unit], families: dict[str, str] | None = None) -> list
                 setattr(row, level.lower(), getattr(row, level.lower()) + 1)
             row.rag += "rag" in u.systems
             row.agente += "agente" in u.systems
+            if is_open:
+                row.open_units += 1
+            if is_anchored:
+                row.anchored_units += 1
             row.sources[u.source] = row.sources.get(u.source, 0) + 1
     return sorted(rows.values(), key=lambda r: (-r.units, r.kind != "tool", r.entry))
 

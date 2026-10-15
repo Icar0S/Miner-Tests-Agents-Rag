@@ -11,10 +11,8 @@ import gzip
 import hashlib
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from msrkit.models import Item, RawItem
 
@@ -27,8 +25,8 @@ class RawStorage:
     Files are stored at: data/raw/{source}/{run_id}/{partition_hash}.jsonl.gz
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
+    def __init__(self, data_dir: Path | str) -> None:
+        self.data_dir = Path(data_dir)
         self._offsets: dict[str, int] = {}
 
     def save_raw(
@@ -111,8 +109,8 @@ class ItemStorage:
     Files are stored at: data/items/{run_id}/items.jsonl
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
+    def __init__(self, data_dir: Path | str) -> None:
+        self.data_dir = Path(data_dir)
 
     def save_items(self, items: list[Item], run_id: str) -> Path:
         """Append normalized items to the run's item file.

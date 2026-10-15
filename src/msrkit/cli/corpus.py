@@ -252,17 +252,32 @@ def stats(
             console.print("[red]✗ No runs found in data directory.[/red]")
             raise typer.Exit(1)
 
-        from msrkit.dedupe import deduplicate
+        consolidated_items = item_storage.read_items("consolidated", prefer_deduped=True)
+        report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+        if consolidated_items and report_path.exists():
+            unique_items = consolidated_items
+            try:
+                rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                total_raw = rep_data.get("input", len(unique_items))
+                num_duplicates = total_raw - len(unique_items)
+            except Exception:
+                total_raw = len(unique_items)
+                num_duplicates = 0
+        else:
+            from msrkit.dedupe import deduplicate
 
-        all_items = []
-        for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
+            all_items = []
+            for r in runs:
+                all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
-        if not all_items:
-            console.print("[yellow]No items found across runs.[/yellow]")
-            return
+            if not all_items:
+                console.print("[yellow]No items found across runs.[/yellow]")
+                return
 
-        unique_items, duplicates = deduplicate(all_items)
+            unique_items, duplicates = deduplicate(all_items, near_threshold=0.85)
+            total_raw = len(all_items)
+            num_duplicates = len(duplicates)
+
         hist_by_source: dict[str, int] = {}
         for it in unique_items:
             hist_by_source[it.source] = hist_by_source.get(it.source, 0) + 1
@@ -288,8 +303,8 @@ def stats(
         )
         console.print(hist_table)
         console.print(
-            f"\n[dim]Total across history: {len(all_items)} raw items collected | "
-            f"{len(duplicates)} duplicates removed[/dim]"
+            f"\n[dim]Total across history: {total_raw} raw items collected | "
+            f"{num_duplicates} duplicates removed[/dim]"
         )
         return
 
@@ -369,14 +384,34 @@ def stats(
     # Historical Consolidated Overview across all runs
     runs = [r for r in item_storage.list_runs() if r != "consolidated"]
     if len(runs) > 1:
-        from msrkit.dedupe import deduplicate
+        consolidated_items = item_storage.read_items("consolidated", prefer_deduped=True)
+        report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+        if consolidated_items and report_path.exists():
+            unique_items = consolidated_items
+            try:
+                rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                total_raw = rep_data.get("input", len(unique_items))
+                duplicates_count = total_raw - len(unique_items)
+            except Exception:
+                total_raw = len(unique_items)
+                duplicates_count = 0
+        else:
+            from msrkit.dedupe import deduplicate
 
-        all_items = []
-        for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
+            all_items = []
+            for r in runs:
+                all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
-        if all_items:
-            unique_items, duplicates = deduplicate(all_items)
+            if all_items:
+                unique_items, duplicates = deduplicate(all_items, near_threshold=0.85)
+                total_raw = len(all_items)
+                duplicates_count = len(duplicates)
+            else:
+                unique_items = []
+                total_raw = 0
+                duplicates_count = 0
+
+        if unique_items:
             hist_by_source = {}
             for it in unique_items:
                 hist_by_source[it.source] = hist_by_source.get(it.source, 0) + 1
@@ -402,8 +437,8 @@ def stats(
             )
             console.print(hist_table)
             console.print(
-                f"[dim]Historical total: {len(all_items)} raw items collected across runs | "
-                f"{len(duplicates)} duplicates removed[/dim]"
+                f"[dim]Historical total: {total_raw} raw items collected across runs | "
+                f"{duplicates_count} duplicates removed[/dim]"
             )
 
 
@@ -450,13 +485,30 @@ def export(
         for r in runs:
             all_items.extend(item_storage.read_items(r, prefer_deduped=False))
         if not raw:
-            from msrkit.dedupe import deduplicate
+            deduped_existing = item_storage.read_items("consolidated", prefer_deduped=True)
+            if deduped_existing:
+                items = deduped_existing
+                report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+                dups_len = 0
+                if report_path.exists():
+                    try:
+                        rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                        dups_len = rep_data.get("input", len(items)) - len(items)
+                    except Exception:
+                        pass
+                console.print(
+                    f"  [green]Total consolidado (deduplicado em disco):[/green] "
+                    f"{len(items)} únicos "
+                    f"([dim]{dups_len} duplicatas removidas[/dim])"
+                )
+            else:
+                from msrkit.dedupe import deduplicate
 
-            items, dups = deduplicate(all_items)
-            console.print(
-                f"  [green]Total consolidado:[/green] {len(items)} únicos "
-                f"([dim]{len(dups)} duplicatas removidas[/dim])"
-            )
+                items, dups = deduplicate(all_items, near_threshold=0.85)
+                console.print(
+                    f"  [green]Total consolidado:[/green] {len(items)} únicos "
+                    f"([dim]{len(dups)} duplicatas removidas[/dim])"
+                )
         else:
             items = all_items
             console.print(f"  [green]Total consolidado bruto:[/green] {len(items)} achados")
