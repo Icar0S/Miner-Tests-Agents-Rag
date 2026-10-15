@@ -111,14 +111,14 @@ def enrich(
                 fh.flush()
     finally:
         adapter.close()
-
-    updated = apply_signals(items, signals)
-    storage.rewrite_items(items, run_id)
-    deduped_path = _cli.DATA_DIR / "items" / run_id / "items_deduped.jsonl"
-    if deduped_path.exists():
-        deduped = storage.read_items(run_id, prefer_deduped=True)
-        apply_signals(deduped, signals)
-        storage.rewrite_items(deduped, run_id, deduped=True)
+        if signals:
+            updated = apply_signals(items, signals)
+            storage.rewrite_items(items, run_id)
+            deduped_path = _cli.DATA_DIR / "items" / run_id / "items_deduped.jsonl"
+            if deduped_path.exists():
+                deduped = storage.read_items(run_id, prefer_deduped=True)
+                apply_signals(deduped, signals)
+                storage.rewrite_items(deduped, run_id, deduped=True)
 
     console.print(
         f"[green]✓ Enriched {len(todo)} repositories ({errors} with errors); "
