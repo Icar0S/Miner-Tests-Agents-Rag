@@ -321,9 +321,7 @@ def analyze_topics(
         total = sum(origin.values())
         disc = origin.get("discovery", 0)
         pct = f"({disc / total:.0%})" if total else "(0%)"
-        console.print(
-            f"Catalog from the discovery pass: {disc}/{total} entries {pct}"
-        )
+        console.print(f"Catalog from the discovery pass: {disc}/{total} entries {pct}")
     console.print(f"[green]✓ Written to {out}[/green]")
 
 

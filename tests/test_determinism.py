@@ -131,4 +131,3 @@ class TestStorageFeatures:
         consolidated = storage.read_items("consolidated", prefer_deduped=True)
         assert len(consolidated) == 2
         assert {it.id for it in consolidated} == {items1[0].id, items2[0].id}
-

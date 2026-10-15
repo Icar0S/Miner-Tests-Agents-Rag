@@ -194,9 +194,7 @@ class ProtocolConfig(BaseModel):
         out: list[tuple[str, str]] = []
         for tool in self._gazetteer.anchors(raw_q.anchor_families):
             repos = (
-                [r.strip() for r in tool.repos if r and r.strip()]
-                if "{repo}" in raw_q.q
-                else [""]
+                [r.strip() for r in tool.repos if r and r.strip()] if "{repo}" in raw_q.q else [""]
             )
             for repo in repos:
                 text = raw_q.q.replace("{anchor}", tool.token()).replace("{repo}", repo)

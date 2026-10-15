@@ -185,7 +185,7 @@ class TestPrismaCommand:
         assert r"reason\_'x'\_with\_underscore" in tikz or r"reason\_" in tikz
 
         mermaid = render_mermaid(flow)
-        assert '"quote_\'source\'"' not in mermaid  # inner double quotes replaced by single
+        assert "\"quote_'source'\"" not in mermaid  # inner double quotes replaced by single
         assert "reason_'x'_with_underscore" in mermaid
 
     def test_build_flow_non_string_criteria_met(self, tmp_path: Path) -> None:
@@ -214,4 +214,3 @@ class TestPrismaCommand:
         )
         assert flow.excluded == 1
         assert "E1" in flow.exclusion_reasons
-

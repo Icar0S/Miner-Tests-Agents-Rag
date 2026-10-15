@@ -195,12 +195,8 @@ def _mermaid_escape(text: str) -> str:
 def render_mermaid(flow: PrismaFlow) -> str:
     dup = "n/a" if flow.duplicates is None else str(sum(flow.duplicates.values()))
     filtered = sum(flow.filtered.values())
-    per_source = "<br/>".join(
-        f"{_mermaid_escape(s)}: {n}" for s, n in flow.identified.items()
-    )
-    excl = "<br/>".join(
-        f"{_mermaid_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items()
-    )
+    per_source = "<br/>".join(f"{_mermaid_escape(s)}: {n}" for s, n in flow.identified.items())
+    excl = "<br/>".join(f"{_mermaid_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items())
     return "\n".join(
         [
             "flowchart TD",

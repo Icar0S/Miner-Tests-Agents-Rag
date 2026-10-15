@@ -190,8 +190,7 @@ class TestAgreementCommands:
         # Fill resolution and apply with `msrkit resolve`
         dis_path = tmp_path / "coding/run-k/disagreements.csv"
         header = (
-            "item_id;dimension;coder_a;value_a;coder_b;value_b;"
-            "consensus_value;resolved_by;reason\n"
+            "item_id;dimension;coder_a;value_a;coder_b;value_b;consensus_value;resolved_by;reason\n"
         )
         dis_path.write_text(
             f"{header}"

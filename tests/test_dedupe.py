@@ -59,8 +59,7 @@ class TestCanonicalizeUrl:
 
     def test_git_suffix_stripping(self) -> None:
         assert (
-            canonicalize_url("https://github.com/owner/repo.git")
-            == "https://github.com/owner/repo"
+            canonicalize_url("https://github.com/owner/repo.git") == "https://github.com/owner/repo"
         )
 
     def test_git_forge_case_insensitivity(self) -> None:

@@ -280,4 +280,3 @@ def test_empty_repo_handling(monkeypatch):
     enricher = GitHubEnricher(adapter)
     sig = enricher.enrich("acme/empty")
     assert sig.error == "empty repository (no default branch)"
-

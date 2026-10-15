@@ -367,11 +367,7 @@ def screen_interactive(
             clean_choice = crit_choice.upper().strip()
             if clean_choice.startswith("E") and len(clean_choice) > 1:
                 clean_choice = clean_choice[1:]
-            crit_id = (
-                f"E{clean_choice}"
-                if clean_choice in ("1", "2", "3", "4", "5", "6")
-                else "E1"
-            )
+            crit_id = f"E{clean_choice}" if clean_choice in ("1", "2", "3", "4", "5", "6") else "E1"
             recorded.append(
                 ScreeningDecision(
                     item_id=it.id,
@@ -488,9 +484,7 @@ app.command(name="review-tui", help="Launch full-screen Textual TUI for literatu
 )
 
 
-coding_app = typer.Typer(
-    help="Extraction form (Annex A) and quality (§9): export, import, status."
-)
+coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
 
 
 app.add_typer(coding_app, name="coding")
@@ -727,10 +721,19 @@ def agreement(
         values.setdefault((item_id, coder), {})["screening"] = d.decision
     with open(out_dir / "disagreements.csv", "w", encoding="utf-8-sig", newline="") as fh:
         writer = csv.writer(fh, delimiter=";")
-        writer.writerow([
-            "item_id", "dimension", "coder_a", "value_a", "coder_b", "value_b",
-            "consensus_value", "resolved_by", "reason",
-        ])
+        writer.writerow(
+            [
+                "item_id",
+                "dimension",
+                "coder_a",
+                "value_a",
+                "coder_b",
+                "value_b",
+                "consensus_value",
+                "resolved_by",
+                "reason",
+            ]
+        )
         for r in results:
             a, b = r.coders
             for item_id in r.disagreements:
@@ -821,9 +824,7 @@ def resolve_disagreements_cmd(
             item_vals = coding_resolutions.setdefault((item_id, row_resolver), {})
             if "," in consensus_val or ";" in consensus_val:
                 item_vals[dimension] = [
-                    v.strip()
-                    for v in consensus_val.replace(";", ",").split(",")
-                    if v.strip()
+                    v.strip() for v in consensus_val.replace(";", ",").split(",") if v.strip()
                 ]
             elif consensus_val.lower() in ("true", "sim", "yes", "s", "1"):
                 item_vals[dimension] = True
@@ -976,6 +977,6 @@ def coding_tui(
 
 
 # Top-level convenient alias
-app.command(
-    name="coding-tui", help="Launch full-screen Textual TUI for Annex A data extraction."
-)(coding_tui)
+app.command(name="coding-tui", help="Launch full-screen Textual TUI for Annex A data extraction.")(
+    coding_tui
+)

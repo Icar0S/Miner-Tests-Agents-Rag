@@ -591,11 +591,7 @@ def export(
                         t = (
                             hit.term
                             if hasattr(hit, "term")
-                            else (
-                                hit.get("term", str(hit))
-                                if isinstance(hit, dict)
-                                else str(hit)
-                            )
+                            else (hit.get("term", str(hit)) if isinstance(hit, dict) else str(hit))
                         )
                         if t:
                             terms_set.add(t)

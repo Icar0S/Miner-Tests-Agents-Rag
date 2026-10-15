@@ -302,9 +302,7 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
         from msrkit.cli.evidence import extract
 
         extract(run_id=latest_run, protocol=protocol_path, top=10, verbose=False)
-        console.print(
-            "[bold green]✓ Termos casados e fila ordenada por relevância![/bold green]"
-        )
+        console.print("[bold green]✓ Termos casados e fila ordenada por relevância![/bold green]")
     except Exception as e:
         console.print(f"[dim](Nota na extração automática: {e})[/dim]")
 
@@ -340,9 +338,7 @@ def _select_screening_run_id() -> str | None:
 
     storage = ItemStorage(_cli.DATA_DIR)
     latest_run = _get_latest_run_id()
-    latest_count = (
-        len(storage.read_items(latest_run, prefer_deduped=True)) if latest_run else 0
-    )
+    latest_count = len(storage.read_items(latest_run, prefer_deduped=True)) if latest_run else 0
     consolidated_count = len(storage.read_items("consolidated", prefer_deduped=True))
 
     if not latest_run and consolidated_count == 0:
@@ -380,9 +376,7 @@ def _select_screening_run_id() -> str | None:
         for idx, r in enumerate(runs, 1):
             count = len(storage.read_items(r, prefer_deduped=True))
             console.print(f"  [cyan]{idx}[/cyan] - {r} ({count} itens)")
-        idx_choice = Prompt.ask(
-            "\n[bold green]Digite o número da coleta[/bold green]", default="1"
-        )
+        idx_choice = Prompt.ask("\n[bold green]Digite o número da coleta[/bold green]", default="1")
         try:
             chosen_idx = int(idx_choice)
             if 1 <= chosen_idx <= len(runs):
@@ -482,9 +476,7 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
     )
 
     while True:
-        console.print(
-            "\n[bold cyan]─── 📈 Análises Estatísticas do Estudo (A1–A6) ───[/bold cyan]"
-        )
+        console.print("\n[bold cyan]─── 📈 Análises Estatísticas do Estudo (A1–A6) ───[/bold cyan]")
         console.print(f"[dim]Base de dados ativa: {run_id}[/dim]\n")
         console.print(
             "  [bold cyan]1[/bold cyan] - 🚀 [bold]Todas as Análises em Lote (A1–A6)[/bold]"
@@ -529,9 +521,7 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
                 console.print(f"[yellow]Nota em A4: {e}[/yellow]")
 
         if sub in ("1", "5"):
-            console.print(
-                "\n[bold cyan]Executando Comparação RAG vs Agentes (A6)...[/bold cyan]"
-            )
+            console.print("\n[bold cyan]Executando Comparação RAG vs Agentes (A6)...[/bold cyan]")
             try:
                 analyze_compare(run_id=run_id, basis="detections", protocol=protocol_path)
             except Exception as e:
@@ -549,8 +539,7 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
 
         if sub == "1":
             console.print(
-                "\n[bold green]✓ Bateria de análises concluída! "
-                "CSVs em data/reports/[/bold green]"
+                "\n[bold green]✓ Bateria de análises concluída! CSVs em data/reports/[/bold green]"
             )
             break
 

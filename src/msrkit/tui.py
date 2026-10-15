@@ -246,9 +246,7 @@ class ScreeningApp(App[None]):
             tech_parts.append(f"⑂ {it.engagement.forks} forks")
         if it.tech.has_ci is not None:
             ci_str = (
-                "[green]CI/CD: [✓ Sim][/green]"
-                if it.tech.has_ci
-                else "[dim]CI/CD: [✗ Não][/dim]"
+                "[green]CI/CD: [✓ Sim][/green]" if it.tech.has_ci else "[dim]CI/CD: [✗ Não][/dim]"
             )
             tech_parts.append(ci_str)
         if it.tech.has_tests is not None:
@@ -394,9 +392,7 @@ class CodingApp(App[None]):
     """Interactive full-screen TUI for qualitative data extraction (Annex A Coding)."""
 
     TITLE = "MSR-Kit — Extração Técnica de Dados (Annex A Coding)"
-    SUB_TITLE = (
-        "Preencha as dimensões do protocolo e pressione [G / Enter] para Gravar, [Q] Sair"
-    )
+    SUB_TITLE = "Preencha as dimensões do protocolo e pressione [G / Enter] para Gravar, [Q] Sair"
 
     BINDINGS = [
         Binding("g", "save_and_advance", "Gravar (G)", priority=True),
@@ -612,9 +608,7 @@ class CodingApp(App[None]):
             tech_parts.append(f"⑂ {it.engagement.forks} forks")
         if it.tech.has_ci is not None:
             ci_str = (
-                "[green]CI/CD: [✓ Sim][/green]"
-                if it.tech.has_ci
-                else "[dim]CI/CD: [✗ Não][/dim]"
+                "[green]CI/CD: [✓ Sim][/green]" if it.tech.has_ci else "[dim]CI/CD: [✗ Não][/dim]"
             )
             tech_parts.append(ci_str)
         if it.tech.has_tests is not None:
@@ -640,9 +634,7 @@ class CodingApp(App[None]):
             sug_parts.append(f"Ferramentas: [bold]{sug['auto_ferramentas']}[/bold]")
         sug_lbl = self.query_one("#coding-suggestions", Label)
         if sug_parts:
-            sug_text = (
-                "[bold yellow]Sugestões Automáticas:[/bold yellow] " + " | ".join(sug_parts)
-            )
+            sug_text = "[bold yellow]Sugestões Automáticas:[/bold yellow] " + " | ".join(sug_parts)
             sug_lbl.update(sug_text)
         else:
             sug_lbl.update("")

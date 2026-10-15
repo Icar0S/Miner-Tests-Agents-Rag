@@ -1323,4 +1323,3 @@ class TestSearchLoopsAndQueryBuilding:
         resp = adapter._governed_get("https://api.github.com/test")
         assert resp.status_code == 200
         assert call_count == 2
-

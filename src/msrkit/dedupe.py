@@ -84,9 +84,7 @@ def canonicalize_url(url: str) -> str:
             path = path[:-4]
         parts = path.split("/")
         if len(parts) >= 3:
-            if host == "huggingface.co" and parts[1].lower() in (
-                "datasets", "spaces", "models"
-            ):
+            if host == "huggingface.co" and parts[1].lower() in ("datasets", "spaces", "models"):
                 if len(parts) >= 4:
                     parts[2] = parts[2].lower()
                     parts[3] = parts[3].lower()

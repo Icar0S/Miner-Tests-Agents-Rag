@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from msrkit.models import Item, RawItem
 
@@ -300,23 +300,13 @@ class DuckDBStorage:
                         item.author_handle,
                         (
                             item.created_at.isoformat()
-                            if item.created_at is not None
-                            and hasattr(item.created_at, "isoformat")
-                            else (
-                                str(item.created_at)
-                                if item.created_at is not None
-                                else None
-                            )
+                            if item.created_at is not None and hasattr(item.created_at, "isoformat")
+                            else (str(item.created_at) if item.created_at is not None else None)
                         ),
                         (
                             item.updated_at.isoformat()
-                            if item.updated_at is not None
-                            and hasattr(item.updated_at, "isoformat")
-                            else (
-                                str(item.updated_at)
-                                if item.updated_at is not None
-                                else None
-                            )
+                            if item.updated_at is not None and hasattr(item.updated_at, "isoformat")
+                            else (str(item.updated_at) if item.updated_at is not None else None)
                         ),
                         item.provenance.run_id,
                         item.provenance.adapter,

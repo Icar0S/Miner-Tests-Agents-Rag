@@ -62,7 +62,6 @@ def effective_core_rate_limit() -> RateLimit:
     return RateLimit(requests=55, per_seconds=3600, burst=2)
 
 
-
 class RepoSignals(BaseModel):
     """What the enricher learned about one repository."""
 

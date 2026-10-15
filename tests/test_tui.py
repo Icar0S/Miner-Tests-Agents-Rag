@@ -265,9 +265,7 @@ def test_screening_app_exclude_and_bounds_safety(
     asyncio.run(_run())
 
 
-def test_coding_app_tools_deduplication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_coding_app_tools_deduplication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
 
     async def _run() -> None:
