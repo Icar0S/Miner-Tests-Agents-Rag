@@ -242,3 +242,23 @@ class TestAgreementCommands:
         res = agreement(FORM, codings={}, decisions=decisions)
         assert len(res) == 1
         assert res[0].coders == ("ana", "bia")
+
+    def test_multi_field_agreement_with_scalar_strings_and_semicolons(self) -> None:
+        codings = {
+            ("i1", "ana"): _rec("i1", "ana", modos="FP1; AF1"),
+            ("i1", "bia"): _rec("i1", "bia", modos=["FP1", "AF1"]),
+            ("i2", "ana"): _rec("i2", "ana", modos="FP1"),
+            ("i2", "bia"): _rec("i2", "bia", modos=["FP1"]),
+        }
+        res = agreement(FORM, codings=codings, dimensions=["modos"])
+        assert len(res) == 1
+        pair = res[0]
+        assert pair.dimension == "modos"
+        assert pair.percent == 1.0
+        assert set(pair.per_value.keys()) == {"FP1", "AF1"}
+        assert len(pair.disagreements) == 0
+
+    def test_double_sample_distinct_ids(self) -> None:
+        items = [_item(1), _item(1), _item(2), _item(3)]
+        sample = double_sample(items, rate=0.5, seed=42)
+        assert len(sample) == len(set(sample))

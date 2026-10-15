@@ -408,6 +408,8 @@ def screen_tui(
     if target_batch is not None:
         pending = [it for it in pending if ranking[it.id].batch == target_batch]
 
+    pending.sort(key=lambda it: ranking[it.id].rank)
+
     if not pending:
         console.print(
             f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"

@@ -25,6 +25,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 import unicodedata
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -234,10 +235,10 @@ def _parse(
     field: CodingField, raw: str, allowed: list[str], problems: list[str], where: str
 ) -> Any:
     text = raw.strip()
+    if not text:
+        return [] if field.type == "multi" else None
     if field.type == "bool":
         folded = _fold(text)
-        if not folded:
-            return None
         if folded in TRUE_MARKS:
             return True
         if folded in FALSE_MARKS:
@@ -247,11 +248,15 @@ def _parse(
     if field.type == "text":
         if field.max_length and len(text) > field.max_length:
             problems.append(f"{where}: {field.name} longer than {field.max_length} characters")
-        return text or None
+        return text
     folded_allowed = {_fold(v): v for v in allowed}
-    parts = [text] if field.type == "enum" else text.replace("|", ",").split(",")
+    parts = (
+        [text]
+        if field.type == "enum"
+        else [p.strip() for p in re.split(r"[,;|]", text) if p.strip()]
+    )
     values: list[str] = []
-    for part in (p.strip() for p in parts):
+    for part in parts:
         if not part:
             continue
         match = folded_allowed.get(_fold(part))
