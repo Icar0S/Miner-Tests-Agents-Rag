@@ -265,3 +265,11 @@ class TestFlexibleMatching:
         assert discards[0]["title"] == "Cooking with Cast Iron"
         assert discards[0]["reason"] == "no_term_match"
         assert adapter.pop_discards() == []
+
+    def test_empty_or_whitespace_term_is_ignored(self) -> None:
+        assert match_terms(["", "   "], title="Hello world") == []
+
+    def test_tags_with_none_or_non_string(self) -> None:
+        hits = match_terms(["rag"], tags=["rag", None, 123])  # type: ignore[list-item]
+        assert len(hits) == 1
+        assert hits[0].field == "tags"

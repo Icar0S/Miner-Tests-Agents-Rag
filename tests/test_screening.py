@@ -322,3 +322,14 @@ def test_final_decisions_fuzzy_consensus_coder() -> None:
     )
     decisions = {("i1", "ana"): dec1, ("i1", "bia"): dec2, ("i1", "supervisor_joao"): dec3}
     assert final_decisions(decisions)["i1"] == "include"
+
+
+def test_is_consensus_coder_detection() -> None:
+    from msrkit.screening import is_consensus_coder
+
+    assert is_consensus_coder("consenso")
+    assert is_consensus_coder("supervisor_ana")
+    assert is_consensus_coder("terceiro_revisor")
+    assert is_consensus_coder("tiebreaker")
+    assert not is_consensus_coder("ana")
+    assert not is_consensus_coder("joao_silva")

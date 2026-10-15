@@ -278,3 +278,16 @@ class TestAdapterPartitioning:
         flagged = [p for p in parts if p.truncated]
         assert len(flagged) == 1
         assert flagged[0].since == flagged[0].until == date(2024, 5, 1)
+
+    def test_partition_propagates_estimated_total(self) -> None:
+        q = Query(
+            source="github",
+            terms=["rag"],
+            since=date(2024, 1, 1),
+            until=date(2024, 1, 10),
+        )
+        res = partition(q, max_results=50, estimate_fn=lambda _: 30)
+        assert len(res) == 1
+        part_q, truncated = res[0]
+        assert not truncated
+        assert part_q.estimated_total == 30

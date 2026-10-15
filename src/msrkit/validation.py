@@ -63,9 +63,16 @@ def load_gold(path: str | Path) -> GoldSet:
 
 def _gold_repo(url: str) -> str | None:
     parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host != "github.com":
+        return None
     parts = [p for p in parsed.path.split("/") if p]
-    if (parsed.hostname or "").lower() == "github.com" and len(parts) == 2:
-        return f"{parts[0]}/{parts[1]}".lower()
+    if len(parts) >= 2:
+        owner = parts[0].lower()
+        repo = parts[1][:-4].lower() if parts[1].endswith(".git") else parts[1].lower()
+        return f"{owner}/{repo}"
     return None
 
 

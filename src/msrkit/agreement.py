@@ -133,7 +133,7 @@ def agreement(
     dimensions: list[str] | None = None,
 ) -> list[PairAgreement]:
     """κ per dimension and coder pair. `dimensions` restricts the form fields."""
-    from msrkit.screening import CONSENSUS_CODERS
+    from msrkit.screening import is_consensus_coder
 
     results: list[PairAgreement] = []
 
@@ -141,9 +141,7 @@ def agreement(
         by_coder: dict[str, dict[str, Any]] = {}
         for (item_id, coder), d in decisions.items():
             by_coder.setdefault(coder, {})[item_id] = d.decision
-        active_coders = [
-            c for c in sorted(by_coder) if c.strip().lower() not in CONSENSUS_CODERS
-        ]
+        active_coders = [c for c in sorted(by_coder) if not is_consensus_coder(c)]
         coder_list = active_coders if len(active_coders) >= 2 else sorted(by_coder)
         for a, b in combinations(coder_list, 2):
             pair = _pair("screening", (a, b), by_coder[a], by_coder[b], multi=False)
@@ -156,7 +154,7 @@ def agreement(
     coded: dict[str, dict[str, dict[str, Any]]] = {}  # coder -> item -> values
     for (item_id, coder), rec in codings.items():
         coded.setdefault(coder, {})[item_id] = rec.values
-    active_coded = [c for c in sorted(coded) if c.strip().lower() not in CONSENSUS_CODERS]
+    active_coded = [c for c in sorted(coded) if not is_consensus_coder(c)]
     coded_list = active_coded if len(active_coded) >= 2 else sorted(coded)
     for f in fields:
         for a, b in combinations(coded_list, 2):

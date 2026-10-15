@@ -138,14 +138,17 @@ def match_terms(
     """
     hits: list[TermHit] = []
 
+    clean_tags = " ".join(str(t) for t in tags if t is not None) if tags else None
     fields: list[tuple[Literal["title", "body", "tags", "path"], str | None]] = [
         ("title", title),
         ("body", body),
-        ("tags", " ".join(tags) if tags else None),
+        ("tags", clean_tags if clean_tags else None),
         ("path", path),
     ]
 
     for term in terms:
+        if not term or not term.strip():
+            continue
         pattern = _build_pattern(term, mode)
 
         for field_name, field_value in fields:

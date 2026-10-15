@@ -263,6 +263,11 @@ class TestCiCodeHits:
         dets = Extractor(GAZ).run([self._hit()], thin)
         assert {d.level for d in dets if d.signal == "ci"} == {"N2"}
 
+    def test_promoted_to_n3_with_mixed_case_signals_repo(self) -> None:
+        signals = {"Acme/App": _sig(months=3, contributors=4)}
+        dets = Extractor(GAZ).run([self._hit()], signals)
+        assert ("deepeval", "N3") in {(d.entry_id, d.level) for d in dets if d.signal == "ci"}
+
     def test_non_workflow_code_hit_is_not_ci(self) -> None:
         hit = _item(
             "https://github.com/acme/app/blob/main/src/x.py",

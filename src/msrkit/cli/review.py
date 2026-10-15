@@ -746,7 +746,7 @@ def resolve_disagreements_cmd(
             skipped_unresolved += 1
             continue
 
-        if dimension == "screening":
+        if dimension.lower() in ("screening", "triagem"):
             norm_dec = consensus_val.lower()
             norm_dec = DECISION_ALIASES.get(norm_dec, norm_dec)
             if norm_dec not in ("include", "exclude", "uncertain"):

@@ -214,3 +214,31 @@ class TestAgreementCommands:
         recs = [rec for (it, _c), rec in latest_cod.items() if it == target]
         res_values = compute_consensus(recs)
         assert res_values.get("nivel_evidencia") == "N2"
+
+    def test_agreement_excludes_fuzzy_consensus_coders(self) -> None:
+        decisions = {
+            ("i1", "ana"): ScreeningDecision(
+                item_id="i1",
+                coder="ana",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+            ("i1", "bia"): ScreeningDecision(
+                item_id="i1",
+                coder="bia",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+            ("i1", "supervisor_carlos"): ScreeningDecision(
+                item_id="i1",
+                coder="supervisor_carlos",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+        }
+        res = agreement(FORM, codings={}, decisions=decisions)
+        assert len(res) == 1
+        assert res[0].coders == ("ana", "bia")

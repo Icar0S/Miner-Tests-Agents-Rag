@@ -72,7 +72,8 @@ def partition(
 
     # Unknown or within limit → single partition
     if estimated is None or estimated <= max_results:
-        return [(q, False)]
+        q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+        return [(q_out, False)]
 
     # Guard against infinite recursion
     if depth >= max_depth:
@@ -83,7 +84,8 @@ def partition(
             estimated,
             max_results,
         )
-        return [(q, True)]
+        q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+        return [(q_out, True)]
 
     # Try splitting by date window first
     if q.since is not None and q.until is not None:
@@ -131,7 +133,8 @@ def partition(
         estimated,
         max_results,
     )
-    return [(q, True)]
+    q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+    return [(q_out, True)]
 
 
 def merge_date_ranges(queries: list[Query]) -> tuple[date | None, date | None]:

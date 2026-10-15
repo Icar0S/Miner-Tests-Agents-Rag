@@ -116,6 +116,12 @@ class TestBuild:
         with zipfile.ZipFile(out) as zf:
             assert {i.date_time for i in zf.infolist()} == {(2026, 1, 1, 0, 0, 0)}
 
+    def test_empty_items_produces_empty_corpus_file(self, tmp_path: Path) -> None:
+        data = tmp_path / "data"
+        out, _ = build_package(data, "r", tmp_path / "b.zip", [], {}, None, salt="s")
+        files = _zip(out)
+        assert files["corpus/items.jsonl"] == b""
+
 
 class TestPackageCommand:
     def test_package(self, tmp_path: Path, monkeypatch) -> None:

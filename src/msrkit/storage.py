@@ -161,7 +161,13 @@ class ItemStorage:
 
                 unique_items, _ = deduplicate(all_items)
                 return unique_items
-            return all_items
+            seen_ids: set[str] = set()
+            unique_by_id: list[Item] = []
+            for it in all_items:
+                if it.id not in seen_ids:
+                    seen_ids.add(it.id)
+                    unique_by_id.append(it)
+            return unique_by_id
         else:
             return []
 
@@ -297,17 +303,31 @@ class DuckDBStorage:
                         (
                             item.created_at.isoformat()
                             if item.created_at is not None
-                            else None
+                            and hasattr(item.created_at, "isoformat")
+                            else (
+                                str(item.created_at)
+                                if item.created_at is not None
+                                else None
+                            )
                         ),
                         (
                             item.updated_at.isoformat()
                             if item.updated_at is not None
-                            else None
+                            and hasattr(item.updated_at, "isoformat")
+                            else (
+                                str(item.updated_at)
+                                if item.updated_at is not None
+                                else None
+                            )
                         ),
                         item.provenance.run_id,
                         item.provenance.adapter,
                         item.provenance.query_string,
-                        item.provenance.fetched_at.isoformat(),
+                        (
+                            item.provenance.fetched_at.isoformat()
+                            if hasattr(item.provenance.fetched_at, "isoformat")
+                            else str(item.provenance.fetched_at)
+                        ),
                         data_json,
                     ],
                 )

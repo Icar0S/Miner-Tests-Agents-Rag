@@ -97,3 +97,21 @@ class TestTemplates:
         result = CliRunner().invoke(app, ["validate", str(proto)])
         assert result.exit_code == 1
         assert "no gazetteer" in result.stdout
+
+
+def test_catalog_origin_counts() -> None:
+    from msrkit.discovery import catalog_origin
+    from msrkit.gazetteer import Gazetteer
+
+    gaz = Gazetteer.model_validate(
+        {
+            "version": "1",
+            "tools": [
+                {"id": "a", "name": "A", "family": "f", "origin": "seed"},
+                {"id": "b", "name": "B", "family": "f", "origin": "discovery"},
+                {"id": "c", "name": "C", "family": "f", "origin": "seed"},
+            ],
+        }
+    )
+    counts = catalog_origin(gaz)
+    assert counts == {"seed": 2, "discovery": 1}

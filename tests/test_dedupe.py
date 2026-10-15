@@ -69,6 +69,16 @@ class TestCanonicalizeUrl:
             == "https://github.com/langchain-ai/langchain"
         )
 
+    def test_huggingface_dataset_canonicalization(self) -> None:
+        assert (
+            canonicalize_url("https://HuggingFace.co/datasets/Owner/MyDataset.git")
+            == "https://huggingface.co/datasets/owner/mydataset"
+        )
+        assert (
+            canonicalize_url("https://huggingface.co/spaces/Owner/MySpace")
+            == "https://huggingface.co/spaces/owner/myspace"
+        )
+
 
 class TestContentHash:
     """Tests for content-based hashing."""

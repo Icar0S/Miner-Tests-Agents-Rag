@@ -85,6 +85,25 @@ CONSENSUS_CODERS = {
     "desempate",
 }
 
+
+def is_consensus_coder(coder: str) -> bool:
+    """Check if coder name indicates a consensus / tie-breaker / supervisor role."""
+    c_clean = coder.strip().lower()
+    return c_clean in CONSENSUS_CODERS or any(
+        kw in c_clean
+        for kw in (
+            "consenso",
+            "consensus",
+            "tiebreaker",
+            "tie-breaker",
+            "terceiro",
+            "supervisor",
+            "resolver",
+            "desempate",
+        )
+    )
+
+
 TRUE_MARKS = {"x", "s", "sim", "y", "yes", "1", "true", "✓"}
 DELIMITER = ";"
 
@@ -371,20 +390,7 @@ def final_decisions(latest: dict[tuple[str, str], ScreeningDecision]) -> dict[st
         # Check if there is an explicit consensus/tie-breaker decision
         consensus_dec = None
         for coder, dec in coder_decisions.items():
-            c_clean = coder.strip().lower()
-            if c_clean in CONSENSUS_CODERS or any(
-                kw in c_clean
-                for kw in (
-                    "consenso",
-                    "consensus",
-                    "tiebreaker",
-                    "tie-breaker",
-                    "terceiro",
-                    "supervisor",
-                    "resolver",
-                    "desempate",
-                )
-            ):
+            if is_consensus_coder(coder):
                 consensus_dec = dec
                 break
         if consensus_dec is not None:

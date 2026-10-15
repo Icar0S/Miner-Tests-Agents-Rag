@@ -96,7 +96,7 @@ class PackageBuilder:
         else:
             lines = path.read_text(encoding="utf-8").splitlines()
             text = "\n".join(transform(ln) for ln in lines if ln.strip())
-            self.add_bytes(arcname, (text + "\n").encode("utf-8"))
+            self.add_bytes(arcname, (text + "\n" if text else "").encode("utf-8"))
         return True
 
     def add_tree(self, prefix: str, root: Path) -> int:
@@ -207,7 +207,10 @@ def build_package(
                    ensure_ascii=False)
         for it in items
     ]  # fmt: skip
-    b.add_bytes("corpus/items.jsonl", ("\n".join(lines) + "\n").encode("utf-8"))
+    b.add_bytes(
+        "corpus/items.jsonl",
+        (("\n".join(lines) + "\n") if lines else "").encode("utf-8"),
+    )
     b.add_file("corpus/dedupe_report.json", data_dir / "items" / run_id / "dedupe_report.json")
 
     b.add_file(
