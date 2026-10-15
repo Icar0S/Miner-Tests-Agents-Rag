@@ -53,6 +53,16 @@ MAX_FILE_BYTES = 200_000
 CORE_RATE_LIMIT = RateLimit(requests=4500, per_seconds=3600, burst=10)
 
 
+def effective_core_rate_limit() -> RateLimit:
+    """Core rate limit: 4,500 req/h with GITHUB_TOKEN, 55 req/h without token (burst 2)."""
+    import os
+
+    if os.environ.get("GITHUB_TOKEN"):
+        return CORE_RATE_LIMIT
+    return RateLimit(requests=55, per_seconds=3600, burst=2)
+
+
+
 class RepoSignals(BaseModel):
     """What the enricher learned about one repository."""
 

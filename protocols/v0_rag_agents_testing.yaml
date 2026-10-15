@@ -61,14 +61,20 @@ terms_by_language:
   pt:
     - "teste de RAG"
     - "avaliação de RAG"
+    - "avaliacao de RAG"
     - "teste de LLM"
     - "avaliação de LLM"
+    - "avaliacao de LLM"
     - "LLM como juiz"
     - "teste de agentes"
     - "avaliação de agentes"
+    - "avaliacao de agentes"
     - "dataset de referência"
+    - "dataset de referencia"
     - "teste de alucinação"
+    - "teste de alucinacao"
     - "regressão de prompt"
+    - "regressao de prompt"
 
 # ---- Grupos de conceito (§3.1, RQ5) ----
 # Cada item recebe os conceitos cujo léxico casou. Rótulo de sistema do E2:

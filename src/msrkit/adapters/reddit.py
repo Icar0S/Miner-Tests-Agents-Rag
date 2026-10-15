@@ -240,8 +240,7 @@ class RedditAdapter(BaseAdapter):
             kind=ItemKind.POST,
             url=url,  # type: ignore[arg-type]
             title=p.get("title"),
-            body=None,  # metadata_only
-            body_hash=None,
+            body=p.get("selftext") or None,
             author_handle=p.get("author"),
             created_at=created_at,
             engagement=Engagement(

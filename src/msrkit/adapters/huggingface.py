@@ -101,6 +101,12 @@ class HuggingFaceAdapter(BaseAdapter):
         """HF API does not provide result count estimates."""
         return None
 
+    def partition(self, q: Query) -> list[Query]:
+        """Split multi-term queries so each term runs as its own query."""
+        from msrkit.partition import split_by_term
+
+        return split_by_term(q)
+
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search models, datasets, and spaces."""
         kinds = q.extra.get("kinds", ["models", "datasets", "spaces"])
@@ -181,13 +187,14 @@ class HuggingFaceAdapter(BaseAdapter):
 
         native_key = f"{hf_kind}:{item_id}" if hf_kind != "models" else str(item_id)
 
+        desc = p.get("description")
         return Item(
             id=Item.make_id(self.name, native_key),
             source=self.name,
             kind=kind,
             url=url,  # type: ignore[arg-type]
             title=item_id,
-            body=None,
+            body=desc or None,
             author_handle=p.get("author"),
             created_at=created_at,
             updated_at=updated_at,

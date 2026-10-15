@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from msrkit.adapters.base import BaseAdapter
@@ -1236,3 +1237,90 @@ class TestSearchLoopsAndQueryBuilding:
         bsky_adapter._session_token = "dummy"
         q_bsky = Query(source="bluesky", terms=["rag"], limit=0)
         assert list(bsky_adapter.search(q_bsky)) == []
+
+    def test_stackexchange_partition_splits_by_term(self) -> None:
+        adapter = StackExchangeAdapter()
+        q = Query(source="stackexchange", terms=["term1", "term2", "term3"])
+        parts = adapter.partition(q)
+        assert len(parts) == 3
+        assert [p.terms for p in parts] == [["term1"], ["term2"], ["term3"]]
+
+    def test_huggingface_partition_splits_by_term(self) -> None:
+        adapter = HuggingFaceAdapter()
+        q = Query(source="huggingface", terms=["term1", "term2"])
+        parts = adapter.partition(q)
+        assert len(parts) == 2
+        assert [p.terms for p in parts] == [["term1"], ["term2"]]
+
+    def test_huggingface_preserves_body(self) -> None:
+        adapter = HuggingFaceAdapter()
+        raw = RawItem(
+            source="huggingface",
+            native_id="user/repo",
+            payload={"id": "user/repo", "description": "Benchmark evaluation dataset for RAG."},
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw, terms=["RAG"])
+        assert item.body == "Benchmark evaluation dataset for RAG."
+
+    def test_rss_preserves_body_and_content(self) -> None:
+        adapter = RSSAdapter()
+        raw = RawItem(
+            source="rss",
+            native_id="http://example.com/item",
+            payload={
+                "title": "Post",
+                "summary": "Short summary",
+                "content": "Full article body with evaluation details.",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert item.body == "Full article body with evaluation details."
+
+    def test_github_effective_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        unauth_limit = GitHubAdapter.effective_rate_limit()
+        assert unauth_limit.requests == 10
+        assert unauth_limit.per_seconds == 60
+
+        monkeypatch.setenv("GITHUB_TOKEN", "dummy_token")
+        auth_limit = GitHubAdapter.effective_rate_limit()
+        assert auth_limit.requests == 30
+
+    def test_enrich_effective_core_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from msrkit.enrich import effective_core_rate_limit
+
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert effective_core_rate_limit().requests == 55
+
+        monkeypatch.setenv("GITHUB_TOKEN", "dummy_token")
+        assert effective_core_rate_limit().requests == 4500
+
+    def test_governed_get_retries_after_rate_limit_sleep(self) -> None:
+        from msrkit.governor import Governor
+
+        governor = Governor("github", GitHubAdapter.effective_rate_limit())
+        adapter = GitHubAdapter(governor=governor)
+        call_count = 0
+
+        def fake_request(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(
+                    403,
+                    headers={"Retry-After": "1", "x-ratelimit-remaining": "0"},
+                    request=httpx.Request("GET", "https://api.github.com/test"),
+                )
+            return httpx.Response(
+                200,
+                json={"items": []},
+                request=httpx.Request("GET", "https://api.github.com/test"),
+            )
+
+        adapter._request_with_retry = fake_request  # type: ignore[method-assign]
+        resp = adapter._governed_get("https://api.github.com/test")
+        assert resp.status_code == 200
+        assert call_count == 2
+

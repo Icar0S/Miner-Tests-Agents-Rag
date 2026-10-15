@@ -120,6 +120,12 @@ class StackExchangeAdapter(BaseAdapter):
         total = data.get("total")
         return int(total) if total is not None else None
 
+    def partition(self, q: Query) -> list[Query]:
+        """Split multi-term queries so each term runs as its own query."""
+        from msrkit.partition import split_by_term
+
+        return split_by_term(q)
+
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search across configured Stack Exchange sites."""
         sites = q.extra.get("sites", ["stackoverflow"])

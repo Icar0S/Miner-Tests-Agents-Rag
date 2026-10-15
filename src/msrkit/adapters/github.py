@@ -127,6 +127,19 @@ class GitHubAdapter(BaseAdapter):
             reason="GitHub token configured. 5,000 req/h, code search available.",
         )
 
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Rate limit to enforce: 30 req/min with token, 10 req/min without token (burst 2)."""
+        base = cls.policy.rate_limit
+        if cls._env("GITHUB_TOKEN"):
+            return base
+        return RateLimit(
+            requests=10,
+            per_seconds=60,
+            burst=2,
+            daily_cap=None,
+        )
+
     def graphql(self, query: str, variables: dict[str, Any] | None = None) -> httpx.Response:
         """Execute a governed GraphQL query against GitHub API v4."""
         return self._governed_post(

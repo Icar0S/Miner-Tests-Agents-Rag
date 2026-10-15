@@ -181,28 +181,40 @@ class BaseAdapter(ABC):
         """Make a GET request, respecting the rate governor.
 
         Applies rate limiting before the request. On 429/403 responses,
-        handles Retry-After and rate limit headers.
+        handles Retry-After and rate limit headers, retrying if backoff slept.
         """
-        if self._governor:
-            self._governor.acquire()
+        max_rate_retries = 2
+        for attempt in range(max_rate_retries + 1):
+            if self._governor:
+                self._governor.acquire()
 
-        response = self._request_with_retry(url, params=params, headers=headers)
-        self._request_count += 1
-        self._last_response_sha256 = self._hash_response(response.content)
-        self._response_hashes.append(self._last_response_sha256)
+            response = self._request_with_retry(url, params=params, headers=headers)
+            self._request_count += 1
+            self._last_response_sha256 = self._hash_response(response.content)
+            self._response_hashes.append(self._last_response_sha256)
 
-        # Handle rate limit response headers
-        if self._governor and response.status_code in (429, 403):
-            retry_after = response.headers.get("Retry-After")
-            remaining = response.headers.get("x-ratelimit-remaining")
-            reset_at = response.headers.get("x-ratelimit-reset")
+            # Handle rate limit response headers
+            if self._governor and response.status_code in (429, 403):
+                retry_after = response.headers.get("Retry-After")
+                remaining = response.headers.get("x-ratelimit-remaining")
+                reset_at = response.headers.get("x-ratelimit-reset")
 
-            self._governor.handle_rate_limit_response(
-                retry_after=float(retry_after) if retry_after else None,
-                remaining=int(remaining) if remaining else None,
-                reset_at=float(reset_at) if reset_at else None,
-            )
+                waited = self._governor.handle_rate_limit_response(
+                    retry_after=float(retry_after) if retry_after else None,
+                    remaining=int(remaining) if remaining else None,
+                    reset_at=float(reset_at) if reset_at else None,
+                )
+                if waited > 0 and attempt < max_rate_retries:
+                    logger.info(
+                        "Governor waited %.1fs on HTTP %d; retrying request (%d/%d)",
+                        waited,
+                        response.status_code,
+                        attempt + 1,
+                        max_rate_retries,
+                    )
+                    continue
 
+            return response
         return response
 
     @retry(
@@ -227,25 +239,37 @@ class BaseAdapter(ABC):
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make a POST request, respecting the rate governor."""
-        if self._governor:
-            self._governor.acquire()
+        max_rate_retries = 2
+        for attempt in range(max_rate_retries + 1):
+            if self._governor:
+                self._governor.acquire()
 
-        response = self._request_post_with_retry(url, json_body=json, headers=headers)
-        self._request_count += 1
-        self._last_response_sha256 = self._hash_response(response.content)
-        self._response_hashes.append(self._last_response_sha256)
+            response = self._request_post_with_retry(url, json_body=json, headers=headers)
+            self._request_count += 1
+            self._last_response_sha256 = self._hash_response(response.content)
+            self._response_hashes.append(self._last_response_sha256)
 
-        if self._governor and response.status_code in (429, 403):
-            retry_after = response.headers.get("Retry-After")
-            remaining = response.headers.get("x-ratelimit-remaining")
-            reset_at = response.headers.get("x-ratelimit-reset")
+            if self._governor and response.status_code in (429, 403):
+                retry_after = response.headers.get("Retry-After")
+                remaining = response.headers.get("x-ratelimit-remaining")
+                reset_at = response.headers.get("x-ratelimit-reset")
 
-            self._governor.handle_rate_limit_response(
-                retry_after=float(retry_after) if retry_after else None,
-                remaining=int(remaining) if remaining else None,
-                reset_at=float(reset_at) if reset_at else None,
-            )
+                waited = self._governor.handle_rate_limit_response(
+                    retry_after=float(retry_after) if retry_after else None,
+                    remaining=int(remaining) if remaining else None,
+                    reset_at=float(reset_at) if reset_at else None,
+                )
+                if waited > 0 and attempt < max_rate_retries:
+                    logger.info(
+                        "Governor waited %.1fs on HTTP %d; retrying request (%d/%d)",
+                        waited,
+                        response.status_code,
+                        attempt + 1,
+                        max_rate_retries,
+                    )
+                    continue
 
+            return response
         return response
 
     @retry(

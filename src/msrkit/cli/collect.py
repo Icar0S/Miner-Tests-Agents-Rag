@@ -598,9 +598,9 @@ def run(
                     )
                     partitioned_queries.append(q)
             queries = partitioned_queries
-            if per_query_limit is not None and adapter_cls.policy.searches_each_term:
-                # A per-query cap must hold per term, or the first term takes the
-                # whole sample (sources fetched by tag or feed are left as they are).
+            if adapter_cls.policy.searches_each_term:
+                # Sources that search each term separately must hold one query per term,
+                # so caps, checkpoints, and limits apply evenly across the whole lexicon.
                 from msrkit.partition import split_by_term
 
                 queries = [s for q in queries for s in ([q] if q.raw else split_by_term(q))]

@@ -222,9 +222,8 @@ class BlueskyAdapter(BaseAdapter):
             source=self.name,
             kind=ItemKind.POST,
             url=url,  # type: ignore[arg-type]
-            title=None,
-            body=None,  # metadata_only
-            body_hash=None,
+            title=text[:100] if text else None,
+            body=text or None,
             author_handle=handle,
             created_at=created_at,
             engagement=Engagement(
