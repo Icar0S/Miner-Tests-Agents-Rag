@@ -1,0 +1,71 @@
+interactions:
+- request:
+    body: ''
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      host:
+      - huggingface.co
+    method: GET
+    uri: https://huggingface.co/api/models?full=true&limit=5&search=rag
+  response:
+    body:
+      string: '[{"_id":"6a9614f04682791833118a51","id":"peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF-MTP","author":"peculiar-ragdoll","gated":false,"lastModified":"2026-09-18T10:56:00.000Z","likes":236,"trendingScore":27,"private":false,"sha":"fa19d4f33561dc0d107c2a2f8943f1ca2e288109","downloads":556478,"tags":["gguf","llama.cpp","qwen35moe","moe","imatrix","unsloth-dynamic","mtp","speculative-decoding","agentic-coding","abliterated","uncensored","vision","image-text-to-text","en","zh","base_model:huihui-ai/Huihui-Ornith-1.5-35B-A3B-abliterated","base_model:quantized:huihui-ai/Huihui-Ornith-1.5-35B-A3B-abliterated","license:mit","endpoints_compatible","region:us","conversational"],"pipeline_tag":"image-text-to-text","library_name":"gguf","createdAt":"2026-08-31T23:57:36.000Z","modelId":"peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF-MTP","siblings":[{"rfilename":".gitattributes"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-IQ3_XXS.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-IQ4_XS.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q2_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q3_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q4_K_M.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q4_K_S.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q5_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q6_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-MTP-UD-Q8_K_XL.gguf"},{"rfilename":"README.md"},{"rfilename":"assets/cybertiel_banner_crt.gif"},{"rfilename":"assets/cybertiel_bench_cybench.gif"},{"rfilename":"assets/cybertiel_bench_harmbench.gif"},{"rfilename":"assets/cybertiel_bench_mmlu.gif"},{"rfilename":"assets/cybertiel_bench_swe.gif"},{"rfilename":"assets/cybertiel_bench_swe_speed.gif"},{"rfilename":"assets/kl_q999_code.png"},{"rfilename":"assets/kl_q999_cybersec.png"},{"rfilename":"assets/kl_q999_documentation.png"},{"rfilename":"assets/kl_q999_multilingual.png"},{"rfilename":"mmproj-BF16.gguf"},{"rfilename":"mmproj-Q8_0.gguf"}]},{"_id":"6a8c929a3e848c987cdeec8d","id":"peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP","author":"peculiar-ragdoll","gated":false,"lastModified":"2026-09-10T20:03:54.000Z","likes":278,"trendingScore":21,"private":false,"sha":"bbe9e566f39e4fc9652ac66b71968289a03c520a","downloads":1840614,"tags":["gguf","llama.cpp","qwen35moe","moe","imatrix","unsloth-dynamic","mtp","speculative-decoding","agentic-coding","token-efficient","vision","image-text-to-text","en","zh","base_model:ornith-ai/Ornith-1.5-35B-A3B","base_model:quantized:ornith-ai/Ornith-1.5-35B-A3B","license:mit","region:us"],"pipeline_tag":"image-text-to-text","library_name":"gguf","createdAt":"2026-08-24T18:51:06.000Z","modelId":"peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP","siblings":[{"rfilename":".gitattributes"},{"rfilename":"README.md"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-IQ3_XXS.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-IQ4_XS.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q2_K_XL.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q3_K_XL.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q4_K_S.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q4_K_XL.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q5_K_XL.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q6_K_XL.gguf"},{"rfilename":"Tiel-Coder-35B-A3B-MTP-UD-Q8_K_XL.gguf"},{"rfilename":"assets/card_tiel_claw.png"},{"rfilename":"assets/card_tiel_local.png"},{"rfilename":"assets/card_tiel_mmlu.png"},{"rfilename":"assets/card_tiel_swe.png"},{"rfilename":"assets/tiel_banner_eyebrow.png"},{"rfilename":"mmproj-BF16.gguf"}]},{"_id":"6aa049e722a71789f6732234","id":"peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF","author":"peculiar-ragdoll","gated":false,"lastModified":"2026-09-10T10:53:52.000Z","likes":110,"trendingScore":18,"private":false,"sha":"644bee2e6b9a75aa64c3bb818aaeeebe43d862bb","downloads":43150,"tags":["gguf","llama.cpp","qwen35moe","moe","imatrix","unsloth-dynamic","agentic-coding","abliterated","uncensored","vision","image-text-to-text","en","zh","base_model:huihui-ai/Huihui-Ornith-1.5-35B-A3B-abliterated","base_model:quantized:huihui-ai/Huihui-Ornith-1.5-35B-A3B-abliterated","license:mit","endpoints_compatible","region:us","conversational"],"pipeline_tag":"image-text-to-text","library_name":"gguf","createdAt":"2026-09-08T17:46:15.000Z","modelId":"peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF","siblings":[{"rfilename":".gitattributes"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-IQ3_XXS.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-IQ4_XS.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q2_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q3_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q4_K_M.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q4_K_S.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q4_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q5_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q6_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-UD-Q8_K_XL.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B-fullcorpus.imatrix.gguf"},{"rfilename":"Cyber-Tiel-Coder-35B-A3B.imatrix.gguf"},{"rfilename":"README.md"},{"rfilename":"assets/cybertiel_banner_crt.gif"},{"rfilename":"assets/cybertiel_bench_cybench.gif"},{"rfilename":"assets/cybertiel_bench_harmbench.gif"},{"rfilename":"assets/cybertiel_bench_mmlu.gif"},{"rfilename":"assets/cybertiel_bench_swe.gif"},{"rfilename":"assets/cybertiel_bench_swe_speed.gif"},{"rfilename":"assets/kl_q999_code.png"},{"rfilename":"assets/kl_q999_cybersec.png"},{"rfilename":"assets/kl_q999_documentation.png"},{"rfilename":"assets/kl_q999_multilingual.png"},{"rfilename":"mmproj-BF16.gguf"},{"rfilename":"mtp-Cyber-Tiel-Coder-35B-A3B.gguf"}]},{"_id":"6a792ad8b4a20e9e9b4babeb","id":"peculiar-ragdoll/Qwen-Sharp-Chat-Templates","author":"peculiar-ragdoll","gated":false,"lastModified":"2026-10-10T21:54:30.000Z","likes":457,"trendingScore":17,"private":false,"sha":"6a78b888557f8c9987f51bca98d02d8f69682044","downloads":0,"tags":["mlx","jinja","chat-template","qwen","qwen3.5","qwen3.6","qwen3.8","llama.cpp","lm-studio","vllm","tool-calling","thinking","token-efficient","base_model:froggeric/Qwen-Fixed-Chat-Templates","base_model:finetune:froggeric/Qwen-Fixed-Chat-Templates","license:apache-2.0","region:us"],"library_name":"mlx","createdAt":"2026-08-10T01:35:20.000Z","modelId":"peculiar-ragdoll/Qwen-Sharp-Chat-Templates","siblings":[{"rfilename":".gitattributes"},{"rfilename":"README.md"},{"rfilename":"archive/v1-qwen3.6-froggeric-v21.3/README.md"},{"rfilename":"archive/v1-qwen3.6-froggeric-v21.3/chat_template.jinja"},{"rfilename":"archive/v1-qwen3.6-froggeric-v21.3/chat_template_oneline.txt"},{"rfilename":"archive/v22-sharp/chat_template.jinja"},{"rfilename":"archive/v22-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.1-sharp/chat_template.jinja"},{"rfilename":"archive/v22.1-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.1.1-sharp/chat_template.jinja"},{"rfilename":"archive/v22.1.1-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.3.1-sharp/chat_template.jinja"},{"rfilename":"archive/v22.3.1-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.3.2-sharp/chat_template.jinja"},{"rfilename":"archive/v22.3.2-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.4.0-sharp/chat_template.jinja"},{"rfilename":"archive/v22.4.0-sharp/chat_template_oneline.txt"},{"rfilename":"archive/v22.4.1-sharp/chat_template.jinja"},{"rfilename":"archive/v22.4.1-sharp/chat_template_oneline.txt"},{"rfilename":"chat_template.jinja"},{"rfilename":"chat_template_oneline.json.txt"},{"rfilename":"chat_template_oneline.txt"},{"rfilename":"plates/card_swe_bounds.png"},{"rfilename":"plates/card_swe_sharp.png"},{"rfilename":"plates/claweval_sharp_plate.png"},{"rfilename":"plates/sharp_template_plate.png"},{"rfilename":"plates/swe_sharp_template_plate.png"},{"rfilename":"scripts/check_applied.py"},{"rfilename":"scripts/fuzz_template.py"},{"rfilename":"scripts/minify_jinja.py"},{"rfilename":"scripts/test_v21.py"},{"rfilename":"scripts/test_v22.py"},{"rfilename":"scripts/verify_template.py"}]},{"_id":"6a9a089a4dfcf4af39457a65","id":"peculiar-ragdoll/Sharp-Spark-X2.5-4B-GGUF","author":"peculiar-ragdoll","gated":false,"lastModified":"2026-09-20T21:03:52.000Z","likes":131,"trendingScore":13,"private":false,"sha":"e797ddf6a57d9ecfddf68394438d2667ecb42dad","downloads":490453,"tags":["gguf","llama.cpp","imatrix","spark2_5","long-context","coding","sharp-template","token-efficient","efficient-thinking","text-generation","conversational","base_model:XHToken/Spark-X2.5-4B","base_model:quantized:XHToken/Spark-X2.5-4B","license:apache-2.0","endpoints_compatible","region:us"],"pipeline_tag":"text-generation","library_name":"gguf","createdAt":"2026-09-03T23:54:02.000Z","modelId":"peculiar-ragdoll/Sharp-Spark-X2.5-4B-GGUF","siblings":[{"rfilename":".gitattributes"},{"rfilename":"README.md"},{"rfilename":"Sharp-Spark-X2.5-4B-Q4_K_XL.gguf"},{"rfilename":"Sharp-Spark-X2.5-4B-Q5_K_XL.gguf"},{"rfilename":"Sharp-Spark-X2.5-4B-Q6_K_XL.gguf"},{"rfilename":"Spark-X2.5-4B-cyber.imatrix.gguf"},{"rfilename":"assets/sharpspark_banner.png"},{"rfilename":"assets/sharpspark_mmlu_board.png"},{"rfilename":"assets/sharpspark_swe_board.png"},{"rfilename":"assets/sharpspark_upgrade_swe_board.png"},{"rfilename":"chat_template.jinja"}]}]'
+    headers:
+      Access-Control-Allow-Origin:
+      - https://huggingface.co
+      Access-Control-Expose-Headers:
+      - X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash
+      Access-Control-Max-Age:
+      - '86400'
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 15 Oct 2026 18:21:59 GMT
+      ETag:
+      - W/"2493-uOZgaAr6vZ89pAPlKhiI88XPvG0"
+      Link:
+      - <https://huggingface.co/api/models?search=rag&limit=5&full=true&cursor=eyIkb3IiOlt7InRyZW5kaW5nU2NvcmUiOjEzLCJfaWQiOnsiJGd0IjoiNmE5YTA4OWE0ZGZjZjRhZjM5NDU3YTY1In19LHsidHJlbmRpbmdTY29yZSI6eyIkbHQiOjEzfX0seyJ0cmVuZGluZ1Njb3JlIjpudWxsfV0sInNlYXJjaFNlcXVlbmNlVG9rZW4iOiJDTWEzcHdJYUNTRUFBQUFBQUFBcVFCb09XZ3hxbWdpYVRmejByemxGZW1VaURsb01hcG9JbWszODlLODVSWHBsIn0%3D>;
+        rel="next"
+      RateLimit:
+      - '"api";r=499;t=273'
+      RateLimit-Policy:
+      - '"fixed window";"api";q=500;w=300'
+      Referrer-Policy:
+      - strict-origin-when-cross-origin
+      Server-Timing:
+      - atlas1-0;dur=8.164698000997305
+      Strict-Transport-Security:
+      - max-age=31536000
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 1.1 c731a55b8af948dc97debfa329e5df4a.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - Ax3XjovJvtxYRnMxKI3mJ-jUWHvzfho-7Yg4Mj0yisHv8L_ufOYaQQ==
+      X-Amz-Cf-Pop:
+      - FOR50-P6
+      X-Cache:
+      - Miss from cloudfront
+      X-Powered-By:
+      - huggingface-moon
+      X-Request-Id:
+      - Root=1-6ad119c7-702cb3602977250042dd9bf1
+      content-length:
+      - '9363'
+      cross-origin-opener-policy:
+      - same-origin
+      vary:
+      - Accept-Encoding
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -1,0 +1,732 @@
+interactions:
+- request:
+    body: ''
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      host:
+      - hn.algolia.com
+    method: GET
+    uri: https://hn.algolia.com/api/v1/search?hitsPerPage=1000&numericFilters=created_at_i%3E%3D1735689600%2Ccreated_at_i%3C%3D1751327999&page=0&query=rag+evaluation&tags=story
+  response:
+    body:
+      string: '{"exhaustive":{"nbHits":false,"typo":false},"exhaustiveNbHits":false,"exhaustiveTypo":false,"hits":[{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"ArnavAgrawal03"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"I''m
+        currently in the process of improving the testing part of our infrastructure
+        at Morphik (https://github.com/morphik-org/morphik-core). There seem to be
+        a lot of different <em>RAG</em> <em>evaluations</em> out there, and I''m just
+        curious which ones you care about the most.<p>Of course, these will be different
+        based on use cases, but I''d love to learn more about your use case, and which
+        benchmark or eval matters the most for it and why."},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Ask
+        HN: What <em>RAG</em> <em>evaluations</em> do you care about?"}},"_tags":["story","author_ArnavAgrawal03","story_43588464","ask_hn"],"author":"ArnavAgrawal03","created_at":"2025-04-04T22:36:56Z","created_at_i":1743806216,"num_comments":0,"objectID":"43588464","points":1,"story_id":43588464,"story_text":"I&#x27;m
+        currently in the process of improving the testing part of our infrastructure
+        at Morphik (https:&#x2F;&#x2F;github.com&#x2F;morphik-org&#x2F;morphik-core).
+        There seem to be a lot of different RAG evaluations out there, and I&#x27;m
+        just curious which ones you care about the most.<p>Of course, these will be
+        different based on use cases, but I&#x27;d love to learn more about your use
+        case, and which benchmark or eval matters the most for it and why.","title":"Ask
+        HN: What RAG evaluations do you care about?","updated_at":"2025-04-04T22:40:56Z"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"ishan_sinha"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        HN,<p>I\u2019m Ishan, Product Manager at Contextual AI.<p>We''re excited to
+        announce our document parser that combines the best of custom vision, OCR,
+        and vision language models to deliver unmatched accuracy.<p>There are a lot
+        of parsing solutions out there\u2014here\u2019s what makes ours different:\n1)
+        Document hierarchy inference: Unlike traditional parsers that process documents
+        as isolated pages, our solution infers a document\u2019s hierarchy and structure.
+        This allows you to add metadata to each chunk that describes its position
+        in the document, which then lets your agents understand how different sections
+        relate to each other and connect information across hundreds of pages.\n2)
+        Minimized hallucinations: Our multi-stage pipeline minimizes severe hallucinations
+        while also providing bounding boxes and confidence levels for table extraction
+        to simplify auditing its output.\n3) Superior handling of complex modalities:
+        Technical diagrams, complex figures and nested tables are efficiently processed
+        to support all of your data.<p>In an end-to-end <em>RAG</em> <em>evaluation</em>
+        of a dataset of SEC 10Ks and 10Qs (containing 70+ documents spanning 6500+
+        pages), we found that including document hierarchy metadata in chunks increased
+        the equivalence score from 69.2% to 84.0%.<p>Getting started\nThe first 500+
+        pages in our Standard mode (for complex documents that require VLMs and OCR)
+        are free if you want to give it a try. Just create a Contextual AI account
+        (<a href=\"https://app.contextual.ai/?signup=1\" rel=\"nofollow\">https://app.contextual.ai/?signup=1</a>)
+        and visit the Components tab to use the Parse UI playground, or get an API
+        key and call the API directly.<p>Documentation\n1) /parse API: <a href=\"https://docs.contextual.ai/api-reference/parse/parse-file\"
+        rel=\"nofollow\">https://docs.contextual.ai/api-reference/parse/parse-file</a>\n2)
+        Python SDK: <a href=\"https://github.com/ContextualAI/contextual-client-python/blob/main/api.md#parse\">https://github.com/ContextualAI/contextual-client-python/blo...</a>\n3)
+        Code examples: <a href=\"https://github.com/ContextualAI/examples/blob/main/03-standalone-api/04-parse/parse.ipynb\">https://github.com/ContextualAI/examples/blob/main/03-standa...</a>\n4)
+        Blog post: <a href=\"https://contextual.ai/blog/document-parser-for-rag/\"
+        rel=\"nofollow\">https://contextual.ai/blog/document-parser-for-<em>rag</em>/</a><p>Happy
+        to answer any questions about how our document parser works or how you might
+        integrate it into your <em>RAG</em> systems!"},"title":{"matchLevel":"none","matchedWords":[],"value":"Show
+        HN: Contextual AI Document Parser \u2013 Infer hierarchy for long, complex
+        docs"}},"_tags":["story","author_ishan_sinha","story_43976797","show_hn"],"author":"ishan_sinha","created_at":"2025-05-13T19:38:42Z","created_at_i":1747165122,"num_comments":0,"objectID":"43976797","points":2,"story_id":43976797,"story_text":"Hey
+        HN,<p>I\u2019m Ishan, Product Manager at Contextual AI.<p>We&#x27;re excited
+        to announce our document parser that combines the best of custom vision, OCR,
+        and vision language models to deliver unmatched accuracy.<p>There are a lot
+        of parsing solutions out there\u2014here\u2019s what makes ours different:\n1)
+        Document hierarchy inference: Unlike traditional parsers that process documents
+        as isolated pages, our solution infers a document\u2019s hierarchy and structure.
+        This allows you to add metadata to each chunk that describes its position
+        in the document, which then lets your agents understand how different sections
+        relate to each other and connect information across hundreds of pages.\n2)
+        Minimized hallucinations: Our multi-stage pipeline minimizes severe hallucinations
+        while also providing bounding boxes and confidence levels for table extraction
+        to simplify auditing its output.\n3) Superior handling of complex modalities:
+        Technical diagrams, complex figures and nested tables are efficiently processed
+        to support all of your data.<p>In an end-to-end RAG evaluation of a dataset
+        of SEC 10Ks and 10Qs (containing 70+ documents spanning 6500+ pages), we found
+        that including document hierarchy metadata in chunks increased the equivalence
+        score from 69.2% to 84.0%.<p>Getting started\nThe first 500+ pages in our
+        Standard mode (for complex documents that require VLMs and OCR) are free if
+        you want to give it a try. Just create a Contextual AI account (<a href=\"https:&#x2F;&#x2F;app.contextual.ai&#x2F;?signup=1\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;app.contextual.ai&#x2F;?signup=1</a>) and
+        visit the Components tab to use the Parse UI playground, or get an API key
+        and call the API directly.<p>Documentation\n1) &#x2F;parse API: <a href=\"https:&#x2F;&#x2F;docs.contextual.ai&#x2F;api-reference&#x2F;parse&#x2F;parse-file\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;docs.contextual.ai&#x2F;api-reference&#x2F;parse&#x2F;parse-file</a>\n2)
+        Python SDK: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;ContextualAI&#x2F;contextual-client-python&#x2F;blob&#x2F;main&#x2F;api.md#parse\">https:&#x2F;&#x2F;github.com&#x2F;ContextualAI&#x2F;contextual-client-python&#x2F;blo...</a>\n3)
+        Code examples: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;ContextualAI&#x2F;examples&#x2F;blob&#x2F;main&#x2F;03-standalone-api&#x2F;04-parse&#x2F;parse.ipynb\">https:&#x2F;&#x2F;github.com&#x2F;ContextualAI&#x2F;examples&#x2F;blob&#x2F;main&#x2F;03-standa...</a>\n4)
+        Blog post: <a href=\"https:&#x2F;&#x2F;contextual.ai&#x2F;blog&#x2F;document-parser-for-rag&#x2F;\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;contextual.ai&#x2F;blog&#x2F;document-parser-for-rag&#x2F;</a><p>Happy
+        to answer any questions about how our document parser works or how you might
+        integrate it into your RAG systems!","title":"Show HN: Contextual AI Document
+        Parser \u2013 Infer hierarchy for long, complex docs","updated_at":"2025-05-14T18:05:57Z"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"ingve"},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Evaluating
+        the evaluators: know your <em>RAG</em> metrics"},"url":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"https://www.tweag.io/blog/2025-02-27-<em>rag</em>-<em>evaluation</em>/"}},"_tags":["story","author_ingve","story_43193932"],"author":"ingve","created_at":"2025-02-27T12:51:22Z","created_at_i":1740660682,"num_comments":0,"objectID":"43193932","points":2,"story_id":43193932,"title":"Evaluating
+        the evaluators: know your RAG metrics","updated_at":"2025-02-27T13:14:41Z","url":"https://www.tweag.io/blog/2025-02-27-rag-evaluation/"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"Jimmc414"},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Long
+        Context vs. <em>RAG</em> for LLMs: An <em>Evaluation</em> and Revisits"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://arxiv.org/abs/2501.01880"}},"_tags":["story","author_Jimmc414","story_42611325"],"author":"Jimmc414","children":[42611408],"created_at":"2025-01-06T15:26:25Z","created_at_i":1736177185,"num_comments":4,"objectID":"42611325","points":3,"story_id":42611325,"title":"Long
+        Context vs. RAG for LLMs: An Evaluation and Revisits","updated_at":"2025-01-07T14:13:30Z","url":"https://arxiv.org/abs/2501.01880"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"s1l3nt"},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Real-Time
+        <em>Evaluation</em> Models for <em>RAG</em>: Who Detects Hallucinations Best?"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://arxiv.org/abs/2503.21157"}},"_tags":["story","author_s1l3nt","story_43627238"],"author":"s1l3nt","children":[43627239],"created_at":"2025-04-08T22:50:26Z","created_at_i":1744152626,"num_comments":1,"objectID":"43627238","points":3,"story_id":43627238,"title":"Real-Time
+        Evaluation Models for RAG: Who Detects Hallucinations Best?","updated_at":"2025-04-09T01:11:55Z","url":"https://arxiv.org/abs/2503.21157"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"justacoolname"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hallucinations
+        are still a major blocker for deploying reliable retrieval-augmented generation
+        (<em>RAG</em>) systems, especially in complex domains like medical or legal.<p>Most
+        existing hallucination detectors rely on full LLM inference (expensive, slow),
+        or struggle with long-context inputs.<p>I built LettuceDetect \u2014 an open-source,
+        encoder-only framework that detects hallucinated spans in LLM-generated answers
+        based on the retrieved context. No LLMs needed, and it much more efficiently.<p>Highlights:<p>-
+        Token-level hallucination detection (unsupported spans flagged based on retrieved
+        evidence)<p>- Built on ModernBERT \u2014 handles up to 4K token contexts<p>-
+        79.22% F1 on the RAGTruth benchmark (beats previous encoder models, competitive
+        with LLMs)<p>- MIT licensed<p>\u2014 Includes Python packages, pretrained
+        models, and Hugging Face demo<p>GitHub: <a href=\"https://github.com/KRLabsOrg/LettuceDetect\">https://github.com/KRLabsOrg/LettuceDetect</a><p>Blog:
+        <a href=\"https://huggingface.co/blog/adaamko/lettucedetect\" rel=\"nofollow\">https://huggingface.co/blog/adaamko/lettucedetect</a><p>Preprint:
+        <a href=\"https://arxiv.org/abs/2502.17125\" rel=\"nofollow\">https://arxiv.org/abs/2502.17125</a><p>Models/Demo:
+        <a href=\"https://huggingface.co/KRLabsOrg\" rel=\"nofollow\">https://huggingface.co/KRLabsOrg</a><p>Would
+        love feedback from anyone working on <em>RAG</em>, hallucination detection,
+        or efficient LLM <em>evaluation</em>. Also exploring real-time hallucination
+        detection (vs. just post-gen) \u2014 open to thoughts/collab there."},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Show
+        HN: LettuceDetect \u2013 Lightweight hallucination detector for <em>RAG</em>
+        pipelines"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://github.com/KRLabsOrg/LettuceDetect"}},"_tags":["story","author_justacoolname","story_43736950","show_hn"],"author":"justacoolname","children":[43742524],"created_at":"2025-04-19T15:12:02Z","created_at_i":1745075522,"num_comments":1,"objectID":"43736950","points":10,"story_id":43736950,"story_text":"Hallucinations
+        are still a major blocker for deploying reliable retrieval-augmented generation
+        (RAG) systems, especially in complex domains like medical or legal.<p>Most
+        existing hallucination detectors rely on full LLM inference (expensive, slow),
+        or struggle with long-context inputs.<p>I built LettuceDetect \u2014 an open-source,
+        encoder-only framework that detects hallucinated spans in LLM-generated answers
+        based on the retrieved context. No LLMs needed, and it much more efficiently.<p>Highlights:<p>-
+        Token-level hallucination detection (unsupported spans flagged based on retrieved
+        evidence)<p>- Built on ModernBERT \u2014 handles up to 4K token contexts<p>-
+        79.22% F1 on the RAGTruth benchmark (beats previous encoder models, competitive
+        with LLMs)<p>- MIT licensed<p>\u2014 Includes Python packages, pretrained
+        models, and Hugging Face demo<p>GitHub: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;KRLabsOrg&#x2F;LettuceDetect\">https:&#x2F;&#x2F;github.com&#x2F;KRLabsOrg&#x2F;LettuceDetect</a><p>Blog:
+        <a href=\"https:&#x2F;&#x2F;huggingface.co&#x2F;blog&#x2F;adaamko&#x2F;lettucedetect\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;huggingface.co&#x2F;blog&#x2F;adaamko&#x2F;lettucedetect</a><p>Preprint:
+        <a href=\"https:&#x2F;&#x2F;arxiv.org&#x2F;abs&#x2F;2502.17125\" rel=\"nofollow\">https:&#x2F;&#x2F;arxiv.org&#x2F;abs&#x2F;2502.17125</a><p>Models&#x2F;Demo:
+        <a href=\"https:&#x2F;&#x2F;huggingface.co&#x2F;KRLabsOrg\" rel=\"nofollow\">https:&#x2F;&#x2F;huggingface.co&#x2F;KRLabsOrg</a><p>Would
+        love feedback from anyone working on RAG, hallucination detection, or efficient
+        LLM evaluation. Also exploring real-time hallucination detection (vs. just
+        post-gen) \u2014 open to thoughts&#x2F;collab there.","title":"Show HN: LettuceDetect
+        \u2013 Lightweight hallucination detector for RAG pipelines","updated_at":"2025-04-22T17:23:34Z","url":"https://github.com/KRLabsOrg/LettuceDetect"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"jeffreyip"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hi
+        HN - we''re Jeffrey and Kritin, and we''re building Confident AI (<a href=\"https://confident-ai.com\">https://confident-ai.com</a>).
+        This is the cloud platform for DeepEval (<a href=\"https://github.com/confident-ai/deepeval\">https://github.com/confident-ai/deepeval</a>),
+        our open-source package that helps engineers evaluate and unit-test LLM applications.
+        Think Pytest for LLMs.<p>We spent the past year building DeepEval with the
+        goal of providing the best LLM <em>evaluation</em> developer experience, growing
+        it to run over 600K evaluations daily in CI/CD pipelines of enterprises like
+        BCG, AstraZeneca, AXA, and Capgemini. But the fact that DeepEval simply runs,
+        and does nothing with the data afterward, isn\u2019t the best experience.
+        If you want to inspect failing test cases, identify regressions, or even pick
+        the best model/prompt combination, you need more than just DeepEval. That\u2019s
+        why we built a platform around it.<p>Here\u2019s a quick demo video of how
+        everything works: <a href=\"https://youtu.be/PB3ngq7x4ko\" rel=\"nofollow\">https://youtu.be/PB3ngq7x4ko</a><p>Confident
+        AI is great for <em>RAG</em> pipelines, agents, and chatbots. Typical use
+        cases involve allowing companies to switch the underlying LLM, rewrite prompts
+        for newer (and possibly cheaper) models, and keep test sets in sync with the
+        codebase where DeepEval tests are run.<p>Our platform features a &quot;dataset
+        editor,&quot; a &quot;regression catcher,&quot; and &quot;iteration insights&quot;.
+        The datasets editor in Confident AI allows domain experts to edit datasets
+        while keeping them in sync with your codebase for <em>evaluation</em>. We\u2019ll
+        then generate sharable LLM testing/benchmark reports once DeepEval has finished
+        running evaluations on these datasets that are pulled from the cloud. The
+        regression catcher then identifies any regressions in your new implementation,
+        and we use these <em>evaluation</em> results to determine the best iteration
+        based on your metric scores.<p>Our goal is to make benchmarking LLM applications
+        so reliable that picking the best implementation is as simple as reading the
+        metric values off the dashboard. To achieve this, the quality of curated datasets
+        and the accuracy and reliability of metrics must be the highest possible.<p>This
+        brings us to our current limitations. Right now, DeepEval\u2019s primary <em>evaluation</em>
+        method is LLM-as-a-judge. We use techniques such as GEval and question-answer
+        generation to improve reliability, but these methods can still be inconsistent.
+        Even with high-quality datasets curated by domain experts, our <em>evaluation</em>
+        metrics remain the biggest blocker to our goal.<p>To address this, we recently
+        released a DAG (Directed Acyclic Graph) metric in DeepEval. It is a decision-tree-based,
+        LLM-as-a-judge metric that provides deterministic results by breaking a test
+        case into finer atomic units. Each edge represents a decision, each node represents
+        an LLM <em>evaluation</em> step, and each leaf node returns a score. It works
+        best in scenarios where success criteria are clearly defined, such as text
+        summarization.<p>The DAG metric is still in its early stages, but our hope
+        is that by moving towards better, code-driven, open-source metrics, Confident
+        AI can deliver deterministic LLM benchmarks that anyone can blindly trust.<p>We
+        hope you\u2019ll give Confident AI a try. Quickstart here: <a href=\"https://docs.confident-ai.com/confident-ai/confident-ai-introduction\">https://docs.confident-ai.com/confident-ai/confident-ai-intr...</a><p>The
+        platform runs on a freemium tier, and we''ve dropped the need to signup with
+        a work email for the next four days.<p>Looking forward to your thoughts!"},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["evaluation"],"value":"Launch
+        HN: Confident AI (YC W25) \u2013 Open-source <em>evaluation</em> framework
+        for LLM apps"}},"_tags":["story","author_jeffreyip","story_43116633","launch_hn"],"author":"jeffreyip","children":[43118409,43118881,43118969,43119072,43119323,43120211,43121129,43121178,43124903,43126359,43131559,43172556],"created_at":"2025-02-20T16:23:56Z","created_at_i":1740068636,"num_comments":27,"objectID":"43116633","points":117,"story_id":43116633,"story_text":"Hi
+        HN - we&#x27;re Jeffrey and Kritin, and we&#x27;re building Confident AI (<a
+        href=\"https:&#x2F;&#x2F;confident-ai.com\">https:&#x2F;&#x2F;confident-ai.com</a>).
+        This is the cloud platform for DeepEval (<a href=\"https:&#x2F;&#x2F;github.com&#x2F;confident-ai&#x2F;deepeval\">https:&#x2F;&#x2F;github.com&#x2F;confident-ai&#x2F;deepeval</a>),
+        our open-source package that helps engineers evaluate and unit-test LLM applications.
+        Think Pytest for LLMs.<p>We spent the past year building DeepEval with the
+        goal of providing the best LLM evaluation developer experience, growing it
+        to run over 600K evaluations daily in CI&#x2F;CD pipelines of enterprises
+        like BCG, AstraZeneca, AXA, and Capgemini. But the fact that DeepEval simply
+        runs, and does nothing with the data afterward, isn\u2019t the best experience.
+        If you want to inspect failing test cases, identify regressions, or even pick
+        the best model&#x2F;prompt combination, you need more than just DeepEval.
+        That\u2019s why we built a platform around it.<p>Here\u2019s a quick demo
+        video of how everything works: <a href=\"https:&#x2F;&#x2F;youtu.be&#x2F;PB3ngq7x4ko\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;youtu.be&#x2F;PB3ngq7x4ko</a><p>Confident
+        AI is great for RAG pipelines, agents, and chatbots. Typical use cases involve
+        allowing companies to switch the underlying LLM, rewrite prompts for newer
+        (and possibly cheaper) models, and keep test sets in sync with the codebase
+        where DeepEval tests are run.<p>Our platform features a &quot;dataset editor,&quot;
+        a &quot;regression catcher,&quot; and &quot;iteration insights&quot;. The
+        datasets editor in Confident AI allows domain experts to edit datasets while
+        keeping them in sync with your codebase for evaluation. We\u2019ll then generate
+        sharable LLM testing&#x2F;benchmark reports once DeepEval has finished running
+        evaluations on these datasets that are pulled from the cloud. The regression
+        catcher then identifies any regressions in your new implementation, and we
+        use these evaluation results to determine the best iteration based on your
+        metric scores.<p>Our goal is to make benchmarking LLM applications so reliable
+        that picking the best implementation is as simple as reading the metric values
+        off the dashboard. To achieve this, the quality of curated datasets and the
+        accuracy and reliability of metrics must be the highest possible.<p>This brings
+        us to our current limitations. Right now, DeepEval\u2019s primary evaluation
+        method is LLM-as-a-judge. We use techniques such as GEval and question-answer
+        generation to improve reliability, but these methods can still be inconsistent.
+        Even with high-quality datasets curated by domain experts, our evaluation
+        metrics remain the biggest blocker to our goal.<p>To address this, we recently
+        released a DAG (Directed Acyclic Graph) metric in DeepEval. It is a decision-tree-based,
+        LLM-as-a-judge metric that provides deterministic results by breaking a test
+        case into finer atomic units. Each edge represents a decision, each node represents
+        an LLM evaluation step, and each leaf node returns a score. It works best
+        in scenarios where success criteria are clearly defined, such as text summarization.<p>The
+        DAG metric is still in its early stages, but our hope is that by moving towards
+        better, code-driven, open-source metrics, Confident AI can deliver deterministic
+        LLM benchmarks that anyone can blindly trust.<p>We hope you\u2019ll give Confident
+        AI a try. Quickstart here: <a href=\"https:&#x2F;&#x2F;docs.confident-ai.com&#x2F;confident-ai&#x2F;confident-ai-introduction\">https:&#x2F;&#x2F;docs.confident-ai.com&#x2F;confident-ai&#x2F;confident-ai-intr...</a><p>The
+        platform runs on a freemium tier, and we&#x27;ve dropped the need to signup
+        with a work email for the next four days.<p>Looking forward to your thoughts!","title":"Launch
+        HN: Confident AI (YC W25) \u2013 Open-source evaluation framework for LLM
+        apps","updated_at":"2026-06-14T02:35:39Z"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"vasa_"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        there HN! We\u2019re Vasilije, Boris, and Laszlo, and we\u2019re excited to
+        introduce cognee, an open-source Python library that approaches building evolving
+        semantic memory using knowledge graphs + data pipelines<p>Before we built
+        cognee, Vasilije(B Economics and Clinical Psychology) worked at a few unicorns
+        (Omio, Zalando, Taxfix), while Boris managed large-scale applications in production
+        at Pera and StuDocu. Laszlo joined after getting his PhD in Graph Theory at
+        the University of Szeged.<p>Using LLMs to connect to large datasets (<em>RAG</em>)
+        has been popularized and has shown great promise. Unfortunately, this approach
+        doesn\u2019t live up to the hype.<p>Let\u2019s assume we want to load a large
+        repository from GitHub to a vector store.\nConnectingfiles in larger systems
+        with <em>RAG</em> would fail because a fixed <em>RAG</em> limit is too constraining
+        in longer dependency chains. While we need results that are aware of the context
+        of the whole repository, <em>RAG</em>\u2019s similarity-based retrieval does
+        not capture the full context of interdependent files spread across the repository.<p>This
+        approach allows cognee to retrieve all relevant and correct context at inference
+        time. For example, if `function A` in one file calls `function B` in another
+        file, which calls `function C` in a third file, all code and summaries that
+        further explain their position and purpose in that chain are served as context.
+        As a result, the system has complete visibility into how different code parts
+        work together within the repo.<p>Last year, Microsoft took a leap published
+        GraphRAG - i.e. <em>RAG</em> with Knowledge Graphs. We think it is the right
+        direction.\nOur initial ideas were similar to this paper and this got some
+        attention on Twitter (<a href=\"https://x.com/tricalt/status/1722216426709365024\"
+        rel=\"nofollow\">https://x.com/tricalt/status/1722216426709365024</a>)<p>Over
+        time we understood we needed tooling to create dynamically evolving groups
+        of graphs, cross-connected and evaluated together.\nOur tool is named after
+        a process called cognification. We prefer the definition that Vakalo (1978)
+        uses to explain that cognify represents &quot;building a fitting (mental)
+        picture&quot;<p>We believe that agents of tomorrow will require a correct
+        dynamic \u201cmental picture\u201d or context to operate in a rapidly evolving
+        landscape.<p>To address this, we built ECL pipelines, where we do the following:\n-
+        Extract data from various sources using dlt and existing frameworks\n- Cognify
+        - create a graph/vector representation of the data\n- Load - store the data
+        in the vector (in this case our partner FalkorDB), graph, and relational stores<p>We
+        can also continuously feed the graph with new information, and when testing
+        this approach we found that on HotpotQA, with human labeling, we achieved
+        87% answer accuracy (<a href=\"https://docs.cognee.ai/evaluations\" rel=\"nofollow\">https://docs.cognee.ai/<em>evaluations</em></a>).<p>To
+        show how the approach works we did an integration with continue.dev and built
+        a codegraph<p>Here is how codegraph was implemented: \nWe''re explicitly including
+        repository structure details and integrating custom dependency graph versions.
+        Think of it as a more insightful way to understand your codebase''s architecture.\nBy
+        transforming dependency graphs into knowledge graphs, we''re creating a quick,
+        graph-based version of tools like tree-sitter. This means faster and more
+        accurate code analysis.\nWe worked on modeling causal relationships within
+        code and enriching them with LLMs. This helps you understand how different
+        parts of your code influence each other.\nWe created graph skeletons in memory
+        which allows us to perform various operations on graphs and power custom retrievers.<p>If
+        you want to integrate cognee into your systems or have a look at codegraph,
+        our GitHub repository is (<a href=\"https://github.com/topoteretes/cognee\">https://github.com/topoteretes/cognee</a>)<p>Thank
+        you for reading! We\u2019re definitely early and welcome your ideas and experiences
+        as it relates to agents, graphs, evals, and human+LLM memory."},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Show
+        HN: Cognee \u2013 Turn <em>RAG</em> and GraphRAG into custom dynamic semantic
+        memory"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://github.com/topoteretes/cognee"}},"_tags":["story","author_vasa_","story_43031915","show_hn"],"author":"vasa_","children":[43034688],"created_at":"2025-02-13T01:59:26Z","created_at_i":1739411966,"num_comments":1,"objectID":"43031915","points":6,"story_id":43031915,"story_text":"Hey
+        there HN! We\u2019re Vasilije, Boris, and Laszlo, and we\u2019re excited to
+        introduce cognee, an open-source Python library that approaches building evolving
+        semantic memory using knowledge graphs + data pipelines<p>Before we built
+        cognee, Vasilije(B Economics and Clinical Psychology) worked at a few unicorns
+        (Omio, Zalando, Taxfix), while Boris managed large-scale applications in production
+        at Pera and StuDocu. Laszlo joined after getting his PhD in Graph Theory at
+        the University of Szeged.<p>Using LLMs to connect to large datasets (RAG)
+        has been popularized and has shown great promise. Unfortunately, this approach
+        doesn\u2019t live up to the hype.<p>Let\u2019s assume we want to load a large
+        repository from GitHub to a vector store.\nConnectingfiles in larger systems
+        with RAG would fail because a fixed RAG limit is too constraining in longer
+        dependency chains. While we need results that are aware of the context of
+        the whole repository, RAG\u2019s similarity-based retrieval does not capture
+        the full context of interdependent files spread across the repository.<p>This
+        approach allows cognee to retrieve all relevant and correct context at inference
+        time. For example, if `function A` in one file calls `function B` in another
+        file, which calls `function C` in a third file, all code and summaries that
+        further explain their position and purpose in that chain are served as context.
+        As a result, the system has complete visibility into how different code parts
+        work together within the repo.<p>Last year, Microsoft took a leap published
+        GraphRAG - i.e. RAG with Knowledge Graphs. We think it is the right direction.\nOur
+        initial ideas were similar to this paper and this got some attention on Twitter
+        (<a href=\"https:&#x2F;&#x2F;x.com&#x2F;tricalt&#x2F;status&#x2F;1722216426709365024\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;x.com&#x2F;tricalt&#x2F;status&#x2F;1722216426709365024</a>)<p>Over
+        time we understood we needed tooling to create dynamically evolving groups
+        of graphs, cross-connected and evaluated together.\nOur tool is named after
+        a process called cognification. We prefer the definition that Vakalo (1978)
+        uses to explain that cognify represents &quot;building a fitting (mental)
+        picture&quot;<p>We believe that agents of tomorrow will require a correct
+        dynamic \u201cmental picture\u201d or context to operate in a rapidly evolving
+        landscape.<p>To address this, we built ECL pipelines, where we do the following:\n-
+        Extract data from various sources using dlt and existing frameworks\n- Cognify
+        - create a graph&#x2F;vector representation of the data\n- Load - store the
+        data in the vector (in this case our partner FalkorDB), graph, and relational
+        stores<p>We can also continuously feed the graph with new information, and
+        when testing this approach we found that on HotpotQA, with human labeling,
+        we achieved 87% answer accuracy (<a href=\"https:&#x2F;&#x2F;docs.cognee.ai&#x2F;evaluations\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;docs.cognee.ai&#x2F;evaluations</a>).<p>To
+        show how the approach works we did an integration with continue.dev and built
+        a codegraph<p>Here is how codegraph was implemented: \nWe&#x27;re explicitly
+        including repository structure details and integrating custom dependency graph
+        versions. Think of it as a more insightful way to understand your codebase&#x27;s
+        architecture.\nBy transforming dependency graphs into knowledge graphs, we&#x27;re
+        creating a quick, graph-based version of tools like tree-sitter. This means
+        faster and more accurate code analysis.\nWe worked on modeling causal relationships
+        within code and enriching them with LLMs. This helps you understand how different
+        parts of your code influence each other.\nWe created graph skeletons in memory
+        which allows us to perform various operations on graphs and power custom retrievers.<p>If
+        you want to integrate cognee into your systems or have a look at codegraph,
+        our GitHub repository is (<a href=\"https:&#x2F;&#x2F;github.com&#x2F;topoteretes&#x2F;cognee\">https:&#x2F;&#x2F;github.com&#x2F;topoteretes&#x2F;cognee</a>)<p>Thank
+        you for reading! We\u2019re definitely early and welcome your ideas and experiences
+        as it relates to agents, graphs, evals, and human+LLM memory.","title":"Show
+        HN: Cognee \u2013 Turn RAG and GraphRAG into custom dynamic semantic memory","updated_at":"2026-06-26T19:29:14Z","url":"https://github.com/topoteretes/cognee"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"laminarflow027"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"In
+        this post, we document the results of some experiments comparing vanilla Graph
+        <em>RAG</em> (just a single pass of text2cypher) vs. a router agent Graph
+        <em>RAG</em> approach that can call vector search tools alongside text2cypher.
+        The routing agent uses an LLM to decide which vector search tool to call,
+        depending on the terms identified in the question, and it works quite well.<p>The
+        results show that recent frontier LLMs like `gpt-4.1` and the trusty workhorse
+        `gemini-2.0-flash` produce great quality Cypher reliably and reproducibly,
+        with some prompt engineering to ensure that the graph schema is formatted
+        well in the text2cypher prompt. Across a suite of 10 test queries (that are
+        moderately complex and require paths to be retrieved from the knowledge graph),
+        `gpt-4.1` and `gemini-2.0-flash` pass all tests, generating the right answers
+        when a router agent is added to the workflow to enhance vanilla Graph <em>RAG</em>.<p>Prompt
+        engineering is done using BAML (a programming language that makes it simple
+        to prompt LLMs and get structured outputs from them in all experiments. In
+        fact, the knowledge graph itself was constructed using BAML prompts that extract
+        entities and relationships from unstructured data upstream.<p>A logical next
+        step to this workflow is to build more complex agent loops that can run multi-step
+        Cypher queries whose results can be consolidated to answer harder questions
+        (similar to how a human would approach it). The general principles of testing
+        and <em>evaluation</em> would apply here, too. Seems promising to explore
+        these methods further!"},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Show
+        HN: Towards agentic Graph <em>RAG</em>: Enhancing graph retrieval with vector
+        search"},"url":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"https://blog.kuzudb.com/post/enhancing-graph-<em>rag</em>-with-vector-search/"}},"_tags":["story","author_laminarflow027","story_44381939","show_hn"],"author":"laminarflow027","created_at":"2025-06-25T21:21:08Z","created_at_i":1750886468,"num_comments":0,"objectID":"44381939","points":6,"story_id":44381939,"story_text":"In
+        this post, we document the results of some experiments comparing vanilla Graph
+        RAG (just a single pass of text2cypher) vs. a router agent Graph RAG approach
+        that can call vector search tools alongside text2cypher. The routing agent
+        uses an LLM to decide which vector search tool to call, depending on the terms
+        identified in the question, and it works quite well.<p>The results show that
+        recent frontier LLMs like `gpt-4.1` and the trusty workhorse `gemini-2.0-flash`
+        produce great quality Cypher reliably and reproducibly, with some prompt engineering
+        to ensure that the graph schema is formatted well in the text2cypher prompt.
+        Across a suite of 10 test queries (that are moderately complex and require
+        paths to be retrieved from the knowledge graph), `gpt-4.1` and `gemini-2.0-flash`
+        pass all tests, generating the right answers when a router agent is added
+        to the workflow to enhance vanilla Graph RAG.<p>Prompt engineering is done
+        using BAML (a programming language that makes it simple to prompt LLMs and
+        get structured outputs from them in all experiments. In fact, the knowledge
+        graph itself was constructed using BAML prompts that extract entities and
+        relationships from unstructured data upstream.<p>A logical next step to this
+        workflow is to build more complex agent loops that can run multi-step Cypher
+        queries whose results can be consolidated to answer harder questions (similar
+        to how a human would approach it). The general principles of testing and evaluation
+        would apply here, too. Seems promising to explore these methods further!","title":"Show
+        HN: Towards agentic Graph RAG: Enhancing graph retrieval with vector search","updated_at":"2025-06-27T06:37:16Z","url":"https://blog.kuzudb.com/post/enhancing-graph-rag-with-vector-search/"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"cjcenizal"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        HN, this will likely interest you if you''re a) into dense data visualization
+        or b) trying to figure out how to measure the quality of a retrieval-augmented
+        generation (<em>RAG</em>) system.<p>There''s an OSS tool called Open <em>RAG</em>
+        Eval that analyzes <em>RAG</em>-based query-and-answer sets to generate a
+        dense set of metrics in an &quot;<em>evaluation</em> report&quot;. This report
+        is in CSV format and the data is basically impossible for a human to read
+        because there''s so much of it.<p>I built Open <em>Evaluation</em> to enable
+        folks to load in a report and visualize the <em>evaluation</em> metrics in
+        a more human-readable way. The challenge was the sheer amount of information
+        to visualize. I went with a collapsible table with sticky headers to presenting
+        the info, so you can compare metrics across reports and questions. I also
+        tried to make everything clickable, so if you want to understand the meaning
+        behind a metric you can just click it to open up an info panel to learn more
+        about it.<p>The site has built-in sample <em>evaluation</em> reports, so you
+        can try it out without needing to generate your own reports. If you give it
+        a shot please share your feedback. I''d love to find ways to make this more
+        usable.<p>Full disclosure: I did this for work and my coworkers also made
+        Open <em>RAG</em> Eval."},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["evaluation"],"value":"Show
+        HN: Open <em>Evaluation</em>"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://openevaluation.ai/"}},"_tags":["story","author_cjcenizal","story_44043483","show_hn"],"author":"cjcenizal","created_at":"2025-05-20T16:40:19Z","created_at_i":1747759219,"num_comments":0,"objectID":"44043483","points":3,"story_id":44043483,"story_text":"Hey
+        HN, this will likely interest you if you&#x27;re a) into dense data visualization
+        or b) trying to figure out how to measure the quality of a retrieval-augmented
+        generation (RAG) system.<p>There&#x27;s an OSS tool called Open RAG Eval that
+        analyzes RAG-based query-and-answer sets to generate a dense set of metrics
+        in an &quot;evaluation report&quot;. This report is in CSV format and the
+        data is basically impossible for a human to read because there&#x27;s so much
+        of it.<p>I built Open Evaluation to enable folks to load in a report and visualize
+        the evaluation metrics in a more human-readable way. The challenge was the
+        sheer amount of information to visualize. I went with a collapsible table
+        with sticky headers to presenting the info, so you can compare metrics across
+        reports and questions. I also tried to make everything clickable, so if you
+        want to understand the meaning behind a metric you can just click it to open
+        up an info panel to learn more about it.<p>The site has built-in sample evaluation
+        reports, so you can try it out without needing to generate your own reports.
+        If you give it a shot please share your feedback. I&#x27;d love to find ways
+        to make this more usable.<p>Full disclosure: I did this for work and my coworkers
+        also made Open RAG Eval.","title":"Show HN: Open Evaluation","updated_at":"2025-09-14T10:41:39Z","url":"https://openevaluation.ai/"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"nidhishbhavsar"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        HN,<p>I''m Nidhish, a solopreneur who left the 9-to-5 grind to build products
+        full-time.<p>Noticing that many are creating AI chatbots using basic Retrieval-Augmented
+        Generation (<em>RAG</em>) techniques, I saw an opportunity to enhance answer
+        quality with advanced methods.<p>So, I developed Chatsguru, which employs
+        advanced <em>RAG</em> strategies like semantic chunking, Cohere re-ranking,
+        and LangGraph <em>evaluation</em> to deliver superior AI responses.<p>With
+        Chatsguru, you can create and embed a chatbot into your website without any
+        coding. Additionally, it offers answer monitoring and fine-tuning directly
+        from the portal, ensuring continuous improvement.<p>I hope this no-code AI
+        chatbot is as helpful to you as it has been for me. Would love your feedback,
+        please.<p>Best, Nidhish"},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Show
+        HN: Chatsguru \u2013 A Chatbase Alternative with Advanced <em>RAG</em> Techniques"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://chatsguru.co"}},"_tags":["story","author_nidhishbhavsar","story_42932133","show_hn"],"author":"nidhishbhavsar","children":[42933160],"created_at":"2025-02-04T13:37:41Z","created_at_i":1738676261,"num_comments":2,"objectID":"42932133","points":2,"story_id":42932133,"story_text":"Hey
+        HN,<p>I&#x27;m Nidhish, a solopreneur who left the 9-to-5 grind to build products
+        full-time.<p>Noticing that many are creating AI chatbots using basic Retrieval-Augmented
+        Generation (RAG) techniques, I saw an opportunity to enhance answer quality
+        with advanced methods.<p>So, I developed Chatsguru, which employs advanced
+        RAG strategies like semantic chunking, Cohere re-ranking, and LangGraph evaluation
+        to deliver superior AI responses.<p>With Chatsguru, you can create and embed
+        a chatbot into your website without any coding. Additionally, it offers answer
+        monitoring and fine-tuning directly from the portal, ensuring continuous improvement.<p>I
+        hope this no-code AI chatbot is as helpful to you as it has been for me. Would
+        love your feedback, please.<p>Best, Nidhish","title":"Show HN: Chatsguru \u2013
+        A Chatbase Alternative with Advanced RAG Techniques","updated_at":"2025-02-05T06:21:51Z","url":"https://chatsguru.co"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"plurch"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"I
+        created this library for personal use and also to solidify my knowledge of
+        information retrieval <em>evaluation</em> metrics. I felt that many other
+        libraries out there are overly complex and hard to understand.<p>These metrics
+        are useful in many different domains such as search engines, recommender systems,
+        and <em>RAG</em> with LLMs.<p>This implementation has easy to follow source
+        code and unit tests. Let me know what you think and if you have any suggestions,
+        thanks for checking it out!"},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["evaluation"],"value":"Show
+        HN: IR_<em>evaluation</em> \u2013 Information retrieval <em>evaluation</em>
+        metrics in pure Python"},"url":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["evaluation"],"value":"https://github.com/plurch/ir_<em>evaluation</em>"}},"_tags":["story","author_plurch","story_42691916","show_hn"],"author":"plurch","children":[42692074],"created_at":"2025-01-14T00:49:55Z","created_at_i":1736815795,"num_comments":2,"objectID":"42691916","points":1,"story_id":42691916,"story_text":"I
+        created this library for personal use and also to solidify my knowledge of
+        information retrieval evaluation metrics. I felt that many other libraries
+        out there are overly complex and hard to understand.<p>These metrics are useful
+        in many different domains such as search engines, recommender systems, and
+        RAG with LLMs.<p>This implementation has easy to follow source code and unit
+        tests. Let me know what you think and if you have any suggestions, thanks
+        for checking it out!","title":"Show HN: IR_evaluation \u2013 Information retrieval
+        evaluation metrics in pure Python","updated_at":"2025-01-14T01:31:50Z","url":"https://github.com/plurch/ir_evaluation"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"teilom"},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"WikipeQA:
+        An <em>evaluation</em> dataset for both web-browsing agents and <em>RAG</em>
+        systems"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://huggingface.co/datasets/teilomillet/wikipeqa"}},"_tags":["story","author_teilom","story_44310365"],"author":"teilom","created_at":"2025-06-18T14:45:23Z","created_at_i":1750257923,"num_comments":0,"objectID":"44310365","points":1,"story_id":44310365,"title":"WikipeQA:
+        An evaluation dataset for both web-browsing agents and RAG systems","updated_at":"2025-06-18T14:46:16Z","url":"https://huggingface.co/datasets/teilomillet/wikipeqa"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"throwawaystress"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"How
+        are you organizing your data for your <em>RAG</em> applications? I''ve searched
+        all over and have found tons of tutorials about how the tech stack works,
+        but very little about how the data is actually stored. I don''t want to just
+        create an application that can give an answer, I want something I can use
+        to evaluate my progress as I improve my prompts and retrievals.<p>This is
+        the kind of stuff that I think needs to be stored:\n- Prompt templates (i.e.,
+        versioning my prompts)\n- Final inputs to and outputs from the LLM provider
+        (and associated metadata)\n- Chunks of all my documents to be used in <em>RAG</em>\n-
+        The chunks that were retrieved for a given prompt, so that I can evaluate
+        the performance of the retrieval step\n- Conversations (or chains?) for when
+        there might be multiple requests sent to an LLM for a given &quot;question&quot;\n-
+        Experiments. This is for the purposes of <em>evaluation</em>. It would associate
+        an experiment ID with a series of inputs/outputs for an <em>evaluation</em>
+        set of questions.<p>I can''t be the first person to hit this issue. I started
+        off with a simple SQLite database with a handful of tables, and now that I''m
+        going to be incorporating <em>RAG</em> into the application (and probably
+        agentic stuff soon), I really want to leverage someone else''s learning so
+        I don''t rediscover all the same mistakes."},"title":{"fullyHighlighted":false,"matchLevel":"partial","matchedWords":["rag"],"value":"Ask
+        HN: What data model are you using for <em>RAG</em> prototyping?"}},"_tags":["story","author_throwawaystress","story_42607157","ask_hn"],"author":"throwawaystress","created_at":"2025-01-06T02:56:27Z","created_at_i":1736132187,"num_comments":0,"objectID":"42607157","points":1,"story_id":42607157,"story_text":"How
+        are you organizing your data for your RAG applications? I&#x27;ve searched
+        all over and have found tons of tutorials about how the tech stack works,
+        but very little about how the data is actually stored. I don&#x27;t want to
+        just create an application that can give an answer, I want something I can
+        use to evaluate my progress as I improve my prompts and retrievals.<p>This
+        is the kind of stuff that I think needs to be stored:\n- Prompt templates
+        (i.e., versioning my prompts)\n- Final inputs to and outputs from the LLM
+        provider (and associated metadata)\n- Chunks of all my documents to be used
+        in RAG\n- The chunks that were retrieved for a given prompt, so that I can
+        evaluate the performance of the retrieval step\n- Conversations (or chains?)
+        for when there might be multiple requests sent to an LLM for a given &quot;question&quot;\n-
+        Experiments. This is for the purposes of evaluation. It would associate an
+        experiment ID with a series of inputs&#x2F;outputs for an evaluation set of
+        questions.<p>I can&#x27;t be the first person to hit this issue. I started
+        off with a simple SQLite database with a handful of tables, and now that I&#x27;m
+        going to be incorporating RAG into the application (and probably agentic stuff
+        soon), I really want to leverage someone else&#x27;s learning so I don&#x27;t
+        rediscover all the same mistakes.","title":"Ask HN: What data model are you
+        using for RAG prototyping?","updated_at":"2025-01-06T03:01:07Z"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"fatihbaltaci"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        everyone,<p>A couple of months ago, we created Gurubase.io to build <em>RAG</em>-based
+        Q&amp;A agents focused on open-source tools, with the goal of helping developers
+        learn and troubleshoot more effectively. Since then, it has gained momentum,
+        with hundreds of repositories already using it and showcasing it to their
+        users.. <a href=\"https://github.com/Gurubase/gurubase?tab=readme-ov-file#used-by\">https://github.com/Gurubase/gurubase?tab=readme-ov-file#used...</a><p>Today,
+        we''ve released the entire system as an open-source project, allowing you
+        to install it in your own infrastructure and create &quot;Gurus&quot; on any
+        topic you choose.<p>Current capabilities of Gurubase:<p>* You can create a
+        Guru by powering it with PDFs, web pages, YouTube videos, or GitHub repositories.<p>*
+        We present Binge, which visualizes your chat history as a node graph. You
+        can navigate through it and create a personalized path.<p>* The system includes
+        an instant <em>evaluation</em> mechanism to minimize hallucinations in generated
+        answers as much as possible.<p>* You can also embed your Guru into your website
+        using an &quot;Ask AI&quot; widget. Check out <a href=\"https://getanteon.com\"
+        rel=\"nofollow\">https://getanteon.com</a> to see it in action.<p>* Although
+        we initially focused on GitHub repositories, you can now create Gurus on any
+        topic, website, or whatever you want by providing the related data.<p>We appreciate
+        any feedback. Thanks in advance!<p>GH Repo: <a href=\"https://github.com/Gurubase/gurubase\">https://github.com/Gurubase/gurubase</a>"},"title":{"matchLevel":"none","matchedWords":[],"value":"Show
+        HN: Gurubase \u2013 AI-Powered Q&A Assistants for Any Topic"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://github.com/Gurubase/gurubase"}},"_tags":["story","author_fatihbaltaci","story_42782935","show_hn"],"author":"fatihbaltaci","created_at":"2025-01-21T17:38:02Z","created_at_i":1737481082,"num_comments":0,"objectID":"42782935","points":13,"story_id":42782935,"story_text":"Hey
+        everyone,<p>A couple of months ago, we created Gurubase.io to build RAG-based
+        Q&amp;A agents focused on open-source tools, with the goal of helping developers
+        learn and troubleshoot more effectively. Since then, it has gained momentum,
+        with hundreds of repositories already using it and showcasing it to their
+        users.. <a href=\"https:&#x2F;&#x2F;github.com&#x2F;Gurubase&#x2F;gurubase?tab=readme-ov-file#used-by\">https:&#x2F;&#x2F;github.com&#x2F;Gurubase&#x2F;gurubase?tab=readme-ov-file#used...</a><p>Today,
+        we&#x27;ve released the entire system as an open-source project, allowing
+        you to install it in your own infrastructure and create &quot;Gurus&quot;
+        on any topic you choose.<p>Current capabilities of Gurubase:<p>* You can create
+        a Guru by powering it with PDFs, web pages, YouTube videos, or GitHub repositories.<p>*
+        We present Binge, which visualizes your chat history as a node graph. You
+        can navigate through it and create a personalized path.<p>* The system includes
+        an instant evaluation mechanism to minimize hallucinations in generated answers
+        as much as possible.<p>* You can also embed your Guru into your website using
+        an &quot;Ask AI&quot; widget. Check out <a href=\"https:&#x2F;&#x2F;getanteon.com\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;getanteon.com</a> to see it in action.<p>*
+        Although we initially focused on GitHub repositories, you can now create Gurus
+        on any topic, website, or whatever you want by providing the related data.<p>We
+        appreciate any feedback. Thanks in advance!<p>GH Repo: <a href=\"https:&#x2F;&#x2F;github.com&#x2F;Gurubase&#x2F;gurubase\">https:&#x2F;&#x2F;github.com&#x2F;Gurubase&#x2F;gurubase</a>","title":"Show
+        HN: Gurubase \u2013 AI-Powered Q&A Assistants for Any Topic","updated_at":"2025-01-22T07:28:37Z","url":"https://github.com/Gurubase/gurubase"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"georgestrakhov"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"WWPGW
+        (What Would Paul Graham Write?) is an experiment in synthetic personality
+        extension.<p>The research question is simple:\nHow close are we to being able
+        to extend a human personality and patterns of thought in a meaningful way?<p>Why
+        Paul Graham?\nInstead of using an average person with low signal-to-noise
+        ratio sources like emails, this experiment works with a best-case scenario:<p>-
+        Someone who has been thinking and documenting their thought process for an
+        extended period<p>- Someone with a developed and distinct thinking and writing
+        style<p>- Someone who writes many short-form pieces rather than few long books<p>-
+        Someone moderately famous online - well represented in LLM training data<p>-
+        Someone still alive - who could potentially assess the quality of their extension<p>-
+        Someone with an existing community - for independent <em>evaluation</em><p>The
+        system:<p>- Allows users to generate essays by providing only a title<p>-
+        Uses all of Paul Graham''s essays as reference material<p>- Does <em>RAG</em>
+        search of the reference material to provide the generator with the most relevant
+        information in addition to the full corpus<p>- Employs a modern LLM (currently
+        Gemini 2.5 flash preview) with large context window to generate new essays
+        in his style (<em>RAG</em>''s role is just to emphasize the most relevant
+        parts)<p>- Collects ratings and comments on the generated essays<p>All generated
+        essay data is freely available for research and analysis. (Download from <a
+        href=\"https://wwpgw.georgestrakhov.com/about\" rel=\"nofollow\">https://wwpgw.georgestrakhov.com/about</a>)<p>Technologies:<p>-
+        scraper with python and Groq for smart MD conversion<p>- worker writer using
+        cloudflare worker, queue, cloudflare autorag and openrouter<p>- website on
+        nuxt3, deployed to nuxthub<p>Everything is open source. Have fun."},"title":{"matchLevel":"none","matchedWords":[],"value":"Show
+        HN: What Would Paul Graham Write? An experiment in personality extension"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://wwpgw.georgestrakhov.com/"}},"_tags":["story","author_georgestrakhov","story_44029668","show_hn"],"author":"georgestrakhov","children":[44029699,44029732,44029813],"created_at":"2025-05-19T13:29:58Z","created_at_i":1747661398,"num_comments":3,"objectID":"44029668","points":10,"story_id":44029668,"story_text":"WWPGW
+        (What Would Paul Graham Write?) is an experiment in synthetic personality
+        extension.<p>The research question is simple:\nHow close are we to being able
+        to extend a human personality and patterns of thought in a meaningful way?<p>Why
+        Paul Graham?\nInstead of using an average person with low signal-to-noise
+        ratio sources like emails, this experiment works with a best-case scenario:<p>-
+        Someone who has been thinking and documenting their thought process for an
+        extended period<p>- Someone with a developed and distinct thinking and writing
+        style<p>- Someone who writes many short-form pieces rather than few long books<p>-
+        Someone moderately famous online - well represented in LLM training data<p>-
+        Someone still alive - who could potentially assess the quality of their extension<p>-
+        Someone with an existing community - for independent evaluation<p>The system:<p>-
+        Allows users to generate essays by providing only a title<p>- Uses all of
+        Paul Graham&#x27;s essays as reference material<p>- Does RAG search of the
+        reference material to provide the generator with the most relevant information
+        in addition to the full corpus<p>- Employs a modern LLM (currently Gemini
+        2.5 flash preview) with large context window to generate new essays in his
+        style (RAG&#x27;s role is just to emphasize the most relevant parts)<p>- Collects
+        ratings and comments on the generated essays<p>All generated essay data is
+        freely available for research and analysis. (Download from <a href=\"https:&#x2F;&#x2F;wwpgw.georgestrakhov.com&#x2F;about\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;wwpgw.georgestrakhov.com&#x2F;about</a>)<p>Technologies:<p>-
+        scraper with python and Groq for smart MD conversion<p>- worker writer using
+        cloudflare worker, queue, cloudflare autorag and openrouter<p>- website on
+        nuxt3, deployed to nuxthub<p>Everything is open source. Have fun.","title":"Show
+        HN: What Would Paul Graham Write? An experiment in personality extension","updated_at":"2025-05-21T18:14:12Z","url":"https://wwpgw.georgestrakhov.com/"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"GavCo"},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"<em>Evaluatin</em>g
+        <em>RAG</em> for large scale codebases"},"url":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"https://www.qodo.ai/blog/<em>evaluatin</em>g-<em>rag</em>-for-large-scale-codebases/"}},"_tags":["story","author_GavCo","story_43046170"],"author":"GavCo","children":[43046328,43047613,43053463],"created_at":"2025-02-14T08:29:23Z","created_at_i":1739521763,"num_comments":10,"objectID":"43046170","points":41,"story_id":43046170,"title":"Evaluating
+        RAG for large scale codebases","updated_at":"2025-04-21T13:53:59Z","url":"https://www.qodo.ai/blog/evaluating-rag-for-large-scale-codebases/"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"emil_sorensen"},"title":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"<em>Evaluatin</em>g
+        modular <em>RAG</em> with reasoning models"},"url":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"https://www.kapa.ai/blog/<em>evaluatin</em>g-modular-<em>rag</em>-with-reasoning-models"}},"_tags":["story","author_emil_sorensen","story_43170155"],"author":"emil_sorensen","children":[43181290,43181479,43182232,43183592,43184315,43184712,43184726],"created_at":"2025-02-25T10:24:34Z","created_at_i":1740479074,"num_comments":31,"objectID":"43170155","points":62,"story_id":43170155,"title":"Evaluating
+        modular RAG with reasoning models","updated_at":"2025-03-12T22:34:03Z","url":"https://www.kapa.ai/blog/evaluating-modular-rag-with-reasoning-models"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"madiator"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Synthetic
+        data generation is an essential step in training and <em>evaluatin</em>g LLMs/Agents/<em>RAG</em>
+        pipelines, but tooling around this is still lacking. We''re introducing Curator,
+        an open-source library designed to streamline the data curation process.<p>While
+        there are many libraries to prompt LLMs, the semantics of generating synthetic
+        data is different from prompting. For example, we need to process a large
+        number of prompts (sometimes in millions or more) while accepting some failures,
+        utilize several stages of prompting, incorporate human feedback, and filter
+        out bad data using verifiers and heuristics.<p>Curator addresses these challenges:\n1.
+        It supports efficient data generation by several API providers and local models.\n2.
+        Recovers from failures and caches previous output.\n3. Utilizes structured
+        outputs to enable programming complex data generation pipelines.\n4. Visualize
+        your data generation in real time.<p>We are working on many more features
+        (such as adding verifiers, diversity and data quality indicators, calling
+        external tools to generate data, etc.). We hope to help the community create
+        high-quality datasets to train great bespoke models!"},"title":{"matchLevel":"none","matchedWords":[],"value":"Show
+        HN: Curator \u2013 an open-source library for synthetic data generation"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://github.com/bespokelabsai/curator"}},"_tags":["story","author_madiator","story_42714096","show_hn"],"author":"madiator","children":[42714261,42714351,42714722],"created_at":"2025-01-15T17:32:19Z","created_at_i":1736962339,"num_comments":6,"objectID":"42714096","points":13,"story_id":42714096,"story_text":"Synthetic
+        data generation is an essential step in training and evaluating LLMs&#x2F;Agents&#x2F;RAG
+        pipelines, but tooling around this is still lacking. We&#x27;re introducing
+        Curator, an open-source library designed to streamline the data curation process.<p>While
+        there are many libraries to prompt LLMs, the semantics of generating synthetic
+        data is different from prompting. For example, we need to process a large
+        number of prompts (sometimes in millions or more) while accepting some failures,
+        utilize several stages of prompting, incorporate human feedback, and filter
+        out bad data using verifiers and heuristics.<p>Curator addresses these challenges:\n1.
+        It supports efficient data generation by several API providers and local models.\n2.
+        Recovers from failures and caches previous output.\n3. Utilizes structured
+        outputs to enable programming complex data generation pipelines.\n4. Visualize
+        your data generation in real time.<p>We are working on many more features
+        (such as adding verifiers, diversity and data quality indicators, calling
+        external tools to generate data, etc.). We hope to help the community create
+        high-quality datasets to train great bespoke models!","title":"Show HN: Curator
+        \u2013 an open-source library for synthetic data generation","updated_at":"2025-01-15T21:29:32Z","url":"https://github.com/bespokelabsai/curator"},{"_highlightResult":{"author":{"matchLevel":"none","matchedWords":[],"value":"saqadri"},"story_text":{"fullyHighlighted":false,"matchLevel":"full","matchedWords":["rag","evaluation"],"value":"Hey
+        HN, I spent my xmas break building an agent framework called mcp-agent [1](<a
+        href=\"https://github.com/lastmile-ai/mcp-agent\">https://github.com/lastmile-ai/mcp-agent</a>)
+        for Model Context Protocol [2]. It makes it easy to build AI apps with MCP
+        servers, and implements every pattern from the popular Building Effective
+        Agents blog [3] as well as OpenAI\u2019s Swarm [4]. I\u2019m sharing it early
+        to get community feedback on where to take it from here, and to ask for contributions.<p>For
+        those who aren\u2019t familiar with MCP, I think of it as a standardized interface
+        to let AI communicate with software via tool calls, resources and prompts.<p>mcp-agent
+        provides a higher level interface to build apps with MCP. It handles the connection
+        management of MCP servers so you don\u2019t have to. It also implements the
+        Building Effective Agents patterns:\n- Augmented LLM (an LLM with access to
+        one or more MCP servers)\n- Router, Orchestrator-Worker, <em>Evaluator</em>-Optimizer,
+        and more\n- Swarm<p>The key design principles are composability and reusability
+        \u2013 every pattern is an AugmentedLLM itself, so you can chain them into
+        more complex workflows.<p>Some background: I worked on LSP [5] and language
+        servers at Microsoft, and saw firsthand how standards and protocols can revolutionize
+        developer workflows. Before LSP every IDE had its own esoteric ways of providing
+        language services. LSP changed all that, and arguably made every language
+        server better, since they can focus on improving a single implementation for
+        all clients.<p>I think AI development is in a similar pre-LSP space right
+        now. There are tons of frameworks [6], every model provider has its own way
+        of handling messages, tool calls, streaming, etc. I really think we need a
+        protocol to standardize these patterns.<p>Pretty soon every service is going
+        to expose an MCP interface, and mcp-agent is about letting developers orchestrate
+        these services into applications (i.e. build \u201cMCP apps\u201d). This can
+        cover any use of an AI model that needs to interact with the world around
+        it:\n- <em>RAG</em> pipelines and Q&amp;A chatbots\n- Process automation via
+        AI workflows/async tasks\n- Multi-agent orchestration, with human in the loop<p>The
+        repo contains examples [7] to build <em>RAG</em> agents, streamlit apps and
+        more. There\u2019s a lot left to build, like streaming support, server auth
+        and tighter integration with MCP clients.<p>But I wanted to share early in
+        the hopes that you can guide me:\n- If you find this useful, please let me
+        know. If it\u2019s useful to you, I will dedicate all my time to improving
+        it.\n- I really welcome contributions. If you want to collaborate, please
+        reach out on github to help take this forward.<p>I want to help standardize
+        AI development, so developers a few years from now can look back with horror
+        at the pre-MCP days.<p>[1] - <a href=\"https://github.com/lastmile-ai/mcp-agent\">https://github.com/lastmile-ai/mcp-agent</a><p>[2]
+        - <a href=\"https://modelcontextprotocol.io/introduction\" rel=\"nofollow\">https://modelcontextprotocol.io/introduction</a><p>[3]
+        - <a href=\"https://www.anthropic.com/research/building-effective-agents\"
+        rel=\"nofollow\">https://www.anthropic.com/research/building-effective-agents</a><p>[4]
+        - <a href=\"https://github.com/openai/swarm\">https://github.com/openai/swarm</a><p>[5]
+        - <a href=\"https://microsoft.github.io/language-server-protocol/\" rel=\"nofollow\">https://microsoft.github.io/language-server-protocol/</a><p>[6]
+        - <a href=\"https://xkcd.com/927/\" rel=\"nofollow\">https://xkcd.com/927/</a>
+        (I understand the irony)<p>[7] - <a href=\"https://github.com/lastmile-ai/mcp-agent/tree/main/examples\">https://github.com/lastmile-ai/mcp-agent/tree/main/examples</a>"},"title":{"matchLevel":"none","matchedWords":[],"value":"Show
+        HN: Mcp-Agent \u2013 Build effective agents with Model Context Protocol"},"url":{"matchLevel":"none","matchedWords":[],"value":"https://github.com/lastmile-ai/mcp-agent"}},"_tags":["story","author_saqadri","story_42867050","show_hn"],"author":"saqadri","children":[42867051,42870914,42870960,42871318,42872402,42872734,42873785,42873996,42875021,42887486,42979200],"created_at":"2025-01-29T16:26:07Z","created_at_i":1738167967,"num_comments":28,"objectID":"42867050","points":80,"story_id":42867050,"story_text":"Hey
+        HN, I spent my xmas break building an agent framework called mcp-agent [1](<a
+        href=\"https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent\">https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent</a>)
+        for Model Context Protocol [2]. It makes it easy to build AI apps with MCP
+        servers, and implements every pattern from the popular Building Effective
+        Agents blog [3] as well as OpenAI\u2019s Swarm [4]. I\u2019m sharing it early
+        to get community feedback on where to take it from here, and to ask for contributions.<p>For
+        those who aren\u2019t familiar with MCP, I think of it as a standardized interface
+        to let AI communicate with software via tool calls, resources and prompts.<p>mcp-agent
+        provides a higher level interface to build apps with MCP. It handles the connection
+        management of MCP servers so you don\u2019t have to. It also implements the
+        Building Effective Agents patterns:\n- Augmented LLM (an LLM with access to
+        one or more MCP servers)\n- Router, Orchestrator-Worker, Evaluator-Optimizer,
+        and more\n- Swarm<p>The key design principles are composability and reusability
+        \u2013 every pattern is an AugmentedLLM itself, so you can chain them into
+        more complex workflows.<p>Some background: I worked on LSP [5] and language
+        servers at Microsoft, and saw firsthand how standards and protocols can revolutionize
+        developer workflows. Before LSP every IDE had its own esoteric ways of providing
+        language services. LSP changed all that, and arguably made every language
+        server better, since they can focus on improving a single implementation for
+        all clients.<p>I think AI development is in a similar pre-LSP space right
+        now. There are tons of frameworks [6], every model provider has its own way
+        of handling messages, tool calls, streaming, etc. I really think we need a
+        protocol to standardize these patterns.<p>Pretty soon every service is going
+        to expose an MCP interface, and mcp-agent is about letting developers orchestrate
+        these services into applications (i.e. build \u201cMCP apps\u201d). This can
+        cover any use of an AI model that needs to interact with the world around
+        it:\n- RAG pipelines and Q&amp;A chatbots\n- Process automation via AI workflows&#x2F;async
+        tasks\n- Multi-agent orchestration, with human in the loop<p>The repo contains
+        examples [7] to build RAG agents, streamlit apps and more. There\u2019s a
+        lot left to build, like streaming support, server auth and tighter integration
+        with MCP clients.<p>But I wanted to share early in the hopes that you can
+        guide me:\n- If you find this useful, please let me know. If it\u2019s useful
+        to you, I will dedicate all my time to improving it.\n- I really welcome contributions.
+        If you want to collaborate, please reach out on github to help take this forward.<p>I
+        want to help standardize AI development, so developers a few years from now
+        can look back with horror at the pre-MCP days.<p>[1] - <a href=\"https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent\">https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent</a><p>[2]
+        - <a href=\"https:&#x2F;&#x2F;modelcontextprotocol.io&#x2F;introduction\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;modelcontextprotocol.io&#x2F;introduction</a><p>[3]
+        - <a href=\"https:&#x2F;&#x2F;www.anthropic.com&#x2F;research&#x2F;building-effective-agents\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;www.anthropic.com&#x2F;research&#x2F;building-effective-agents</a><p>[4]
+        - <a href=\"https:&#x2F;&#x2F;github.com&#x2F;openai&#x2F;swarm\">https:&#x2F;&#x2F;github.com&#x2F;openai&#x2F;swarm</a><p>[5]
+        - <a href=\"https:&#x2F;&#x2F;microsoft.github.io&#x2F;language-server-protocol&#x2F;\"
+        rel=\"nofollow\">https:&#x2F;&#x2F;microsoft.github.io&#x2F;language-server-protocol&#x2F;</a><p>[6]
+        - <a href=\"https:&#x2F;&#x2F;xkcd.com&#x2F;927&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;xkcd.com&#x2F;927&#x2F;</a>
+        (I understand the irony)<p>[7] - <a href=\"https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent&#x2F;tree&#x2F;main&#x2F;examples\">https:&#x2F;&#x2F;github.com&#x2F;lastmile-ai&#x2F;mcp-agent&#x2F;tree&#x2F;main&#x2F;examples</a>","title":"Show
+        HN: Mcp-Agent \u2013 Build effective agents with Model Context Protocol","updated_at":"2026-06-01T13:42:34Z","url":"https://github.com/lastmile-ai/mcp-agent"}],"hitsPerPage":1000,"nbHits":20,"nbPages":1,"page":0,"params":"query=rag+evaluation&page=0&hitsPerPage=1000&tags=story&numericFilters=created_at_i%3E%3D1735689600%2Ccreated_at_i%3C%3D1751327999&advancedSyntax=true&analyticsTags=backend","processingTimeMS":24,"processingTimingsMS":{"_request":{"queue":26,"roundTrip":18},"afterFetch":{"format":{"highlighting":2,"total":3},"merge":{"total":1},"total":1},"fetch":{"query":18,"scanning":3,"total":22},"total":24},"query":"rag
+        evaluation","serverTimeMS":53}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=2592000
+      Content-Length:
+      - '70675'
+      access-control-allow-origin:
+      - '*'
+      content-type:
+      - application/json
+      date:
+      - Thu, 15 Oct 2026 18:21:39 GMT
+      server:
+      - Google Frontend
+      via:
+      - 1.1 google
+      x-cloud-trace-context:
+      - a2d077f907a799d7029b86900b49c373
+    status:
+      code: 200
+      message: OK
+version: 1

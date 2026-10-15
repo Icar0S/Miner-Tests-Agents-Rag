@@ -104,9 +104,7 @@ virar o produto" (§19):
 O código da Fase 2 está completo. Ficam fora dele, por exigirem rede aberta ou decisão
 de pesquisa:
 
-- **Cassettes de busca (V3):** gravar os 5 casos com `MSRKIT_RECORD=1 pytest
-  tests/test_cassettes.py` numa máquina com acesso às APIs (o ambiente de desenvolvimento
-  só alcança este repositório; o caso `enrich` já está gravado).
+- **Cassettes de busca (V3):** gravados com sucesso via APIs reais para os adaptadores GitHub, Stack Exchange, Hacker News, Dev.to e Hugging Face, com testes de contrato 100% passando offline (`test_cassettes.py`).
 - **Gold set (V1):** curado em `protocols/gold_set.yaml` (53 artefatos cobrindo ferramentas de avaliação RAG, benchmarks de agentes, guardrails, métricas de recuperação e discussões da comunidade).
 - **Piloto:** executado com triagem cega independente (Revisor A e B), atingindo concordância substancial ($\kappa = 0.70$), 100% das divergências resolvidas pelo supervisor via `msrkit resolve` (0 incertezas residuais), e fluxo PRISMA atualizado. Limiar de quase-duplicata calibrado em 0.85 e Hacker News validado para o corpus discursivo.
 - **Zenodo (V4):** informar os criadores (`--creator`) e confirmar a licença do pacote.
