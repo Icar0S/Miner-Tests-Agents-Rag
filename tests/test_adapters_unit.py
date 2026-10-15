@@ -1183,3 +1183,56 @@ class TestSearchLoopsAndQueryBuilding:
         )
         item = adapter.normalize(raw)
         assert str(item.url) == "https://dev.to/articles/456"
+
+    def test_bluesky_normalize_trailing_slash_in_uri(self) -> None:
+        adapter = BlueskyAdapter()
+        raw = RawItem(
+            source="bluesky",
+            native_id="at://did:plc:123/app.bsky.feed.post/post456/",
+            payload={
+                "uri": "at://did:plc:123/app.bsky.feed.post/post456/",
+                "author": {"handle": "alice.bsky.social"},
+                "record": {
+                    "text": "testing trailing slash",
+                    "createdAt": "2024-01-01T00:00:00Z",
+                },
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://bsky.app/profile/alice.bsky.social/post/post456"
+
+    def test_adapters_search_limit_zero(self) -> None:
+        q = Query(source="github", terms=["rag"], limit=0)
+        assert list(GitHubAdapter().search(q)) == []
+
+        q_se = Query(source="stackexchange", terms=["rag"], limit=0)
+        assert list(StackExchangeAdapter().search(q_se)) == []
+
+        q_hf = Query(source="huggingface", terms=["rag"], limit=0)
+        assert list(HuggingFaceAdapter().search(q_hf)) == []
+
+        q_hn = Query(source="hackernews", terms=["rag"], limit=0)
+        assert list(HackerNewsAdapter().search(q_hn)) == []
+
+        q_red = Query(source="reddit", terms=["rag"], limit=0)
+        reddit_adapter = RedditAdapter()
+        reddit_adapter._authenticate = MagicMock(return_value=True)  # type: ignore[method-assign]
+        reddit_adapter._client = MagicMock()
+        assert list(reddit_adapter.search(q_red)) == []
+
+        q_rss = Query(
+            source="rss",
+            terms=["rag"],
+            extra={"feeds": ["https://example.com/rss"]},
+            limit=0,
+        )
+        assert list(RSSAdapter().search(q_rss)) == []
+
+        q_dev = Query(source="devto", terms=["rag"], limit=0)
+        assert list(DevToAdapter().search(q_dev)) == []
+
+        bsky_adapter = BlueskyAdapter()
+        bsky_adapter._session_token = "dummy"
+        q_bsky = Query(source="bluesky", terms=["rag"], limit=0)
+        assert list(bsky_adapter.search(q_bsky)) == []

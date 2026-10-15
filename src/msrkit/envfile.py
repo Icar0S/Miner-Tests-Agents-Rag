@@ -50,7 +50,7 @@ def load_dotenv(
     if env.get("MSRKIT_NO_DOTENV") == "1" or not p.is_file():
         return []
     loaded = []
-    for key, value in parse_dotenv(p.read_text(encoding="utf-8")).items():
+    for key, value in parse_dotenv(p.read_text(encoding="utf-8-sig")).items():
         if key not in env:
             env[key] = value
             loaded.append(key)

@@ -362,3 +362,36 @@ def test_write_csv_formats_lists_tuples_and_dicts(tmp_path: Path) -> None:
     assert parsed[0]["tags"] == "rag, eval"
     assert parsed[0]["bounds"] == "0.1, 0.9"
     assert parsed[0]["meta"] == "a=1; b=2"
+
+
+def test_consensus_cross_field_and_supervisor() -> None:
+    rec_a = _rec("r1", "ana", f1="val1")
+    rec_b = _rec("r1", "bob", f1="val1", f2="val2")
+    res = consensus([rec_a, rec_b])
+    assert res["f1"] == "val1"
+    assert res["f2"] is None
+
+    rec_sup = _rec("r1", "supervisor_joao", f1="val1", f2="override")
+    res_sup = consensus([rec_a, rec_b, rec_sup])
+    assert res_sup["f2"] == "override"
+
+
+def test_units_from_codings_scalar_strings_no_splintering() -> None:
+    item = _item("r1", "https://github.com/org/repo")
+    codings = {
+        ("r1", "ana"): _rec(
+            "r1",
+            "ana",
+            sistema="rag",
+            ferramentas="pytest",
+            metodos="fuzzing",
+            modos_falha="FP1",
+        )
+    }
+    units = units_from_codings([item], codings)
+    assert len(units) == 1
+    unit = units[0]
+    assert unit.systems == ["rag"]
+    assert "pytest" in unit.tools
+    assert unit.methods == ["fuzzing"]
+    assert unit.failure_modes == ["FP1"]

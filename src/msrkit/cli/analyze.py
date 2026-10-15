@@ -297,9 +297,10 @@ def analyze_topics(
     if gaz:
         origin = catalog_origin(gaz)
         total = sum(origin.values())
+        disc = origin.get("discovery", 0)
+        pct = f"({disc / total:.0%})" if total else "(0%)"
         console.print(
-            f"Catalog from the discovery pass: {origin['discovery']}/{total} entries "
-            f"({origin['discovery'] / total:.0%})"
+            f"Catalog from the discovery pass: {disc}/{total} entries {pct}"
         )
     console.print(f"[green]✓ Written to {out}[/green]")
 

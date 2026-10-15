@@ -193,7 +193,11 @@ class ProtocolConfig(BaseModel):
             raise ValueError(f"query '{raw_q.q}' uses a template but no gazetteer is loaded")
         out: list[tuple[str, str]] = []
         for tool in self._gazetteer.anchors(raw_q.anchor_families):
-            repos = tool.repos if "{repo}" in raw_q.q else [""]
+            repos = (
+                [r.strip() for r in tool.repos if r and r.strip()]
+                if "{repo}" in raw_q.q
+                else [""]
+            )
             for repo in repos:
                 text = raw_q.q.replace("{anchor}", tool.token()).replace("{repo}", repo)
                 out.append((text, f"{raw_q.label}:{tool.id}" if raw_q.label else tool.id))
@@ -363,7 +367,7 @@ def load_protocol(path: str | Path, environ: Mapping[str, str] | None = None) ->
     if not p.exists():
         raise FileNotFoundError(f"Protocol file not found: {p}")
 
-    raw = p.read_text(encoding="utf-8")
+    raw = p.read_text(encoding="utf-8-sig")
     data = yaml.safe_load(raw)
 
     if not isinstance(data, dict):

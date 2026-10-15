@@ -342,13 +342,13 @@ def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRec
         if coding_dir.exists():
             for p in coding_dir.glob("*/codings.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8").splitlines():
+                    for line in p.read_text(encoding="utf-8-sig").splitlines():
                         if line.strip():
                             r = CodingRecord.model_validate(json.loads(line))
                             latest[(r.item_id, r.coder)] = r
         path = codings_path(data_dir, "consolidated")
         if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
+            for line in path.read_text(encoding="utf-8-sig").splitlines():
                 if line.strip():
                     r = CodingRecord.model_validate(json.loads(line))
                     latest[(r.item_id, r.coder)] = r
@@ -356,7 +356,7 @@ def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRec
 
     path = codings_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
             if line.strip():
                 r = CodingRecord.model_validate(json.loads(line))
                 latest[(r.item_id, r.coder)] = r

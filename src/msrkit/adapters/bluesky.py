@@ -122,7 +122,7 @@ class BlueskyAdapter(BaseAdapter):
             logger.warning("Bluesky: cannot authenticate, skipping")
             return
 
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -207,8 +207,9 @@ class BlueskyAdapter(BaseAdapter):
 
         # Convert AT URI to web URL
         # at://did:plc:xxx/app.bsky.feed.post/yyy → https://bsky.app/profile/handle/post/yyy
-        if uri and handle:
-            url = f"https://bsky.app/profile/{handle}/post/{uri.split('/')[-1]}"
+        post_key = [x for x in uri.split("/") if x][-1] if uri else ""
+        if post_key and handle:
+            url = f"https://bsky.app/profile/{handle}/post/{post_key}"
         elif handle:
             url = f"https://bsky.app/profile/{handle}"
         else:

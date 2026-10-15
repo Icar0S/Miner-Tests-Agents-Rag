@@ -358,13 +358,13 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
         if screen_dir.exists():
             for p in screen_dir.glob("*/decisions.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8").splitlines():
+                    for line in p.read_text(encoding="utf-8-sig").splitlines():
                         if line.strip():
                             d = ScreeningDecision.model_validate(json.loads(line))
                             latest[(d.item_id, d.coder)] = d
         path = decisions_path(data_dir, "consolidated")
         if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
+            for line in path.read_text(encoding="utf-8-sig").splitlines():
                 if line.strip():
                     d = ScreeningDecision.model_validate(json.loads(line))
                     latest[(d.item_id, d.coder)] = d
@@ -372,7 +372,7 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
 
     path = decisions_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
             if line.strip():
                 d = ScreeningDecision.model_validate(json.loads(line))
                 latest[(d.item_id, d.coder)] = d

@@ -109,7 +109,7 @@ def build_flow(
             for (i, _coder), d in decisions.items()
             if i == item_id and d.decision == "exclude"
             for c in d.criteria_met
-            if c.upper().startswith("E")
+            if isinstance(c, str) and c.upper().startswith("E")
         }
         for c in sorted(marked) or ["other (reason given)"]:
             excl_reasons[c] += 1

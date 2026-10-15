@@ -188,3 +188,30 @@ class TestPrismaCommand:
         assert '"quote_\'source\'"' not in mermaid  # inner double quotes replaced by single
         assert "reason_'x'_with_underscore" in mermaid
 
+    def test_build_flow_non_string_criteria_met(self, tmp_path: Path) -> None:
+        decisions = {
+            ("it1", "coder1"): ScreeningDecision.model_construct(
+                item_id="it1",
+                coder="coder1",
+                decision="exclude",
+                criteria_met=["E1", None, 123],
+                reason="test",
+                decided_at="now",
+                sheet_sha256="s",
+            )
+        }
+        item = _item(1, "github")
+        item.id = "it1"
+        flow = build_flow(
+            run_id="r1",
+            manifest=None,
+            items=[item],
+            pool=[item],
+            dedupe_report=None,
+            discard_file=tmp_path / "discard.jsonl",
+            decisions=decisions,
+            coded_ids=set(),
+        )
+        assert flow.excluded == 1
+        assert "E1" in flow.exclusion_reasons
+

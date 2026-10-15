@@ -115,3 +115,17 @@ def test_catalog_origin_counts() -> None:
     )
     counts = catalog_origin(gaz)
     assert counts == {"seed": 2, "discovery": 1}
+
+
+def test_repo_template_skips_empty_repos(tmp_path: Path) -> None:
+    proto = _protocol(
+        tmp_path,
+        "      - {kind: issue, q: 'repo:{repo} is:issue'}\n",
+    )
+    (tmp_path / "g.yaml").write_text(
+        "version: '1'\ntools:\n"
+        "  - {id: no_repo, name: NoRepo, family: eval, repos: ['', '  ']}\n"
+        "  - {id: valid, name: Valid, family: eval, repos: ['owner/valid']}\n"
+    )
+    queries = load_protocol(proto).build_queries("github")
+    assert [q.terms[0] for q in queries] == ["repo:owner/valid is:issue"]

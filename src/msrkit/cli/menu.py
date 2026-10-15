@@ -610,6 +610,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             dedupe(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "6":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             enrich(
                 run_id=selected_run,
                 limit=50,
@@ -619,6 +621,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             )
         elif choice == "7":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             extract(run_id=selected_run, protocol=protocol_path, top=25, verbose=False)
         elif choice == "8":
             sub_choice = Prompt.ask(
@@ -628,6 +632,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
 
             if sub_choice == "1":
                 selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
                 coder = Prompt.ask("Nome do avaliador", default="revisor")
                 screen_export(
                     run_id=selected_run,
@@ -640,6 +646,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 )
             else:
                 selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
                 sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
                 screen_import(
                     sheet=sheet_file,
@@ -656,6 +664,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
 
             if sub_choice == "1":
                 selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
                 coder = Prompt.ask("Nome do avaliador", default="revisor")
                 coding_export(
                     run_id=selected_run,
@@ -669,6 +679,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 )
             else:
                 selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
                 sheet_file = Prompt.ask("Caminho do arquivo CSV preenchido")
                 coding_import(
                     sheet=sheet_file,
@@ -678,6 +690,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 )
         elif choice == "10":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             sub_choice = Prompt.ask(
                 "Deseja [1] Calcular índice Kappa e exportar divergências ou "
                 "[2] Aplicar resolução de divergências (disagreements.csv)?",
@@ -697,6 +711,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 resolve_disagreements_cmd(sheet=sheet_file, run_id=selected_run)
         elif choice == "11":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             default_gold = (
                 "protocols/gold_set.yaml"
                 if Path("protocols/gold_set.yaml").exists()
@@ -712,6 +728,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             )
         elif choice == "12":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             sub_choice = Prompt.ask(
                 "Deseja [1] Gerar amostra estratificada (.csv) ou "
                 "[2] Calcular precisão de planilha avaliada?",
@@ -728,6 +746,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 precision_score_cmd(sheet=sheet_file, run_id=selected_run)
         elif choice == "13":
             selected_run = _select_screening_run_id()
+            if not selected_run:
+                continue
             creator_name = Prompt.ask(
                 "Nome do autor/criador para Zenodo (ex: Lima, Matheus)", default=""
             )

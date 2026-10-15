@@ -88,7 +88,7 @@ class RSSAdapter(BaseAdapter):
         import feedparser
 
         feeds = q.extra.get("feeds", [])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 

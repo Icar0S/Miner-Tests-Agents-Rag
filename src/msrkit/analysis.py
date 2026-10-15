@@ -99,14 +99,15 @@ def consensus(records: list[CodingRecord]) -> dict[str, Any]:
     """
     if not records:
         return {}
-    from msrkit.screening import CONSENSUS_CODERS
+    from msrkit.screening import is_consensus_coder
 
     for r in records:
-        if r.coder.strip().lower() in CONSENSUS_CODERS:
+        if is_consensus_coder(r.coder):
             return dict(r.values)
 
     out: dict[str, Any] = {}
-    for name in records[0].values:
+    all_names = list(dict.fromkeys(k for r in records for k in r.values))
+    for name in all_names:
         values = [r.values.get(name) for r in records]
         lists = [v for v in values if isinstance(v, list)]
         if len(lists) == len(values):
@@ -128,6 +129,12 @@ def units_from_codings(
         by_item.setdefault(item_id, []).append(rec)
     item_map = {it.id: it for it in items}
     units: dict[str, Unit] = {}
+
+    def _as_list(v: Any) -> list[Any]:
+        if isinstance(v, str):
+            return [v]
+        return list(v) if isinstance(v, (list, set, tuple)) else []
+
     for item_id, recs in by_item.items():
         item = item_map.get(item_id)
         if item is None:
@@ -136,16 +143,18 @@ def units_from_codings(
         key = _unit_key(item)
         unit = units.setdefault(key, Unit(id=key, source=item.source))
         unit.item_ids.append(item_id)
-        unit.systems = sorted(set(unit.systems) | set(values.get(FIELD_SYSTEM) or []))
+        unit.systems = sorted(set(unit.systems) | set(_as_list(values.get(FIELD_SYSTEM))))
         level = values.get(FIELD_LEVEL)
-        for tool in values.get(FIELD_TOOLS) or []:
+        for tool in _as_list(values.get(FIELD_TOOLS)):
             current = unit.tools.get(tool)
             if level and (current is None or LEVEL_RANK[level] > LEVEL_RANK[current]):
                 unit.tools[tool] = level
             elif current is None:
                 unit.tools[tool] = "N1"
-        unit.methods = sorted(set(unit.methods) | set(values.get(FIELD_METHODS) or []))
-        unit.failure_modes = sorted(set(unit.failure_modes) | set(values.get(FIELD_FAILURES) or []))
+        unit.methods = sorted(set(unit.methods) | set(_as_list(values.get(FIELD_METHODS))))
+        unit.failure_modes = sorted(
+            set(unit.failure_modes) | set(_as_list(values.get(FIELD_FAILURES)))
+        )
         unit.oracle = unit.oracle or values.get(FIELD_ORACLE)
         unit.aggregation = unit.aggregation or values.get(FIELD_AGGREGATION)
     return sorted(units.values(), key=lambda u: u.id)

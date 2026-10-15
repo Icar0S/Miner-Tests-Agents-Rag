@@ -89,7 +89,7 @@ class DevToAdapter(BaseAdapter):
         in the protocol config and yield all articles.
         """
         tags = q.extra.get("tags", ["rag", "llm", "ai", "agents", "testing"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 

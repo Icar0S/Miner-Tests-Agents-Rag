@@ -73,6 +73,32 @@ class TestGitHubRawQuery:
         qs = GitHubAdapter()._build_single_query_string(q, term=q.terms[0])
         assert qs == '("RAG") (eval OR test) stars:>5 created:2023-01-01..2023-06-30'
 
+    def test_raw_repo_query_half_open_date_windows(self) -> None:
+        adapter = GitHubAdapter()
+        q_since = Query(
+            source="github",
+            terms=["stars:>5"],
+            kind="repo",
+            raw=True,
+            since=date(2023, 1, 1),
+        )
+        assert (
+            adapter._build_single_query_string(q_since, term=q_since.terms[0])
+            == "stars:>5 created:>=2023-01-01"
+        )
+
+        q_until = Query(
+            source="github",
+            terms=["stars:>5"],
+            kind="repo",
+            raw=True,
+            until=date(2023, 6, 30),
+        )
+        assert (
+            adapter._build_single_query_string(q_until, term=q_until.terms[0])
+            == "stars:>5 created:<=2023-06-30"
+        )
+
     def test_raw_query_with_own_created_range_is_not_date_split(self, monkeypatch) -> None:
         adapter = GitHubAdapter()
         monkeypatch.setattr(adapter, "estimate", lambda q: 5000)

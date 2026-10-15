@@ -94,7 +94,7 @@ class PackageBuilder:
         if transform is None:
             self.add_bytes(arcname, path.read_bytes())
         else:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
             text = "\n".join(transform(ln) for ln in lines if ln.strip())
             self.add_bytes(arcname, (text + "\n" if text else "").encode("utf-8"))
         return True

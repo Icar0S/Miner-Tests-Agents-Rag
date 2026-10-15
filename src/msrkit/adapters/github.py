@@ -191,7 +191,7 @@ class GitHubAdapter(BaseAdapter):
             return
 
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -449,9 +449,13 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         if q.raw and term:
             # Literal protocol query: keep it verbatim, add only the date window.
-            if kind == "code" or "created:" in term or not (q.since and q.until):
+            if kind == "code" or "created:" in term or not (q.since or q.until):
                 return term
-            return f"{term} created:{q.since}..{q.until}"
+            if q.since and q.until:
+                return f"{term} created:{q.since}..{q.until}"
+            if q.since:
+                return f"{term} created:>={q.since}"
+            return f"{term} created:<={q.until}"
         parts = []
         if term:
             parts.append(f'"{term}"' if " " in term else term)

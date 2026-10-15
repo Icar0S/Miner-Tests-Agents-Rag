@@ -123,7 +123,7 @@ class StackExchangeAdapter(BaseAdapter):
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search across configured Stack Exchange sites."""
         sites = q.extra.get("sites", ["stackoverflow"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
 
         # One request per (site, term, tag filter); see tag_filters (ADR-017, ADR-042).

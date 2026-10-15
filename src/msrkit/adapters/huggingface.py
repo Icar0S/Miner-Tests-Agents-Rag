@@ -104,7 +104,7 @@ class HuggingFaceAdapter(BaseAdapter):
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search models, datasets, and spaces."""
         kinds = q.extra.get("kinds", ["models", "datasets", "spaces"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 

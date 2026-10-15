@@ -58,7 +58,7 @@ def load_gold(path: str | Path) -> GoldSet:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Gold set not found: {p}")
-    return GoldSet.model_validate(yaml.safe_load(p.read_text(encoding="utf-8")))
+    return GoldSet.model_validate(yaml.safe_load(p.read_text(encoding="utf-8-sig")))
 
 
 def _gold_repo(url: str) -> str | None:
