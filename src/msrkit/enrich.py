@@ -38,7 +38,15 @@ logger = logging.getLogger(__name__)
 
 _API = "https://api.github.com"
 TEST_DIRS = {
-    "tests", "test", "evals", "eval", "evaluation", "__tests__", "spec", "benchmarks", "testing"
+    "tests",
+    "test",
+    "evals",
+    "eval",
+    "evaluation",
+    "__tests__",
+    "spec",
+    "benchmarks",
+    "testing",
 }
 TEST_FILE_RE = re.compile(
     r"(^test_.*\.py$|.*_test\.py$|.*\.(test|spec)\.[jt]sx?$|.*_test\.go$|.*_test\.rs$)"
