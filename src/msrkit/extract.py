@@ -98,7 +98,14 @@ def dependency_names(path: str, content: str) -> dict[str, str]:
         if base.endswith(".txt"):
             match = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", stripped)
             candidates = [match.group(1)] if match else []
-        else:  # pyproject.toml / setup.cfg / setup.py: quoted specs and `name = ` keys
+        elif base == "go.mod":
+            go_match = re.search(r"(?:require\s+)?([A-Za-z0-9._/-]+)\s+v[0-9]", stripped)
+            if go_match:
+                pkg_full = go_match.group(1)
+                candidates = [pkg_full, pkg_full.split("/")[-1]]
+            else:
+                candidates = []
+        else:  # pyproject.toml / setup.cfg / setup.py / Cargo.toml: quoted specs and `name = ` keys
             candidates = re.findall(
                 r'["\']([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*[<>=!~;"\']', stripped
             )

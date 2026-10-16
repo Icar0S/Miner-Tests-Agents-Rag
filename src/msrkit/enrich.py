@@ -37,10 +37,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _API = "https://api.github.com"
-TEST_DIRS = {"tests", "test", "evals", "eval", "evaluation", "__tests__", "spec", "benchmarks"}
-TEST_FILE_RE = re.compile(r"(^test_.*\.py$|.*_test\.py$|.*\.(test|spec)\.[jt]sx?$)")
+TEST_DIRS = {
+    "tests", "test", "evals", "eval", "evaluation", "__tests__", "spec", "benchmarks", "testing"
+}
+TEST_FILE_RE = re.compile(
+    r"(^test_.*\.py$|.*_test\.py$|.*\.(test|spec)\.[jt]sx?$|.*_test\.go$|.*_test\.rs$)"
+)
 MANIFEST_RE = re.compile(
-    r"^(pyproject\.toml|setup\.cfg|setup\.py|package\.json|requirements[^/]*\.txt)$"
+    r"^(pyproject\.toml|setup\.cfg|setup\.py|package\.json|requirements[^/]*\.txt|Cargo\.toml|go\.mod)$"
 )
 MAX_WORKFLOWS = 10
 MAX_MANIFESTS = 6

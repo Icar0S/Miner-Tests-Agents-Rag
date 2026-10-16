@@ -220,20 +220,9 @@ class ProtocolConfig(BaseModel):
         # Se a fonte tem kinds configurados, cria uma query por kind
         kinds = src_cfg.kinds if src_cfg.kinds else [None]
 
-        if src_cfg.use_terms:
-            for kind in kinds:
-                queries.append(
-                    Query(
-                        source=source_name,
-                        terms=self.all_terms(),
-                        kind=kind,
-                        since=since,
-                        until=until,
-                        extra=src_cfg.extra,
-                        limit=self.limits.max_items_per_source,
-                    )
-                )
-
+        # Priority 1: Literal queries (CI workflows, tool imports, configs, issues).
+        # These carry the strongest structural evidence (N2/N3) and must execute first
+        # so they are never starved if generic text queries exhaust the source quota.
         for raw_q in src_cfg.queries:
             for text, label in self._expand_template(raw_q):
                 queries.append(
@@ -247,6 +236,21 @@ class ProtocolConfig(BaseModel):
                         limit=self.limits.max_items_per_source,
                         raw=True,
                         label=label,
+                    )
+                )
+
+        # Priority 2: Generic open-text terms across kinds (repo, code, etc.)
+        if src_cfg.use_terms:
+            for kind in kinds:
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=self.all_terms(),
+                        kind=kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
                     )
                 )
 

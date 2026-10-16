@@ -611,6 +611,16 @@ def run(
         if per_query_limit is not None:
             for q in queries:
                 q.limit = min(q.limit or per_query_limit, per_query_limit)
+        elif config.limits.max_items_per_source and len(queries) > 1:
+            # Fair-share scheduling: if user did not set --per-query-limit,
+            # calculate a sensible ceiling for non-literal queries so broad
+            # text queries cannot exhaust the source budget and starve the rest.
+            budget = limit if limit is not None else config.limits.max_items_per_source
+            open_queries = [q for q in queries if not q.raw]
+            if open_queries:
+                fair_share = max(25, int(budget / len(open_queries) * 2))
+                for q in open_queries:
+                    q.limit = min(q.limit or fair_share, fair_share)
 
         done = {e.key: e for e in source_entry.queries if e.completed and e.key}
         if resume:

@@ -33,11 +33,11 @@ def _config(**source_overrides: Any) -> ProtocolConfig:
 
 
 class TestBuildQueries:
-    def test_raw_queries_run_after_terms(self) -> None:
+    def test_raw_queries_run_before_terms_to_prevent_starvation(self) -> None:
         cfg = _config(queries=[{"kind": "code", "label": "ragas", "q": '"from ragas import"'}])
         queries = cfg.build_queries("github")
-        assert [(q.raw, q.kind) for q in queries] == [(False, "repo"), (True, "code")]
-        raw = queries[1]
+        assert [(q.raw, q.kind) for q in queries] == [(True, "code"), (False, "repo")]
+        raw = queries[0]
         assert raw.terms == ['"from ragas import"']
         assert raw.label == "ragas"
 

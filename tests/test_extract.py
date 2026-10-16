@@ -148,6 +148,10 @@ class TestSignals:
             dependency_names("package.json", '{"devDependencies": {"promptfoo": "^0.9"}}')
         ) == {"promptfoo"}
         assert set(dependency_names("requirements-dev.txt", "# c\nRagas==1\n-e .\n")) == {"ragas"}
+        cargo = '[dependencies]\nragas = "0.1"\ndeepeval = { version = "1.0" }\n'
+        assert set(dependency_names("Cargo.toml", cargo)) >= {"ragas", "deepeval"}
+        gomod = "module test\n\nrequire (\n\tgithub.com/promptfoo/promptfoo v0.1.0\n)\n"
+        assert set(dependency_names("go.mod", gomod)) >= {"promptfoo"}
 
 
 class TestSummaryAndCommand:

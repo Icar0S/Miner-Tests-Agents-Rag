@@ -74,9 +74,15 @@ def main(
     load_dotenv(Path(".env"))
 
     if ctx.invoked_subcommand is None:
-        from msrkit.cli.menu import menu
+        import os
+        import sys
 
-        menu()
+        if sys.stdin and sys.stdin.isatty() and not os.environ.get("CI"):
+            from msrkit.cli.menu import menu
+
+            menu()
+        else:
+            console.print(ctx.get_help())
 
 
 # Register the commands (order = order in --help). Imported last: the command
