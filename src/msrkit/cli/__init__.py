@@ -24,7 +24,13 @@ from pathlib import Path
 import typer
 
 from msrkit import __version__
-from msrkit.cli._common import DEFAULT_PROTOCOL, PROJECT_ROOT, app, console
+from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
+    PROJECT_ROOT,
+    app,
+    console,
+    is_valid_coder_name,
+)
 
 __all__ = [
     "DATA_DIR",
@@ -34,6 +40,7 @@ __all__ = [
     "_tag_concepts",
     "_tag_term_languages",
     "_toggle_source_in_protocol",
+    "is_valid_coder_name",
 ]
 
 # Ensure UTF-8 output on Windows consoles to avoid charmap encoding errors
@@ -78,7 +85,15 @@ def main(
         import os
         import sys
 
-        if sys.stdin and sys.stdin.isatty() and not os.environ.get("CI"):
+        is_interactive = (
+            sys.stdin
+            and sys.stdin.isatty()
+            and sys.stdout
+            and sys.stdout.isatty()
+            and not os.environ.get("CI")
+        )
+
+        if is_interactive:
             from msrkit.cli.menu import menu
 
             menu()

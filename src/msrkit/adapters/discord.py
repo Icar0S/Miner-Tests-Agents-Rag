@@ -69,7 +69,7 @@ class DiscordAdapter(BaseAdapter):
         official_api_name="",
         exclusion_category="private_enclave",
         exclusion_rationale=(
-            "Inviável no protocolo: rede privada fechada sem busca global pública; "
+            "Desativada no protocolo: rede privada fechada sem busca global pública; "
             "exigiria bot autorizado em cada servidor e submissão a Comitê de Ética (§6.1 C)."
         ),
     )

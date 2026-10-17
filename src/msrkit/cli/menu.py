@@ -21,9 +21,12 @@ from msrkit.cli._common import (
     _get_registry,
     app,
     console,
+    is_valid_coder_name,
 )
 from msrkit.cli.collect import run
 from msrkit.cli.corpus import dedupe, export
+
+CANCEL_TOKENS: tuple[str, ...] = ("0", "v", "q", "voltar", "sair", "exit", "cancelar")
 
 
 def _safe_ask(
@@ -39,6 +42,99 @@ def _safe_ask(
     except (KeyboardInterrupt, EOFError):
         console.print("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
         return "0"
+
+
+def _safe_ask_choice(
+    prompt: str,
+    valid_choices: list[str],
+    default: str | None = None,
+) -> str | None:
+    """Prompt user until a valid choice is entered or a cancel token is provided."""
+    while True:
+        try:
+            val = Prompt.ask(
+                prompt,
+                default=default if default is not None else "",
+                show_default=default is not None,
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
+            return None
+
+        if not val and default is not None:
+            val = default
+
+        if val.lower() in CANCEL_TOKENS:
+            return None
+
+        if val in valid_choices:
+            return val
+
+        choices_str = ", ".join(valid_choices)
+        console.print(
+            f"[red]Opção inválida '{val}'! Escolha entre {choices_str} (ou 0 para voltar).[/red]"
+        )
+
+
+def _safe_ask_yes_no(
+    prompt: str,
+    default: bool = True,
+) -> bool | None:
+    """Prompt user for a yes/no confirmation with loop resilience."""
+    suffix = "[S/n]" if default else "[s/N]"
+    full_prompt = f"{prompt} {suffix}" if "[" not in prompt else prompt
+    default_str = "s" if default else "n"
+
+    while True:
+        try:
+            raw = Prompt.ask(full_prompt, default=default_str, show_default=False).strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
+            return None
+
+        if not raw:
+            raw = default_str
+
+        if raw in CANCEL_TOKENS:
+            return None
+
+        if raw in ("s", "sim", "y", "yes"):
+            return True
+        if raw in ("n", "nao", "não", "no"):
+            return False
+
+        console.print(
+            "[red]Resposta inválida! Digite 's' para sim, 'n' para não (ou 0 para cancelar).[/red]"
+        )
+
+
+def _safe_ask_coder(
+    prompt: str = "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
+    default: str = "revisor",
+) -> str | None:
+    """Prompt and validate a coder identifier safe for filenames and inter-coder records."""
+    while True:
+        try:
+            raw = Prompt.ask(prompt, default=default, show_default=True).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
+            return None
+
+        if not raw:
+            raw = default
+
+        if raw.lower() in CANCEL_TOKENS:
+            return None
+
+        is_valid, reason = is_valid_coder_name(raw)
+        if is_valid:
+            return raw
+
+        console.print(f"[red]Nome de avaliador inválido: {reason}[/red]")
+        console.print(
+            "[dim]Dica: use de 1 a 50 caracteres (letras, números, _ ou -), "
+            "sem espaços, barras ou símbolos de pontuação.[/dim]"
+        )
 
 
 def _toggle_source_in_protocol(protocol_path: str, source_name: str, new_state: bool) -> bool:
@@ -112,18 +208,18 @@ def _get_source_display_info(
             api_label = "[yellow][API Oficial: Desativada (Exige Aprovação Reddit nov/25)][/yellow]"
         elif policy.exclusion_category == "commercial_paywall":
             api_label = (
-                "[yellow][API Oficial: Desativada (Inviável: API Paga Pay-per-use)][/yellow]"
+                "[yellow][API Oficial: Desativada (API Paga Pay-per-use)][/yellow]"
             )
         else:
             api_label = "[cyan][API Oficial: Desativada no Protocolo][/cyan]"
         rationale = policy.exclusion_rationale or policy.notes or "Desativada no protocolo."
     else:
         group = "no_api"
-        status_label = "[dim red]○ Inviável[/dim red]"
+        status_label = "[dim]○ Desativada[/dim]"
         if policy.exclusion_category == "no_public_api":
             api_label = "[red][Sem API Pública (Termos Vedam Scraping)][/red]"
         elif policy.exclusion_category == "private_enclave":
-            api_label = "[red][Sem Busca Global (Chat Privado / Requer Ética)][/red]"
+            api_label = "[red][Sem Busca Aberta (Chat Privado / Requer Ética)][/red]"
         else:
             api_label = "[red][Sem API Pública][/red]"
         rationale = (
@@ -262,8 +358,6 @@ def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
 
 def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     """Interactive mining execution with custom quantity and source selection."""
-    from rich.prompt import Prompt
-
     from msrkit.config import load_protocol
 
     try:
@@ -316,7 +410,7 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     # Grupo 2: Têm API Oficial, mas Desativadas Metodologicamente ou por Barreira
     if group_items["official_disabled"]:
         console.print(
-            "\n  [bold yellow]○ Com API Oficial, mas Inativas (Metodologia/Política):[/bold yellow]"
+            "\n  [bold yellow]○ Desativadas no Protocolo (Metodologia/Política):[/bold yellow]"
         )
         for s_name in group_items["official_disabled"]:
             sources_options.append(s_name)
@@ -326,10 +420,10 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
                 f"    [cyan]{idx:<2}[/cyan] - {s_name:<14} {status_label:<20} {api_label}"
             )
 
-    # Grupo 3: Inviáveis por Ausência de API Pública ou Natureza Fechada
+    # Grupo 3: Desativadas por Ausência de API Pública ou Natureza Fechada
     if group_items["no_api"]:
         console.print(
-            "\n  [bold red]○ Inviáveis por Ausência de API Aberta ou Natureza Fechada:[/bold red]"
+            "\n  [bold red]○ Desativadas por Ausência de API Aberta ou Natureza Fechada:[/bold red]"
         )
         for s_name in group_items["no_api"]:
             sources_options.append(s_name)
@@ -376,14 +470,14 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
                         motivo = sel_policy.exclusion_rationale or sel_policy.notes
                         console.print(
                             f"\n[bold yellow]ℹ '{selected_source}' tem API ({api_n}), "
-                            "mas está inativa no E2.[/bold yellow]\n"
+                            "mas está desativada no E2.[/bold yellow]\n"
                             f"[cyan]Motivo:[/cyan] {motivo}\n"
                         )
                         prompt_msg = (
-                            "[bold cyan]Forçar coleta experimental desta fonte?[/bold cyan] [s/N]"
+                            "[bold cyan]Forçar coleta experimental desta fonte?[/bold cyan]"
                         )
-                        confirm = _safe_ask(prompt_msg, default="N")
-                        if confirm.lower() not in ("s", "sim", "y", "yes"):
+                        confirm = _safe_ask_yes_no(prompt_msg, default=False)
+                        if not confirm:
                             console.print(
                                 "[yellow]Seleção cancelada. Escolha outra fonte.[/yellow]"
                             )
@@ -498,12 +592,12 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     )
 
     console.print()
-    do_dedupe = Prompt.ask(
+    do_dedupe = _safe_ask_yes_no(
         "[bold cyan]Deseja executar a desduplicação agora e gerar também "
-        "a planilha desduplicada?[/bold cyan] [S/n]",
-        default="S",
+        "a planilha desduplicada?[/bold cyan]",
+        default=True,
     )
-    if do_dedupe.strip().lower() in ("s", "sim", "y", "yes", ""):
+    if do_dedupe:
         console.print("\n[bold]1. Desduplicando itens coletados...[/bold]")
         dedupe(run_id=latest_run, verbose=False)
         dedup_csv = f"data/resultados_{timestamp}_desduplicados.csv"
@@ -541,24 +635,25 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     console.print(
         f"\n[bold green]✓ Coleta e preparação concluídas para a rodada {latest_run}![/bold green]"
     )
-    go_screen = Prompt.ask(
-        "\n[bold cyan]Deseja iniciar a Triagem Interativa (TUI) agora?[/bold cyan] [S/n]",
-        default="S",
+    go_screen = _safe_ask_yes_no(
+        "\n[bold cyan]Deseja iniciar a Triagem Interativa (TUI) agora?[/bold cyan]",
+        default=True,
     )
-    if go_screen.strip().lower() in ("s", "sim", "y", "yes", ""):
-        coder = Prompt.ask(
-            "[bold cyan]Nome do avaliador (coder)[/bold cyan]",
+    if go_screen:
+        coder = _safe_ask_coder(
+            "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
             default="revisor",
         )
-        from msrkit.cli.review import screen_tui
+        if coder:
+            from msrkit.cli.review import screen_tui
 
-        screen_tui(
-            run_id=latest_run,
-            protocol=protocol_path,
-            coder=coder,
-            batch=None,
-            limit=None,
-        )
+            screen_tui(
+                run_id=latest_run,
+                protocol=protocol_path,
+                coder=coder,
+                batch=None,
+                limit=None,
+            )
 
 
 def _select_screening_run_id() -> str | None:
@@ -686,11 +781,12 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             if not selected_run:
                 continue
             is_all = selected_run == "consolidated"
-            kind_choice = _safe_ask(
+            kind_choice = _safe_ask_choice(
                 "Deseja exportar [1] Versão desduplicada, [2] Versão bruta (ou 0 para voltar)",
+                valid_choices=["1", "2"],
                 default="1",
             )
-            if kind_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if kind_choice is None:
                 continue
             is_raw = kind_choice == "2"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -743,8 +839,12 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
         console.print("  [cyan]6[/cyan] - A5: Descoberta de Tópicos e Clusters (LDA / k-means)")
         console.print("  [cyan]0[/cyan] - ↩ Voltar")
 
-        sub = _safe_ask("\n[bold green]Escolha uma opção de análise[/bold green]", default="1")
-        if sub in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+        sub = _safe_ask_choice(
+            "\n[bold green]Escolha uma opção de análise[/bold green]",
+            valid_choices=["1", "2", "3", "4", "5", "6"],
+            default="1",
+        )
+        if sub is None:
             break
 
         if sub in ("1", "2"):
@@ -847,11 +947,12 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
         elif choice == "4":
             validate(protocol=protocol_path, verbose=False)
         elif choice == "5":
-            which = _safe_ask(
+            which = _safe_ask_choice(
                 "Desduplicar [1] Apenas última coleta, [2] Histórico (ou 0 para voltar)",
+                valid_choices=["1", "2"],
                 default="1",
             )
-            if which in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if which is None:
                 continue
             dedupe(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "6":
@@ -871,11 +972,12 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 continue
             extract(run_id=selected_run, protocol=protocol_path, top=25, verbose=False)
         elif choice == "8":
-            sub_choice = _safe_ask(
+            sub_choice = _safe_ask_choice(
                 "Deseja [1] Exportar CSV, [2] Importar CSV preenchido (ou 0 para voltar)?",
-                default="0",
+                valid_choices=["1", "2"],
+                default="1",
             )
-            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if sub_choice is None:
                 continue
             from msrkit.cli.review import screen_export, screen_import
 
@@ -883,10 +985,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask(
+                coder = _safe_ask_coder(
                     "Nome do avaliador (ou 0 para voltar)", default="revisor"
                 )
-                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                if coder is None:
                     continue
                 screen_export(
                     run_id=selected_run,
@@ -913,11 +1015,12 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                     coder="",
                 )
         elif choice == "9":
-            sub_choice = _safe_ask(
+            sub_choice = _safe_ask_choice(
                 "Deseja [1] Exportar Anexo A CSV, [2] Importar CSV (ou 0 para voltar)?",
-                default="0",
+                valid_choices=["1", "2"],
+                default="1",
             )
-            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if sub_choice is None:
                 continue
             from msrkit.cli.review import coding_export, coding_import
 
@@ -925,10 +1028,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask(
+                coder = _safe_ask_coder(
                     "Nome do avaliador (ou 0 para voltar)", default="revisor"
                 )
-                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                if coder is None:
                     continue
                 coding_export(
                     run_id=selected_run,
@@ -959,12 +1062,13 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             if not selected_run:
                 continue
-            sub_choice = _safe_ask(
+            sub_choice = _safe_ask_choice(
                 "Deseja [1] Calcular índice Kappa e exportar divergências, "
                 "[2] Aplicar resolução de divergências (disagreements.csv) (ou 0 para voltar)?",
+                valid_choices=["1", "2"],
                 default="1",
             )
-            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if sub_choice is None:
                 continue
             if sub_choice == "1":
                 from msrkit.cli.review import agreement
@@ -1005,12 +1109,13 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             if not selected_run:
                 continue
-            sub_choice = _safe_ask(
+            sub_choice = _safe_ask_choice(
                 "Deseja [1] Gerar amostra estratificada (.csv), "
                 "[2] Calcular precisão de planilha avaliada (ou 0 para voltar)?",
+                valid_choices=["1", "2"],
                 default="1",
             )
-            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            if sub_choice is None:
                 continue
             if sub_choice == "1":
                 from msrkit.cli.validation import precision_sample_cmd
@@ -1098,17 +1203,18 @@ def menu() -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                mode = _safe_ask(
+                mode = _safe_ask_choice(
                     "Modo: [1] TUI (Textual), [2] Linha a Linha (ou 0 para cancelar)",
+                    valid_choices=["1", "2"],
                     default="1",
                 )
-                if mode in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                if mode is None:
                     continue
-                coder = _safe_ask(
+                coder = _safe_ask_coder(
                     "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
                     default="revisor",
                 )
-                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                if coder is None:
                     continue
                 try:
                     if mode == "2":
@@ -1137,11 +1243,11 @@ def menu() -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask(
+                coder = _safe_ask_coder(
                     "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
                     default="revisor",
                 )
-                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                if coder is None:
                     continue
                 try:
                     from msrkit.cli.review import coding_tui

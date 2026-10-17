@@ -65,7 +65,7 @@ class LinkedInAdapter(BaseAdapter):
         official_api_name="",
         exclusion_category="no_public_api",
         exclusion_rationale=(
-            "Inviável por ausência de API pública: LinkedIn não expõe endpoint para "
+            "Desativada por ausência de API pública: LinkedIn não expõe endpoint para "
             "busca aberta de conteúdo de terceiros; Termos de Serviço proíbem raspagem (§6.1 C)."
         ),
     )

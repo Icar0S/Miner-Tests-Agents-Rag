@@ -64,7 +64,7 @@ class XTwitterAdapter(BaseAdapter):
         official_api_name="X API v2",
         exclusion_category="commercial_paywall",
         exclusion_rationale=(
-            "Inviabilizada pelo protocolo: API oficial exige plano pago (pay-per-use, "
+            "Desativada no protocolo: API oficial exige plano pago (pay-per-use, "
             "US$ 100+/mês), sem nível acadêmico gratuito para reprodução aberta (§6.1 C)."
         ),
     )

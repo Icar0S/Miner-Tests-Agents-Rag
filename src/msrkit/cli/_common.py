@@ -198,3 +198,32 @@ def _cell(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(value)
     return "" if value is None else str(value)
+
+
+def is_valid_coder_name(coder: str) -> tuple[bool, str]:
+    """Validate that a coder identifier is safe across filesystems and protocols."""
+    import re
+
+    cleaned = coder.strip()
+    if not cleaned:
+        return False, "O nome não pode estar em branco."
+    if len(cleaned) > 50:
+        return False, "O nome deve ter no máximo 50 caracteres."
+    if cleaned.startswith((".", "-")) or cleaned.endswith("."):
+        return False, "O nome não pode iniciar com '.' ou '-' nem terminar com '.'."
+    if re.search(r'[\\/:*?"<>|\s]', cleaned):
+        return False, "Não são permitidos espaços, barras ou caracteres especiais (\\/:*?\"<>|)."
+    reserved = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+    if cleaned.upper() in reserved:
+        return False, f"'{cleaned}' é um nome reservado do sistema operacional."
+    if not re.match(r"^[\w\-\.]+$", cleaned, flags=re.ASCII):
+        return False, "Use apenas caracteres alfanuméricos ASCII, sublinhado (_) ou hífen (-)."
+    return True, ""
+

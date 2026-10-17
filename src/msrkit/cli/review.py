@@ -19,6 +19,7 @@ from msrkit.cli._common import (
     _unwrap,
     app,
     console,
+    is_valid_coder_name,
 )
 
 screen_app = typer.Typer(help="Screening sheets: export, import decisions, status (§8, §11).")
@@ -60,7 +61,12 @@ def screen_export(
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
-    coder = _unwrap(coder)
+    coder = _unwrap(coder).strip()
+    if coder:
+        is_valid, reason = is_valid_coder_name(coder)
+        if not is_valid:
+            console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+            raise typer.Exit(1)
     order = _unwrap(order)
     blind_val = _unwrap(blind)
     if blind_val and order == "relevance":
@@ -208,9 +214,10 @@ def screen_interactive(
         coder_str = Prompt.ask(
             "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
         ).strip()
-        if not coder_str:
-            console.print("[red]✗ Coder é obrigatório.[/red]")
-            raise typer.Exit(1)
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
 
     criteria = _screening_criteria(run_id, _unwrap(protocol))
     items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
@@ -435,9 +442,10 @@ def screen_tui(
         coder_str = Prompt.ask(
             "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
         ).strip()
-        if not coder_str:
-            console.print("[red]✗ Coder é obrigatório.[/red]")
-            raise typer.Exit(1)
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
 
     criteria = _screening_criteria(run_id, _unwrap(protocol))
     items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
@@ -521,7 +529,12 @@ def coding_export(
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
-    coder = _unwrap(coder)
+    coder = _unwrap(coder).strip()
+    if coder:
+        is_valid, reason = is_valid_coder_name(coder)
+        if not is_valid:
+            console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+            raise typer.Exit(1)
     status = _unwrap(status)
     if status not in ("include", "uncertain", "all"):
         console.print("[red]✗ --status must be include, uncertain or all.[/red]")
@@ -917,9 +930,10 @@ def coding_tui(
         coder_str = Prompt.ask(
             "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
         ).strip()
-        if not coder_str:
-            console.print("[red]✗ Coder é obrigatório.[/red]")
-            raise typer.Exit(1)
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
 
     items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
     if not items:

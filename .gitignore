@@ -44,3 +44,10 @@ Thumbs.db
 
 # UV lock
 # uv.lock is committed for reproducibility
+
+# Local notes & assistant prompts
+GEMINI.md
+STATE.md
+status_projeto_*.md
+RELATORIO_*.md
+*.pdf

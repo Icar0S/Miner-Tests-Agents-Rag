@@ -116,6 +116,13 @@ def _format_item_body(it: Item, max_len: int | None = None) -> str:
     """Format item body for display, providing structured context for code artifacts."""
     if it.body:
         return it.body[:max_len] if max_len else it.body
+
+    matched_str = (
+        ", ".join(t.term if hasattr(t, "term") else str(t) for t in it.matched_terms)
+        or "identificado no protocolo"
+    )
+    concepts_str = ", ".join(it.concepts) if it.concepts else "teste / RAG"
+
     if it.source == "github":
         from msrkit.enrich import repo_of
 
@@ -144,7 +151,82 @@ def _format_item_body(it: Item, max_len: int | None = None) -> str:
             "Para inspecionar o arquivo completo, acesse a URL acima no navegador.[/dim]",
         ]
         return "\n".join(lines)
-    return "[dim](Sem corpo de texto disponível)[/dim]"
+
+    if it.source == "hackernews":
+        lines = [
+            "[bold yellow]💬 POST / DISCUSSÃO DA COMUNIDADE (Hacker News)[/bold yellow]",
+            f"• [bold]Título:[/bold] {it.title or 'Sem título'}",
+            f"• [bold]Autor:[/bold] @{it.author_handle or 'desconhecido'}",
+            f"• [bold]Engajamento:[/bold] ★ {it.engagement.votes or 0} pontos | "
+            f"💬 {it.engagement.comments or 0} comentários",
+            f"• [bold]Conceitos do Protocolo (§3.1):[/bold] [cyan]{concepts_str}[/cyan]",
+            f"• [bold]Termos Casados:[/bold] [yellow]{matched_str}[/yellow]",
+            "",
+            "[bold green]🔗 Recurso / Ferramenta Compartilhada (URL Externa):[/bold green]",
+            f"[underline]{it.url}[/underline]",
+            "",
+            "[dim]Nota: Esta publicação no Hacker News é um link direto (link post) para",
+            "o recurso, sem texto dissertativo na submissão. Para analisar a discussão",
+            "ou o código, inspecione a URL acima no navegador.[/dim]",
+        ]
+        return "\n".join(lines)
+
+    if it.source == "huggingface":
+        tags_str = ", ".join(it.tech.tags[:8]) if it.tech.tags else "N/A"
+        url_lower = str(it.url).lower()
+        hf_type = (
+            "Dataset"
+            if "datasets" in url_lower
+            else ("Space" if "spaces" in url_lower else "Modelo")
+        )
+        lines = [
+            f"[bold magenta]🤗 ARTEFATO DE IA / {hf_type.upper()} (Hugging Face)[/bold magenta]",
+            f"• [bold]Identificador:[/bold] {it.title or 'N/A'}",
+            f"• [bold]Tipo de Artefato:[/bold] {hf_type}",
+            f"• [bold]Tarefa / Pipeline:[/bold] {it.tech.language or 'Avaliação / RAG'}",
+            f"• [bold]Engajamento / Impacto:[/bold] ★ {it.engagement.stars or 0} likes | "
+            f"⤓ {it.engagement.views or 0} downloads",
+            f"• [bold]Tags Técnicas:[/bold] [cyan]{tags_str}[/cyan]",
+            f"• [bold]Termos Casados:[/bold] [yellow]{matched_str}[/yellow]",
+            f"• [bold]Conceitos do Protocolo (§3.1):[/bold] [cyan]{concepts_str}[/cyan]",
+            "",
+            "[bold green]🔗 Inspecionar Model Card / Dataset no Hub:[/bold green]",
+            f"[underline]{it.url}[/underline]",
+            "",
+            "[dim]Nota Técnica: A API de busca do Hugging Face expõe metadados e tags do artefato.",
+            "O README.md completo do modelo pode ser consultado no Hub pelo link acima.[/dim]",
+        ]
+        return "\n".join(lines)
+
+    if it.source in ("devto", "rss"):
+        src_name = "dev.to" if it.source == "devto" else "Feed RSS / Medium"
+        tags_str = ", ".join(it.tech.tags[:6]) if it.tech.tags else "N/A"
+        lines = [
+            f"[bold cyan]📰 ARTIGO TÉCNICO ({src_name})[/bold cyan]",
+            f"• [bold]Título:[/bold] {it.title or 'N/A'}",
+            f"• [bold]Autor:[/bold] @{it.author_handle or 'desconhecido'}",
+            f"• [bold]Tópicos / Tags:[/bold] [cyan]{tags_str}[/cyan]",
+            f"• [bold]Termos Casados:[/bold] [yellow]{matched_str}[/yellow]",
+            f"• [bold]Conceitos do Protocolo (§3.1):[/bold] [cyan]{concepts_str}[/cyan]",
+            "",
+            "[bold green]🔗 Ler Artigo Completo Online:[/bold green]",
+            f"[underline]{it.url}[/underline]",
+            "",
+            "[dim]Nota Ética (§17 do Protocolo): O texto integral de artigos de terceiros",
+            "é mantido como metadata_only no pacote de replicação para respeitar direitos",
+            "autorais. Acesse a URL acima para leitura integral.[/dim]",
+        ]
+        return "\n".join(lines)
+
+    lines = [
+        f"[bold]{it.title or 'Sem título'}[/bold]",
+        f"• Fonte: {it.source} ({it.kind.value})",
+        f"• Termos Casados: [yellow]{matched_str}[/yellow]",
+        f"• URL: [underline]{it.url}[/underline]",
+        "",
+        "[dim](Sem corpo de texto adicional no pacote de metadados)[/dim]",
+    ]
+    return "\n".join(lines)
 
 
 class ScreeningApp(App[None]):

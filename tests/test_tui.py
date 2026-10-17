@@ -499,3 +499,101 @@ def test_tui_input_and_mouse_resilience(tmp_path: Path, monkeypatch: pytest.Monk
     asyncio.run(_run())
 
 
+def test_cli_menu_input_resilience(monkeypatch: pytest.MonkeyPatch) -> None:
+    from msrkit.cli._common import is_valid_coder_name
+    from msrkit.cli.menu import _safe_ask_choice, _safe_ask_coder, _safe_ask_yes_no
+
+    # 1. is_valid_coder_name validation rules
+    assert is_valid_coder_name("revisor")[0]
+    assert is_valid_coder_name("coder_1")[0]
+    assert is_valid_coder_name("ana-maria")[0]
+    assert is_valid_coder_name("joao.silva")[0]
+
+    assert not is_valid_coder_name("")[0]
+    assert not is_valid_coder_name("   ")[0]
+    assert not is_valid_coder_name("a" * 51)[0]
+    assert not is_valid_coder_name("-coder")[0]
+    assert not is_valid_coder_name(".coder")[0]
+    assert not is_valid_coder_name("coder.")[0]
+    assert not is_valid_coder_name("con")[0]
+    assert not is_valid_coder_name("PRN")[0]
+    assert not is_valid_coder_name("aux")[0]
+    assert not is_valid_coder_name("nul")[0]
+    assert not is_valid_coder_name("com1")[0]
+    assert not is_valid_coder_name("lpt1")[0]
+    assert not is_valid_coder_name("revisor:1")[0]
+    assert not is_valid_coder_name("revisor/1")[0]
+    assert not is_valid_coder_name("revisor\\1")[0]
+    assert not is_valid_coder_name("revisor 1")[0]
+    assert not is_valid_coder_name("revisor*")[0]
+    assert not is_valid_coder_name("revisor?")[0]
+
+    # 2. _safe_ask_choice
+    # Invalid choice followed by valid choice
+    inputs_seq = iter(["banana", "9", "2"])
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: next(inputs_seq))
+    assert _safe_ask_choice("Escolha", valid_choices=["1", "2"]) == "2"
+
+    # Default choice on empty input
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "")
+    assert _safe_ask_choice("Escolha", valid_choices=["1", "2"], default="1") == "1"
+
+    # Cancel token returns None
+    for token in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, token=token, **kwargs: token)
+        assert _safe_ask_choice("Escolha", valid_choices=["1", "2"]) is None
+
+    # KeyboardInterrupt and EOFError return None
+    monkeypatch.setattr(
+        "rich.prompt.Prompt.ask",
+        lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+    assert _safe_ask_choice("Escolha", valid_choices=["1", "2"]) is None
+
+    # 3. _safe_ask_yes_no
+    # Yes variants
+    for val in ("s", "sim", "y", "yes"):
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, val=val, **kwargs: val)
+        assert _safe_ask_yes_no("Confirmar?") is True
+
+    # No variants
+    for val in ("n", "nao", "não", "no"):
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, val=val, **kwargs: val)
+        assert _safe_ask_yes_no("Confirmar?") is False
+
+    # Default on empty
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "")
+    assert _safe_ask_yes_no("Confirmar?", default=True) is True
+    assert _safe_ask_yes_no("Confirmar?", default=False) is False
+
+    # Invalid input followed by 's'
+    inputs_seq_yn = iter(["talvez", "s"])
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: next(inputs_seq_yn))
+    assert _safe_ask_yes_no("Confirmar?") is True
+
+    # Cancel tokens return None
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "0")
+    assert _safe_ask_yes_no("Confirmar?") is None
+
+    # 4. _safe_ask_coder
+    # Default coder
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "")
+    assert _safe_ask_coder(default="revisor") == "revisor"
+
+    # Invalid coder followed by valid coder
+    inputs_seq_c = iter(["revisor/bad", "coder:1", "ana_revisora"])
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: next(inputs_seq_c))
+    assert _safe_ask_coder() == "ana_revisora"
+
+    # Cancel tokens return None
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "0")
+    assert _safe_ask_coder() is None
+
+    monkeypatch.setattr(
+        "rich.prompt.Prompt.ask",
+        lambda *args, **kwargs: (_ for _ in ()).throw(EOFError),
+    )
+    assert _safe_ask_coder() is None
+
+
+

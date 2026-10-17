@@ -64,14 +64,27 @@ def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
         avail = adapter.available()
         policy = adapter_cls.policy
 
-        status_style = {
-            "OK": "green",
-            "DEGRADED": "yellow",
-            "UNSUPPORTED": "red",
-        }.get(avail.status, "white")
+        if policy.exclusion_category == "methodological":
+            status_text = "DESATIVADA"
+            status_style = "cyan"
+        elif policy.exclusion_category in ("access_gated", "commercial_paywall"):
+            status_text = "DESATIVADA"
+            status_style = "yellow"
+        elif not policy.has_official_api:
+            status_text = "DESATIVADA"
+            status_style = "dim red"
+        elif avail.status == "OK":
+            status_text = "OK"
+            status_style = "green"
+        elif avail.status == "DEGRADED":
+            status_text = "DEGRADED"
+            status_style = "yellow"
+        else:
+            status_text = "DESATIVADA"
+            status_style = "dim"
 
         missing_info = ""
-        if avail.missing_env:
+        if avail.missing_env and not policy.exclusion_category:
             missing_info = f"\n⚠ Missing: {', '.join(avail.missing_env)}"
 
         rate_str = f"{policy.rate_limit.requests}/{policy.rate_limit.per_seconds}s"
@@ -82,13 +95,13 @@ def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
 
         display_reason = (
             policy.exclusion_rationale
-            if (avail.status == "UNSUPPORTED" and policy.exclusion_rationale)
+            if policy.exclusion_rationale
             else avail.reason
         )
 
         table.add_row(
             name,
-            f"[{status_style}]{avail.status}[/{status_style}]",
+            f"[{status_style}]{status_text}[/{status_style}]",
             api_col,
             display_reason[:70] + ("..." if len(display_reason) > 70 else ""),
             "\n".join(policy.auth_env_vars) + missing_info if policy.auth_env_vars else "none",
@@ -111,8 +124,12 @@ def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
         avail = adapter.available()
         policy = adapter_cls.policy
 
+        status_str: str = str(avail.status)
+        if policy.exclusion_category:
+            status_str = "DESATIVADA"
+
         lines.append(f"## {name}\n")
-        lines.append(f"- **Status:** {avail.status}")
+        lines.append(f"- **Status:** {status_str}")
         api_text = (
             f"Yes ({policy.official_api_name})" if policy.has_official_api else "No (no public API)"
         )
