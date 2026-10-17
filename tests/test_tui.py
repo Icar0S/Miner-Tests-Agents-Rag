@@ -18,10 +18,10 @@ if TYPE_CHECKING:
     import pytest
 
 
-def _make_item(idx: int = 1) -> Item:
+def _make_item(idx: int = 1, source: str = "github") -> Item:
     item = Item(
         id=f"item_{idx}",
-        source="github",
+        source=source,
         kind=ItemKind.REPO,
         url="https://github.com/example/rag-test",
         title=f"RAG Testing Framework {idx}",
@@ -295,3 +295,122 @@ def test_coding_app_tools_deduplication(tmp_path: Path, monkeypatch: pytest.Monk
             await pilot.press("q")
 
     asyncio.run(_run())
+
+
+def test_screening_app_pagination_and_source_filter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+    async def _run() -> None:
+        items = [
+            _make_item(1, "github"),
+            _make_item(2, "github"),
+            _make_item(3, "github"),
+            _make_item(4, "hackernews"),
+            _make_item(5, "hackernews"),
+        ]
+        criteria = ScreeningCriteria(
+            inclusion={"I1": "Teste RAG"},
+            exclusion={"E1": "LLM4Testing"},
+            batch_size=10,
+        )
+        app = ScreeningApp(
+            items=items,
+            criteria=criteria,
+            data_dir=tmp_path,
+            run_id="test-run",
+            coder="joao",
+            page_size=2,
+        )
+
+        async with app.run_test() as pilot:
+            assert app.total_pages == 3  # 5 items / 2 per page = 3 pages
+            assert app.current_page == 0
+            assert app.source_filter is None
+            assert len(app.current_page_items) == 2
+            assert app.current_page_items[0].id == "item_1"
+
+            # Avança página com 'n'
+            await pilot.press("n")
+            assert app.current_page == 1
+            assert len(app.current_page_items) == 2
+            assert app.current_page_items[0].id == "item_3"
+            assert app.current_item is not None
+            assert app.current_item.id == "item_3"
+
+            # Inclui item_3 na página 2
+            await pilot.press("i")
+            assert len(app.recorded_decisions) == 1
+            assert app.recorded_decisions[0].item_id == "item_3"
+            assert app.current_item is not None
+            assert app.current_item.id == "item_4"
+
+            # Volta página com 'p'
+            await pilot.press("p")
+            assert app.current_page == 0
+            assert app.current_page_items[0].id == "item_1"
+
+            # Filtra por fonte usando 'f'
+            # Fontes ordenadas: "github", "hackernews"
+            await pilot.press("f")
+            assert app.source_filter == "github"
+            assert len(app.visible_items) == 3
+            assert app.total_pages == 2
+
+            await pilot.press("f")
+            assert app.source_filter == "hackernews"
+            assert len(app.visible_items) == 2
+            assert app.total_pages == 1
+            assert app.current_page == 0
+            assert app.current_item is not None
+            assert app.current_item.id == "item_4"
+
+            # Cicla novamente e retorna para todas as fontes
+            await pilot.press("f")
+            assert app.source_filter is None
+            assert len(app.visible_items) == 5
+
+            await pilot.press("q")
+
+    asyncio.run(_run())
+
+
+def test_coding_app_pagination_and_source_filter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+    async def _run() -> None:
+        items = [
+            _make_item(1, "github"),
+            _make_item(2, "github"),
+            _make_item(3, "hackernews"),
+        ]
+        app = CodingApp(
+            items=items,
+            data_dir=tmp_path,
+            run_id="test-run",
+            coder="joao",
+            page_size=2,
+        )
+
+        async with app.run_test() as pilot:
+            assert app.total_pages == 2
+            assert app.current_page == 0
+
+            # Próxima página
+            await pilot.press("n")
+            assert app.current_page == 1
+            assert app.current_item is not None
+            assert app.current_item.id == "item_3"
+
+            # Filtrar fonte
+            await pilot.press("f")
+            assert app.source_filter == "github"
+            assert len(app.visible_items) == 2
+
+            await pilot.press("q")
+
+    asyncio.run(_run())
+

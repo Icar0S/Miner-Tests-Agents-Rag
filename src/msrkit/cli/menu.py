@@ -515,7 +515,7 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
             protocol=protocol_path,
             coder=coder,
             batch=None,
-            limit=50,
+            limit=None,
         )
 
 
@@ -1077,7 +1077,7 @@ def menu() -> None:  # pragma: no cover
                         run_id=selected_run,
                         protocol=DEFAULT_PROTOCOL,
                         batch=None,
-                        limit=50,
+                        limit=None,
                     )
             except Exception as e:
                 console.print(f"[yellow]Retorno da triagem: {e}[/yellow]")
@@ -1099,7 +1099,7 @@ def menu() -> None:  # pragma: no cover
                     protocol=DEFAULT_PROTOCOL,
                     coder=coder,
                     status="include",
-                    limit=50,
+                    limit=None,
                 )
             except Exception as e:
                 console.print(f"[yellow]Retorno da extração: {e}[/yellow]")

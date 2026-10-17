@@ -141,15 +141,23 @@ class ScreeningApp(App[None]):
     """Interactive full-screen TUI for screening grey literature items."""
 
     TITLE = "MSR-Kit — Triagem Interativa de Literatura Cinza"
-    SUB_TITLE = "Pressione [I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, [Q / Esc] Sair"
+    SUB_TITLE = (
+        "[I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, "
+        "[N/P] Páginas, [F] Fonte, [Q/Esc] Sair"
+    )
 
     BINDINGS = [
         Binding("i", "include_item", "Incluir (I)", priority=True),
         Binding("e", "exclude_item", "Excluir (E)", priority=True),
         Binding("u", "uncertain_item", "Dúvida (U)", priority=True),
         Binding("s", "skip_item", "Pular (S)", priority=True),
+        Binding("n", "next_page", "Próx Pág (N)", priority=True),
+        Binding("p", "prev_page", "Pág Ant (P)", priority=True),
+        Binding("f", "cycle_source", "Filtrar Fonte (F)", priority=True),
         Binding("q", "quit_app", "Sair e Salvar (Q)", priority=True),
         Binding("escape", "quit_app", "Voltar / Sair (Esc)", priority=True),
+        Binding("pageup", "prev_page", "Pág Ant", show=False),
+        Binding("pagedown", "next_page", "Próx Pág", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -157,9 +165,19 @@ class ScreeningApp(App[None]):
         layout: horizontal;
     }
     #sidebar {
-        width: 32;
+        width: 34;
         border-right: heavy $primary;
         background: $panel;
+    }
+    .sidebar-title {
+        text-style: bold;
+        color: $accent;
+        padding: 0 1;
+    }
+    .sidebar-subtitle {
+        color: $text-muted;
+        padding: 0 1;
+        margin-bottom: 1;
     }
     #content-area {
         width: 1fr;
@@ -202,8 +220,10 @@ class ScreeningApp(App[None]):
         run_id: str,
         coder: str,
         detections: list[Detection] | None = None,
+        page_size: int = 50,
     ) -> None:
         super().__init__()
+        self.all_items = items
         self.raw_items = items
         self.criteria = criteria
         self.data_dir = data_dir
@@ -213,13 +233,54 @@ class ScreeningApp(App[None]):
         self.ranking = rank_items(items, self.detections, criteria.batch_size)
         self.recorded_decisions: list[ScreeningDecision] = []
         self.decisions_map: dict[str, str] = {}
+        self.page_size = max(1, page_size)
+        self.current_page = 0
+        self.current_page_idx = 0
         self.current_idx = 0
+        self.source_filter: str | None = None
+
+    @property
+    def available_sources(self) -> list[str]:
+        sources: set[str] = set()
+        for it in self.all_items:
+            if it.source:
+                sources.add(it.source)
+        return sorted(sources)
+
+    @property
+    def visible_items(self) -> list[Item]:
+        if self.source_filter is None:
+            return self.all_items
+        return [it for it in self.all_items if it.source == self.source_filter]
+
+    @property
+    def total_pages(self) -> int:
+        return max(1, (len(self.visible_items) + self.page_size - 1) // self.page_size)
+
+    @property
+    def current_page_items(self) -> list[Item]:
+        visible = self.visible_items
+        start = self.current_page * self.page_size
+        end = min(start + self.page_size, len(visible))
+        return visible[start:end]
+
+    @property
+    def current_item(self) -> Item | None:
+        items = self.current_page_items
+        if 0 <= self.current_page_idx < len(items):
+            return items[self.current_page_idx]
+        return None
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Label("[bold]Itens da Fila[/bold]", classes="sidebar-title")
+                yield Label(
+                    "[bold]Itens da Fila[/bold]", id="sidebar-title", classes="sidebar-title"
+                )
+                yield Label(
+                    "[dim]Pág 1/1[/dim]", id="sidebar-pagination", classes="sidebar-subtitle"
+                )
                 yield ListView(id="item-list")
             with Vertical(id="content-area"):
                 with Vertical(id="item-header"):
@@ -242,26 +303,85 @@ class ScreeningApp(App[None]):
                     yield Button(
                         "Pular (S)", variant="default", id="btn-skip", classes="action-btn"
                     )
+                    yield Button(
+                        "◀ Pág (P)", variant="default", id="btn-prev-page", classes="action-btn"
+                    )
+                    yield Button(
+                        "Pág ▶ (N)", variant="default", id="btn-next-page", classes="action-btn"
+                    )
+                    yield Button(
+                        "Fonte (F)", variant="primary", id="btn-cycle-source", classes="action-btn"
+                    )
                     yield Button("Sair (Q)", variant="default", id="btn-quit", classes="action-btn")
         yield Footer()
 
     def on_mount(self) -> None:
+        self._render_current_page(reset_selection=True)
+
+    def _render_current_page(self, reset_selection: bool = True) -> None:
         list_view = self.query_one("#item-list", ListView)
-        for idx, it in enumerate(self.raw_items, 1):
-            list_view.append(ItemListItem(it, idx))
-        if self.raw_items:
+        list_view.clear()
+
+        visible = self.visible_items
+        total = len(visible)
+        total_p = self.total_pages
+        if self.current_page >= total_p:
+            self.current_page = max(0, total_p - 1)
+
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, total)
+        page_items = visible[start_idx:end_idx]
+
+        for i, it in enumerate(page_items):
+            mark = self.decisions_map.get(it.id)
+            list_view.append(ItemListItem(it, start_idx + i + 1, decision=mark))
+
+        src_label = (
+            f"[bold cyan]{self.source_filter}[/bold cyan]"
+            if self.source_filter
+            else "[dim]Todas as fontes[/dim]"
+        )
+        sub_lbl = self.query_one("#sidebar-pagination", Label)
+        sub_lbl.update(
+            f"Pág [bold]{self.current_page + 1}/{total_p}[/bold] "
+            f"({len(page_items)}/{total}) · {src_label}"
+        )
+
+        if reset_selection and page_items:
+            self.current_page_idx = 0
+            self.current_idx = start_idx
             list_view.index = 0
             self._display_item(0)
+        elif not page_items:
+            self._clear_display()
+
+    def _clear_display(self) -> None:
+        self.query_one("#item-title", Label).update(
+            "[dim](Nenhum item nesta página ou filtro)[/dim]"
+        )
+        self.query_one("#item-meta", Label).update("")
+        self.query_one("#item-tech", Label).update("")
+        self.query_one("#item-evidence", Label).update("")
+        self.query_one("#item-body", Static).update(
+            "[dim]Use [F] para alternar fontes ou [P/N] para mudar de página.[/dim]"
+        )
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if isinstance(event.item, ItemListItem):
-            self.current_idx = event.item.index - 1
-            self._display_item(self.current_idx)
+            list_view = self.query_one("#item-list", ListView)
+            try:
+                self.current_page_idx = list_view.children.index(event.item)
+            except ValueError:
+                self.current_page_idx = 0
+            self.current_idx = self.current_page * self.page_size + self.current_page_idx
+            self._display_item(self.current_page_idx)
 
     def _display_item(self, idx: int) -> None:
-        if not (0 <= idx < len(self.raw_items)):
+        page_items = self.current_page_items
+        if not (0 <= idx < len(page_items)):
             return
-        it = self.raw_items[idx]
+        it = page_items[idx]
+        self.current_idx = self.current_page * self.page_size + idx
         rk = self.ranking.get(it.id)
         batch_str = f"Batch #{rk.batch} | Rank #{rk.rank} (Score: {rk.score:.1f})" if rk else ""
 
@@ -317,15 +437,15 @@ class ScreeningApp(App[None]):
         body_widget.update(_format_item_body(it))
 
     def action_include_item(self) -> None:
-        if not self.raw_items or self.current_idx >= len(self.raw_items):
+        it = self.current_item
+        if not it:
             return
-        it = self.raw_items[self.current_idx]
         now = datetime.now(UTC).isoformat()
         dec = ScreeningDecision(
             item_id=it.id,
             coder=self.coder,
             decision="include",
-            criteria_met=["I1"],
+            criteria_met=list(self.criteria.inclusion.keys()) or ["I1"],
             reason="Incluído via TUI Textual",
             decided_at=now,
             sheet_sha256="tui_textual",
@@ -333,16 +453,19 @@ class ScreeningApp(App[None]):
         self._record_and_advance(it.id, dec, "include")
 
     def action_exclude_item(self) -> None:
-        if not self.raw_items or self.current_idx >= len(self.raw_items):
+        it = self.current_item
+        if not it:
             return
 
         def handle_modal_result(crit: str | None) -> None:
-            if not crit or self.current_idx >= len(self.raw_items):
+            if not crit:
                 return
-            it = self.raw_items[self.current_idx]
+            target_it = self.current_item
+            if not target_it:
+                return
             now = datetime.now(UTC).isoformat()
             dec = ScreeningDecision(
-                item_id=it.id,
+                item_id=target_it.id,
                 coder=self.coder,
                 decision="exclude",
                 criteria_met=[crit],
@@ -350,14 +473,14 @@ class ScreeningApp(App[None]):
                 decided_at=now,
                 sheet_sha256="tui_textual",
             )
-            self._record_and_advance(it.id, dec, "exclude")
+            self._record_and_advance(target_it.id, dec, "exclude")
 
         self.push_screen(ExclusionModal(), handle_modal_result)
 
     def action_uncertain_item(self) -> None:
-        if not self.raw_items or self.current_idx >= len(self.raw_items):
+        it = self.current_item
+        if not it:
             return
-        it = self.raw_items[self.current_idx]
         now = datetime.now(UTC).isoformat()
         dec = ScreeningDecision(
             item_id=it.id,
@@ -371,9 +494,48 @@ class ScreeningApp(App[None]):
         self._record_and_advance(it.id, dec, "uncertain")
 
     def action_skip_item(self) -> None:
-        if not self.raw_items or self.current_idx >= len(self.raw_items):
+        if not self.current_item:
             return
         self._advance()
+
+    def action_next_page(self) -> None:
+        total_p = self.total_pages
+        if self.current_page + 1 < total_p:
+            self.current_page += 1
+            self._render_current_page(reset_selection=True)
+            self.notify(f"Página {self.current_page + 1} de {total_p}")
+        else:
+            self.notify(f"Você já está na última página ({total_p}/{total_p}).")
+
+    def action_prev_page(self) -> None:
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._render_current_page(reset_selection=True)
+            self.notify(f"Página {self.current_page + 1} de {self.total_pages}")
+        else:
+            self.notify("Você já está na primeira página (1/1).")
+
+    def action_cycle_source(self) -> None:
+        srcs = self.available_sources
+        if not srcs:
+            self.notify("Apenas uma fonte disponível nesta coleta.")
+            return
+
+        cycle_list: list[str | None] = [None] + list(srcs)
+        if self.source_filter not in cycle_list:
+            next_idx = 1
+        else:
+            curr_idx = cycle_list.index(self.source_filter)
+            next_idx = (curr_idx + 1) % len(cycle_list)
+
+        self.source_filter = cycle_list[next_idx]
+        self.current_page = 0
+        self.current_page_idx = 0
+        self._render_current_page(reset_selection=True)
+
+        active_name = self.source_filter or "Todas as fontes"
+        count = len(self.visible_items)
+        self.notify(f"Filtro de fonte: {active_name} ({count} itens)")
 
     def action_quit_app(self) -> None:
         if self.recorded_decisions:
@@ -391,8 +553,8 @@ class ScreeningApp(App[None]):
         self.recorded_decisions.append(decision)
         self.decisions_map[item_id] = mark
         list_view = self.query_one("#item-list", ListView)
-        if 0 <= self.current_idx < len(list_view.children):
-            item_widget = list_view.children[self.current_idx]
+        if 0 <= self.current_page_idx < len(list_view.children):
+            item_widget = list_view.children[self.current_page_idx]
             if isinstance(item_widget, ItemListItem):
                 item_widget.decision = mark
                 it = item_widget.item
@@ -402,13 +564,21 @@ class ScreeningApp(App[None]):
         self._advance()
 
     def _advance(self) -> None:
-        self.current_idx += 1
-        if self.current_idx < len(self.raw_items):
+        page_items = self.current_page_items
+        if self.current_page_idx + 1 < len(page_items):
+            self.current_page_idx += 1
+            self.current_idx = self.current_page * self.page_size + self.current_page_idx
             list_view = self.query_one("#item-list", ListView)
-            list_view.index = self.current_idx
-            self._display_item(self.current_idx)
+            list_view.index = self.current_page_idx
+            self._display_item(self.current_page_idx)
         else:
-            self.notify("Fim dos itens desta sessão!")
+            total_p = self.total_pages
+            if self.current_page + 1 < total_p:
+                self.current_page += 1
+                self.notify(f"Avançando para página {self.current_page + 1} de {total_p}")
+                self._render_current_page(reset_selection=True)
+            else:
+                self.notify("Fim dos itens desta sessão!")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
@@ -420,6 +590,12 @@ class ScreeningApp(App[None]):
             self.action_uncertain_item()
         elif btn_id == "btn-skip":
             self.action_skip_item()
+        elif btn_id == "btn-prev-page":
+            self.action_prev_page()
+        elif btn_id == "btn-next-page":
+            self.action_next_page()
+        elif btn_id == "btn-cycle-source":
+            self.action_cycle_source()
         elif btn_id == "btn-quit":
             self.action_quit_app()
 
@@ -428,13 +604,18 @@ class CodingApp(App[None]):
     """Interactive full-screen TUI for qualitative data extraction (Annex A Coding)."""
 
     TITLE = "MSR-Kit — Extração Técnica de Dados (Annex A Coding)"
-    SUB_TITLE = "Preencha o protocolo e pressione [G / Enter] para Gravar, [Q / Esc] Sair"
+    SUB_TITLE = "[G] Gravar, [S] Pular, [N/P] Páginas, [F] Filtrar Fonte, [Q/Esc] Sair"
 
     BINDINGS = [
         Binding("g", "save_and_advance", "Gravar (G)", priority=True),
         Binding("s", "skip_item", "Pular (S)", priority=True),
+        Binding("n", "next_page", "Próx Pág (N)", priority=True),
+        Binding("p", "prev_page", "Pág Ant (P)", priority=True),
+        Binding("f", "cycle_source", "Filtrar Fonte (F)", priority=True),
         Binding("q", "quit_app", "Sair e Salvar (Q)", priority=True),
         Binding("escape", "quit_app", "Voltar / Sair (Esc)", priority=True),
+        Binding("pageup", "prev_page", "Pág Ant", show=False),
+        Binding("pagedown", "next_page", "Próx Pág", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -442,9 +623,19 @@ class CodingApp(App[None]):
         layout: horizontal;
     }
     #coding-sidebar {
-        width: 32;
+        width: 34;
         border-right: heavy $primary;
         background: $panel;
+    }
+    .sidebar-title {
+        text-style: bold;
+        color: $accent;
+        padding: 0 1;
+    }
+    .sidebar-subtitle {
+        color: $text-muted;
+        padding: 0 1;
+        margin-bottom: 1;
     }
     #coding-content-area {
         width: 1fr;
@@ -518,8 +709,10 @@ class CodingApp(App[None]):
         run_id: str,
         coder: str,
         suggestions_map: dict[str, dict[str, str]] | None = None,
+        page_size: int = 50,
     ) -> None:
         super().__init__()
+        self.all_items = items
         self.raw_items = items
         self.data_dir = data_dir
         self.run_id = run_id
@@ -527,18 +720,63 @@ class CodingApp(App[None]):
         self.suggestions_map = suggestions_map or {}
         self.recorded_codings: list[CodingRecord] = []
         self.codings_map: dict[str, bool] = {}
+        self.page_size = max(1, page_size)
+        self.current_page = 0
+        self.current_page_idx = 0
         self.current_idx = 0
+        self.source_filter: str | None = None
 
         self.selected_sistema: list[str] = ["rag"]
         self.selected_nivel: str = "N1"
         self.selected_oraculo: str = "pseudo-automatico"
         self.selected_confianca: str = "alta"
 
+    @property
+    def available_sources(self) -> list[str]:
+        sources: set[str] = set()
+        for it in self.all_items:
+            if it.source:
+                sources.add(it.source)
+        return sorted(sources)
+
+    @property
+    def visible_items(self) -> list[Item]:
+        if self.source_filter is None:
+            return self.all_items
+        return [it for it in self.all_items if it.source == self.source_filter]
+
+    @property
+    def total_pages(self) -> int:
+        return max(1, (len(self.visible_items) + self.page_size - 1) // self.page_size)
+
+    @property
+    def current_page_items(self) -> list[Item]:
+        visible = self.visible_items
+        start = self.current_page * self.page_size
+        end = min(start + self.page_size, len(visible))
+        return visible[start:end]
+
+    @property
+    def current_item(self) -> Item | None:
+        items = self.current_page_items
+        if 0 <= self.current_page_idx < len(items):
+            return items[self.current_page_idx]
+        return None
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
             with Vertical(id="coding-sidebar"):
-                yield Label("[bold]Itens Elegíveis[/bold]", classes="sidebar-title")
+                yield Label(
+                    "[bold]Itens Elegíveis[/bold]",
+                    id="coding-sidebar-title",
+                    classes="sidebar-title",
+                )
+                yield Label(
+                    "[dim]Pág 1/1[/dim]",
+                    id="coding-sidebar-pagination",
+                    classes="sidebar-subtitle",
+                )
                 with VerticalScroll():
                     yield ListView(id="coding-item-list")
             with Vertical(id="coding-content-area"):
@@ -599,7 +837,7 @@ class CodingApp(App[None]):
                         )
                 with Horizontal(id="coding-action-bar"):
                     yield Button(
-                        "Gravar e Avançar (G)",
+                        "Gravar (G)",
                         id="btn-save",
                         variant="success",
                         classes="action-btn",
@@ -608,30 +846,92 @@ class CodingApp(App[None]):
                         "Pular (S)", id="btn-skip", variant="default", classes="action-btn"
                     )
                     yield Button(
-                        "Sair e Salvar (Q)", id="btn-quit", variant="error", classes="action-btn"
+                        "◀ Pág (P)", id="btn-prev-page", variant="default", classes="action-btn"
+                    )
+                    yield Button(
+                        "Pág ▶ (N)", id="btn-next-page", variant="default", classes="action-btn"
+                    )
+                    yield Button(
+                        "Fonte (F)", id="btn-cycle-source", variant="primary", classes="action-btn"
+                    )
+                    yield Button(
+                        "Sair (Q)", id="btn-quit", variant="error", classes="action-btn"
                     )
         yield Footer()
 
     def on_mount(self) -> None:
+        self._render_current_page(reset_selection=True)
+
+    def _render_current_page(self, reset_selection: bool = True) -> None:
         list_view = self.query_one("#coding-item-list", ListView)
-        for idx, it in enumerate(self.raw_items, 1):
-            list_view.append(ItemListItem(it, idx, decision=None))
-        if self.raw_items:
+        list_view.clear()
+
+        visible = self.visible_items
+        total = len(visible)
+        total_p = self.total_pages
+        if self.current_page >= total_p:
+            self.current_page = max(0, total_p - 1)
+
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, total)
+        page_items = visible[start_idx:end_idx]
+
+        for i, it in enumerate(page_items):
+            mark = "include" if self.codings_map.get(it.id) else None
+            list_view.append(ItemListItem(it, start_idx + i + 1, decision=mark))
+
+        src_label = (
+            f"[bold cyan]{self.source_filter}[/bold cyan]"
+            if self.source_filter
+            else "[dim]Todas as fontes[/dim]"
+        )
+        sub_lbl = self.query_one("#coding-sidebar-pagination", Label)
+        sub_lbl.update(
+            f"Pág [bold]{self.current_page + 1}/{total_p}[/bold] "
+            f"({len(page_items)}/{total}) · {src_label}"
+        )
+
+        if reset_selection and page_items:
+            self.current_page_idx = 0
+            self.current_idx = start_idx
+            list_view.index = 0
             self._display_item(0)
+        elif not page_items:
+            self._clear_display()
+
+    def _clear_display(self) -> None:
+        self.query_one("#coding-title", Label).update(
+            "[dim](Nenhum item elegível nesta página ou filtro)[/dim]"
+        )
+        self.query_one("#coding-meta", Label).update("")
+        self.query_one("#coding-tech", Label).update("")
+        self.query_one("#coding-suggestions", Label).update("")
+        self.query_one("#coding-body", Static).update(
+            "[dim]Use [F] para alternar fontes ou [P/N] para mudar de página.[/dim]"
+        )
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if isinstance(event.item, ItemListItem):
-            self.current_idx = event.item.index - 1
-            self._display_item(self.current_idx)
+            list_view = self.query_one("#coding-item-list", ListView)
+            try:
+                self.current_page_idx = list_view.children.index(event.item)
+            except ValueError:
+                self.current_page_idx = 0
+            self.current_idx = self.current_page * self.page_size + self.current_page_idx
+            self._display_item(self.current_page_idx)
 
     def _display_item(self, idx: int) -> None:
-        if not (0 <= idx < len(self.raw_items)):
+        page_items = self.current_page_items
+        if not (0 <= idx < len(page_items)):
             return
-        it = self.raw_items[idx]
+        it = page_items[idx]
+        self.current_idx = self.current_page * self.page_size + idx
         author_str = f" por @{it.author_handle}" if it.author_handle else ""
 
+        global_idx = self.current_page * self.page_size + idx + 1
+        total_visible = len(self.visible_items)
         self.query_one("#coding-title", Label).update(
-            f"[{idx + 1}/{len(self.raw_items)}] {it.title or 'Sem título'}"
+            f"[{global_idx}/{total_visible}] {it.title or 'Sem título'}"
         )
         self.query_one("#coding-meta", Label).update(
             f"Fonte: [bold]{it.source}[/bold] ({it.kind.value}){author_str} | URL: {it.url}"
@@ -749,9 +1049,9 @@ class CodingApp(App[None]):
         )
 
     def action_save_and_advance(self) -> None:
-        if not self.raw_items or self.current_idx >= len(self.raw_items):
+        it = self.current_item
+        if not it:
             return
-        it = self.raw_items[self.current_idx]
         tools_val = self.query_one("#input-tools", Input).value.strip()
         notes_val = self.query_one("#input-notes", Input).value.strip()
 
@@ -785,8 +1085,8 @@ class CodingApp(App[None]):
         self.codings_map[it.id] = True
 
         list_view = self.query_one("#coding-item-list", ListView)
-        if 0 <= self.current_idx < len(list_view.children):
-            item_widget = list_view.children[self.current_idx]
+        if 0 <= self.current_page_idx < len(list_view.children):
+            item_widget = list_view.children[self.current_page_idx]
             if isinstance(item_widget, ItemListItem):
                 item_widget.decision = "include"
                 badge = "[✓]"
@@ -796,7 +1096,48 @@ class CodingApp(App[None]):
         self._advance()
 
     def action_skip_item(self) -> None:
+        if not self.current_item:
+            return
         self._advance()
+
+    def action_next_page(self) -> None:
+        total_p = self.total_pages
+        if self.current_page + 1 < total_p:
+            self.current_page += 1
+            self._render_current_page(reset_selection=True)
+            self.notify(f"Página {self.current_page + 1} de {total_p}")
+        else:
+            self.notify(f"Você já está na última página ({total_p}/{total_p}).")
+
+    def action_prev_page(self) -> None:
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._render_current_page(reset_selection=True)
+            self.notify(f"Página {self.current_page + 1} de {self.total_pages}")
+        else:
+            self.notify("Você já está na primeira página (1/1).")
+
+    def action_cycle_source(self) -> None:
+        srcs = self.available_sources
+        if not srcs:
+            self.notify("Apenas uma fonte disponível nesta coleta.")
+            return
+
+        cycle_list: list[str | None] = [None] + list(srcs)
+        if self.source_filter not in cycle_list:
+            next_idx = 1
+        else:
+            curr_idx = cycle_list.index(self.source_filter)
+            next_idx = (curr_idx + 1) % len(cycle_list)
+
+        self.source_filter = cycle_list[next_idx]
+        self.current_page = 0
+        self.current_page_idx = 0
+        self._render_current_page(reset_selection=True)
+
+        active_name = self.source_filter or "Todas as fontes"
+        count = len(self.visible_items)
+        self.notify(f"Filtro de fonte: {active_name} ({count} itens)")
 
     def action_quit_app(self) -> None:
         if self.recorded_codings:
@@ -810,13 +1151,21 @@ class CodingApp(App[None]):
         self.exit()
 
     def _advance(self) -> None:
-        self.current_idx += 1
-        if self.current_idx < len(self.raw_items):
+        page_items = self.current_page_items
+        if self.current_page_idx + 1 < len(page_items):
+            self.current_page_idx += 1
+            self.current_idx = self.current_page * self.page_size + self.current_page_idx
             list_view = self.query_one("#coding-item-list", ListView)
-            list_view.index = self.current_idx
-            self._display_item(self.current_idx)
+            list_view.index = self.current_page_idx
+            self._display_item(self.current_page_idx)
         else:
-            self.notify("Fim dos itens para codificação!")
+            total_p = self.total_pages
+            if self.current_page + 1 < total_p:
+                self.current_page += 1
+                self.notify(f"Avançando para página {self.current_page + 1} de {total_p}")
+                self._render_current_page(reset_selection=True)
+            else:
+                self.notify("Fim dos itens para codificação!")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
@@ -866,5 +1215,11 @@ class CodingApp(App[None]):
             self.action_save_and_advance()
         elif btn_id == "btn-skip":
             self.action_skip_item()
+        elif btn_id == "btn-prev-page":
+            self.action_prev_page()
+        elif btn_id == "btn-next-page":
+            self.action_next_page()
+        elif btn_id == "btn-cycle-source":
+            self.action_cycle_source()
         elif btn_id == "btn-quit":
             self.action_quit_app()

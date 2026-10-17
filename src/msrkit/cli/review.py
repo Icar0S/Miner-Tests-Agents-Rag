@@ -404,7 +404,9 @@ def screen_tui(
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
     coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
     batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
-    limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of items to load"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-l", help="Maximum items to load (default: all)"
+    ),
 ) -> None:
     """Launch full-screen Textual TUI for interactive screening with keyboard shortcuts."""
     from rich.prompt import Prompt
@@ -424,7 +426,7 @@ def screen_tui(
             run_id=run_id,
             protocol=protocol,
             batch=batch,
-            limit=limit,
+            limit=limit or 50,
         )
 
     run_id = _resolve_run(_unwrap(run_id))
@@ -457,7 +459,7 @@ def screen_tui(
         )
         return
 
-    session_items = pending[:limit]
+    session_items = pending if limit is None or limit <= 0 else pending[:limit]
     app_tui = ScreeningApp(
         items=session_items,
         criteria=criteria,
@@ -889,7 +891,9 @@ def coding_tui(
     status: str = typer.Option(
         "include", "--status", help="Items by screening decision: include, all"
     ),
-    limit: int = typer.Option(50, "--limit", "-l", help="Maximum items to load"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-l", help="Maximum items to load (default: all)"
+    ),
 ) -> None:
     """Launch full-screen Textual TUI for interactive Annex A data extraction."""
     from rich.prompt import Prompt
@@ -956,7 +960,7 @@ def coding_tui(
     detections = _load_detections(run_id)
     sug_map = suggestions(items, detections, system_concepts)
 
-    session_items = pending[:limit]
+    session_items = pending if limit is None or limit <= 0 else pending[:limit]
     app_coding = CodingApp(
         items=session_items,
         data_dir=_cli.DATA_DIR,
