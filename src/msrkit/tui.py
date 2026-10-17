@@ -102,6 +102,41 @@ class ItemListItem(ListItem):
         yield Label(f"{badge} #{self.index} {title_snippet}")
 
 
+def _format_item_body(it: Item, max_len: int | None = None) -> str:
+    """Format item body for display, providing structured context for code artifacts."""
+    if it.body:
+        return it.body[:max_len] if max_len else it.body
+    if it.source == "github":
+        from msrkit.enrich import repo_of
+
+        rname = repo_of(it)
+        tech = it.tech
+        ci_str = "[green]✓ Sim (ativo em CI)[/green]" if tech.has_ci else "[dim]Não[/dim]"
+        test_str = "[green]✓ Sim[/green]" if tech.has_tests else "[dim]Não[/dim]"
+        maturidade = (
+            f"{tech.contributors or 'N/A'} contribuidores | "
+            f"{tech.active_months or 'N/A'} meses com commits"
+        )
+        lines = [
+            "[bold cyan]📁 ARTEFATO DE CÓDIGO FONTE (GitHub)[/bold cyan]",
+            f"• [bold]Repositório:[/bold] {rname or 'N/A'}",
+            f"• [bold]Arquivo / Caminho:[/bold] [yellow]{tech.path or it.title or 'N/A'}[/yellow]",
+            f"• [bold]Linguagem / Formato:[/bold] {tech.language or 'Configuração / YAML'}",
+            f"• [bold]Sinais Técnicos:[/bold] CI/CD: {ci_str} | Suíte de Testes: {test_str}",
+            f"• [bold]Maturidade:[/bold] {maturidade}",
+            f"• [bold]Consulta de Origem:[/bold] [dim]{it.provenance.query_string}[/dim]",
+            "",
+            "[bold green]🔗 Inspecionar Código Online:[/bold green]",
+            f"[underline]{it.url}[/underline]",
+            "",
+            "[dim]Nota Ética (§17 do Protocolo): O código-fonte integral de repositórios",
+            "externos não é duplicado em disco para respeitar os direitos autorais.",
+            "Para inspecionar o arquivo completo, acesse a URL acima no navegador.[/dim]",
+        ]
+        return "\n".join(lines)
+    return "[dim](Sem corpo de texto disponível)[/dim]"
+
+
 class ScreeningApp(App[None]):
     """Interactive full-screen TUI for screening grey literature items."""
 
@@ -278,7 +313,7 @@ class ScreeningApp(App[None]):
         ev_lbl.update(f"Termos casados: [yellow]{matched}[/yellow]")
 
         body_widget = self.query_one("#item-body", Static)
-        body_widget.update(it.body or "[dim](Sem corpo de texto disponível)[/dim]")
+        body_widget.update(_format_item_body(it))
 
     def action_include_item(self) -> None:
         if not self.raw_items or self.current_idx >= len(self.raw_items):
@@ -639,7 +674,7 @@ class CodingApp(App[None]):
         else:
             sug_lbl.update("")
 
-        body_preview = it.body[:2000] if it.body else "[dim]Sem corpo de texto disponível.[/dim]"
+        body_preview = _format_item_body(it, max_len=2000)
         self.query_one("#coding-body", Static).update(body_preview)
 
         if sug.get("auto_sistema"):
