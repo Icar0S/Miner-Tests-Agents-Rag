@@ -141,7 +141,7 @@ class ScreeningApp(App[None]):
     """Interactive full-screen TUI for screening grey literature items."""
 
     TITLE = "MSR-Kit — Triagem Interativa de Literatura Cinza"
-    SUB_TITLE = "Pressione [I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, [Q] Sair"
+    SUB_TITLE = "Pressione [I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, [Q / Esc] Sair"
 
     BINDINGS = [
         Binding("i", "include_item", "Incluir (I)", priority=True),
@@ -149,6 +149,7 @@ class ScreeningApp(App[None]):
         Binding("u", "uncertain_item", "Dúvida (U)", priority=True),
         Binding("s", "skip_item", "Pular (S)", priority=True),
         Binding("q", "quit_app", "Sair e Salvar (Q)", priority=True),
+        Binding("escape", "quit_app", "Voltar / Sair (Esc)", priority=True),
     ]
 
     DEFAULT_CSS = """
@@ -427,12 +428,13 @@ class CodingApp(App[None]):
     """Interactive full-screen TUI for qualitative data extraction (Annex A Coding)."""
 
     TITLE = "MSR-Kit — Extração Técnica de Dados (Annex A Coding)"
-    SUB_TITLE = "Preencha as dimensões do protocolo e pressione [G / Enter] para Gravar, [Q] Sair"
+    SUB_TITLE = "Preencha o protocolo e pressione [G / Enter] para Gravar, [Q / Esc] Sair"
 
     BINDINGS = [
         Binding("g", "save_and_advance", "Gravar (G)", priority=True),
         Binding("s", "skip_item", "Pular (S)", priority=True),
         Binding("q", "quit_app", "Sair e Salvar (Q)", priority=True),
+        Binding("escape", "quit_app", "Voltar / Sair (Esc)", priority=True),
     ]
 
     DEFAULT_CSS = """

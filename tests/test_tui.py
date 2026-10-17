@@ -223,6 +223,11 @@ def test_menu_screening_run_selector(tmp_path: Path, monkeypatch: pytest.MonkeyP
     sel2 = _select_screening_run_id()
     assert sel2 == "consolidated"
 
+    # Escolha 0: Cancelar / Voltar ao menu principal
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "0")
+    sel0 = _select_screening_run_id()
+    assert sel0 is None
+
 
 def test_screening_app_exclude_and_bounds_safety(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
