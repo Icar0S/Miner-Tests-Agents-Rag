@@ -26,7 +26,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from msrkit.models import ItemKind, RateLimit
 
@@ -92,6 +92,13 @@ class RepoSignals(BaseModel):
     response_sha256: list[str] = []
     fetched_at: str = ""
     error: str | None = None
+
+    @field_validator("workflows", "manifests", mode="before")
+    @classmethod
+    def _coerce_dict(cls, v: Any) -> dict[str, str]:
+        if isinstance(v, list):
+            return {p: "" for p in v}
+        return v or {}
 
 
 def repo_of(item: Item) -> str | None:
