@@ -13,7 +13,7 @@ on:
         default: "hackernews,devto,stackexchange,huggingface,rss"
       manual_sources:
         description: "Fontes com credencial (vírgula), coletadas se o secret existir: github, bluesky."
-        default: ""
+        default: "github"
       per_query_limit:
         description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
         default: "10"
@@ -38,7 +38,7 @@ on:
         default: "hackernews,devto,stackexchange,huggingface,rss"
       manual_sources:
         type: string
-        default: ""
+        default: "github"
       per_query_limit:
         type: string
         default: "10"
