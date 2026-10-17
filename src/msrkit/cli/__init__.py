@@ -70,8 +70,9 @@ def main(
     """MSR-Kit: Mining grey literature through official APIs."""
     from msrkit.envfile import load_dotenv
 
-    # Search parameters and credentials from ./.env (existing variables win).
-    load_dotenv(Path(".env"))
+    # Search parameters and credentials from ./.env or PROJECT_ROOT/.env (existing variables win).
+    env_path = Path(".env") if Path(".env").exists() else (PROJECT_ROOT / ".env")
+    load_dotenv(env_path)
 
     if ctx.invoked_subcommand is None:
         import os
