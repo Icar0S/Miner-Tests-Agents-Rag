@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from msrkit.adapters.base import BaseAdapter
 
+from rich.prompt import Prompt
 from rich.table import Table
 
 from msrkit import __version__
@@ -23,6 +24,21 @@ from msrkit.cli._common import (
 )
 from msrkit.cli.collect import run
 from msrkit.cli.corpus import dedupe, export
+
+
+def _safe_ask(
+    prompt: str,
+    default: str = "",
+    choices: list[str] | None = None,
+    show_default: bool = True,
+) -> str:
+    """Prompt user safely, returning default or '0' on KeyboardInterrupt/EOFError."""
+    try:
+        val = Prompt.ask(prompt, default=default, choices=choices, show_default=show_default)
+        return val.strip()
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[yellow]Operação cancelada pelo usuário.[/yellow]")
+        return "0"
 
 
 def _toggle_source_in_protocol(protocol_path: str, source_name: str, new_state: bool) -> bool:
@@ -119,8 +135,6 @@ def _get_source_display_info(
 
 def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
     """Interactive screen to toggle sources on/off based on availability."""
-    from rich.prompt import Prompt
-
     from msrkit.config import load_protocol
 
     while True:
@@ -194,11 +208,11 @@ def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
             "[dim]• Fontes '✗ Sem API Pública' não expõem busca aberta (auditoria PRISMA).[/dim]"
         )
 
-        choice = Prompt.ask(
+        choice = _safe_ask(
             "\n[bold green]Digite o número da fonte para alternar (ou 0 para voltar)[/bold green]",
             default="0",
         )
-        if choice == "0":
+        if choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             break
 
         try:
@@ -325,19 +339,20 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
                 f"    [cyan]{idx:<2}[/cyan] - {s_name:<14} {status_label:<20} {api_label}"
             )
 
-    src_choice = Prompt.ask(
-        "\n[bold green]Escolha o número da fonte, T para todas ou 0 para voltar[/bold green]",
-        default="0",
-    ).strip()
-
-    if src_choice in ("0", "v", "q", "voltar", "cancelar"):
-        console.print("[yellow]Operação cancelada. Retornando ao menu principal.[/yellow]")
-        return
-
     selected_source: str | None = None
-    if src_choice.lower() in ("t", "todas", "all"):
-        selected_source = None
-    else:
+    while True:
+        src_choice = _safe_ask(
+            "\n[bold green]Escolha o número da fonte, T para todas ou 0 para voltar[/bold green]",
+            default="0",
+        )
+        if src_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+            console.print("[yellow]Operação cancelada. Retornando ao menu principal.[/yellow]")
+            return
+
+        if src_choice.lower() in ("t", "todas", "all"):
+            selected_source = None
+            break
+
         try:
             s_idx = int(src_choice)
             if 1 <= s_idx <= len(sources_options):
@@ -352,7 +367,7 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
                             "[yellow]Mantida apenas como registro formal PRISMA.[/yellow]"
                         )
                         console.print(err_text)
-                        return
+                        continue
                     elif not (
                         config.sources.get(selected_source)
                         and config.sources[selected_source].enabled
@@ -367,16 +382,23 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
                         prompt_msg = (
                             "[bold cyan]Forçar coleta experimental desta fonte?[/bold cyan] [s/N]"
                         )
-                        confirm = Prompt.ask(prompt_msg, default="N")
-                        if confirm.strip().lower() not in ("s", "sim", "y", "yes"):
-                            console.print("[yellow]Operação cancelada.[/yellow]")
-                            return
+                        confirm = _safe_ask(prompt_msg, default="N")
+                        if confirm.lower() not in ("s", "sim", "y", "yes"):
+                            console.print(
+                                "[yellow]Seleção cancelada. Escolha outra fonte.[/yellow]"
+                            )
+                            continue
+                break
             else:
                 console.print(
-                    "[yellow]Opção inválida, minerando todas as fontes ativadas.[/yellow]"
+                    f"[red]Número inválido! Digite um valor entre 1 e {len(sources_options)}, "
+                    "'T' para todas ou '0' para voltar.[/red]"
                 )
         except ValueError:
-            console.print("[yellow]Entrada inválida, minerando todas as fontes ativadas.[/yellow]")
+            console.print(
+                "[red]Entrada inválida! Digite o número da fonte, 'T' para todas ou '0' "
+                "para voltar.[/red]"
+            )
 
     console.print("\n[bold cyan]─── 2. Escolha a Quantidade de Itens para Minerar ───[/bold cyan]")
     console.print("  [cyan]1[/cyan] - ⚡ Teste Rápido (5 itens)")
@@ -387,40 +409,60 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     console.print("  [cyan]6[/cyan] - ✏️  Digitar quantidade personalizada")
     console.print("  [cyan]0[/cyan] - ↩ Cancelar e voltar ao Menu Principal")
 
-    qty_choice = Prompt.ask(
-        "\n[bold green]Escolha a opção de quantidade (ou 0 para cancelar)[/bold green]",
-        default="2",
-    ).strip()
-
-    if qty_choice in ("0", "v", "q", "voltar", "cancelar"):
-        console.print("[yellow]Mineração cancelada. Retornando ao menu principal.[/yellow]")
-        return
-
     limit: int | None = 20
-    if qty_choice == "1":
-        limit = 5
-    elif qty_choice == "2":
-        limit = 20
-    elif qty_choice == "3":
-        limit = 50
-    elif qty_choice == "4":
-        limit = 200
-    elif qty_choice == "5":
-        limit = None
-    elif qty_choice == "6":
-        custom = Prompt.ask(
-            "[bold green]Digite a quantidade exata desejada (ou 0 para cancelar)[/bold green]",
-            default="20",
-        ).strip()
-        if custom in ("0", "v", "q", "voltar", "cancelar"):
+    while True:
+        qty_choice = _safe_ask(
+            "\n[bold green]Escolha a opção de quantidade (ou 0 para cancelar)[/bold green]",
+            default="2",
+        )
+        if qty_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             console.print("[yellow]Mineração cancelada. Retornando ao menu principal.[/yellow]")
             return
-        try:
-            limit = max(1, int(custom))
-        except ValueError:
+
+        if qty_choice == "1":
+            limit = 5
+            break
+        elif qty_choice == "2":
             limit = 20
-    else:
-        limit = 20
+            break
+        elif qty_choice == "3":
+            limit = 50
+            break
+        elif qty_choice == "4":
+            limit = 200
+            break
+        elif qty_choice == "5":
+            limit = None
+            break
+        elif qty_choice == "6":
+            while True:
+                custom = _safe_ask(
+                    "[bold green]Digite a quantidade exata desejada "
+                    "(ou 0 para cancelar)[/bold green]",
+                    default="20",
+                )
+                if custom in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    console.print(
+                        "[yellow]Mineração cancelada. Retornando ao menu principal.[/yellow]"
+                    )
+                    return
+                try:
+                    custom_int = int(custom)
+                    if custom_int > 0:
+                        limit = custom_int
+                        break
+                    console.print(
+                        "[red]A quantidade deve ser um número inteiro maior que zero.[/red]"
+                    )
+                except ValueError:
+                    console.print(
+                        "[red]Entrada inválida! Digite um número inteiro maior que zero.[/red]"
+                    )
+            break
+        else:
+            console.print(
+                "[red]Opção de quantidade inválida! Digite de 1 a 6 ou 0 para voltar.[/red]"
+            )
 
     src_label = selected_source if selected_source else "Todas as fontes ativadas"
     limit_label = str(limit) if limit is not None else "Ilimitado (máximo do protocolo)"
@@ -521,8 +563,6 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
 
 def _select_screening_run_id() -> str | None:
     """Select the target dataset for screening or coding (latest run, consolidated, or specific)."""
-    from rich.prompt import Prompt
-
     import msrkit.cli as _cli
     from msrkit.storage import ItemStorage
 
@@ -535,63 +575,73 @@ def _select_screening_run_id() -> str | None:
         console.print("\n[yellow]⚠ Nenhuma coleta minerada encontrada na pasta data/.[/yellow]")
         return None
 
-    console.print("\n[bold cyan]─── Escolha a Base de Dados ───[/bold cyan]")
-    if latest_run:
+    while True:
+        console.print("\n[bold cyan]─── Escolha a Base de Dados ───[/bold cyan]")
+        if latest_run:
+            console.print(
+                f"  [cyan]1[/cyan] - ⚡ Última coleta minerada "
+                f"([bold]{latest_run}[/bold] · {latest_count} itens)"
+            )
+        else:
+            console.print("  [dim]1 - ⚡ Última coleta minerada (nenhuma encontrada)[/dim]")
+
         console.print(
-            f"  [cyan]1[/cyan] - ⚡ Última coleta minerada "
-            f"([bold]{latest_run}[/bold] · {latest_count} itens)"
+            f"  [cyan]2[/cyan] - 📚 Corpus Consolidado "
+            f"([dim]todas as coletas acumuladas[/dim] · {consolidated_count} itens)"
         )
-    else:
-        console.print("  [dim]1 - ⚡ Última coleta minerada (nenhuma encontrada)[/dim]")
+        console.print("  [cyan]3[/cyan] - 🔍 Escolher uma coleta específica do histórico")
+        console.print("  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
 
-    console.print(
-        f"  [cyan]2[/cyan] - 📚 Corpus Consolidado "
-        f"([dim]todas as coletas acumuladas[/dim] · {consolidated_count} itens)"
-    )
-    console.print("  [cyan]3[/cyan] - 🔍 Escolher uma coleta específica do histórico")
-    console.print("  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
+        target_choice = _safe_ask(
+            "\n[bold green]Escolha a base desejada (ou 0 para voltar)[/bold green]",
+            default="1" if latest_run else "2",
+        )
 
-    target_choice = Prompt.ask(
-        "\n[bold green]Escolha a base desejada (ou 0 para voltar)[/bold green]",
-        default="1" if latest_run else "2",
-    ).strip()
-
-    if target_choice in ("0", "v", "q", "voltar", "cancelar"):
-        return None
-
-    if target_choice == "2":
-        return "consolidated"
-    if target_choice == "3":
-        runs = [r for r in storage.list_runs() if r != "consolidated"]
-        if not runs:
-            console.print("[yellow]Nenhuma outra coleta encontrada no histórico.[/yellow]")
-            return latest_run
-        console.print("\n[bold cyan]Coletas Disponíveis:[/bold cyan]")
-        for idx, r in enumerate(runs, 1):
-            count = len(storage.read_items(r, prefer_deduped=True))
-            console.print(f"  [cyan]{idx}[/cyan] - {r} ({count} itens)")
-        console.print("  [cyan]0[/cyan] - ↩ Cancelar e voltar")
-        idx_choice = Prompt.ask(
-            "\n[bold green]Digite o número da coleta (ou 0 para voltar)[/bold green]",
-            default="1",
-        ).strip()
-        if idx_choice in ("0", "v", "q", "voltar", "cancelar"):
+        if target_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             return None
-        try:
-            chosen_idx = int(idx_choice)
-            if 1 <= chosen_idx <= len(runs):
-                return runs[chosen_idx - 1]
-        except ValueError:
-            pass
-        return latest_run
 
-    return latest_run
+        if target_choice == "1":
+            if not latest_run:
+                console.print(
+                    "[yellow]Nenhuma coleta recente encontrada. Escolha outra opção.[/yellow]"
+                )
+                continue
+            return latest_run
+        elif target_choice == "2":
+            return "consolidated"
+        elif target_choice == "3":
+            runs = [r for r in storage.list_runs() if r != "consolidated"]
+            if not runs:
+                console.print("[yellow]Nenhuma outra coleta encontrada no histórico.[/yellow]")
+                return latest_run
+            console.print("\n[bold cyan]Coletas Disponíveis:[/bold cyan]")
+            for idx, r in enumerate(runs, 1):
+                count = len(storage.read_items(r, prefer_deduped=True))
+                console.print(f"  [cyan]{idx}[/cyan] - {r} ({count} itens)")
+            console.print("  [cyan]0[/cyan] - ↩ Cancelar e voltar")
+            while True:
+                idx_choice = _safe_ask(
+                    "\n[bold green]Digite o número da coleta (ou 0 para voltar)[/bold green]",
+                    default="1",
+                )
+                if idx_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    break
+                try:
+                    chosen_idx = int(idx_choice)
+                    if 1 <= chosen_idx <= len(runs):
+                        return runs[chosen_idx - 1]
+                    console.print(
+                        f"[red]Número inválido! Escolha entre 1 e {len(runs)} "
+                        "ou 0 para voltar.[/red]"
+                    )
+                except ValueError:
+                    console.print("[red]Entrada inválida! Digite o número da coleta.[/red]")
+        else:
+            console.print("[red]Opção inválida! Escolha 1, 2, 3 ou 0 para voltar.[/red]")
 
 
 def _results_menu(protocol_path: str) -> None:  # pragma: no cover
     """Submenu for PRISMA 2020 flow, statistical analysis, and reports."""
-    from rich.prompt import Prompt
-
     from msrkit.cli.corpus import export, prisma, stats
 
     while True:
@@ -612,10 +662,10 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
         )
         console.print("  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
 
-        choice = Prompt.ask(
+        choice = _safe_ask(
             "\n[bold green]Escolha uma opção de resultados[/bold green]", default="0"
         )
-        if choice == "0":
+        if choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             break
         if choice == "1":
             selected_run = _select_screening_run_id()
@@ -636,11 +686,11 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             if not selected_run:
                 continue
             is_all = selected_run == "consolidated"
-            kind_choice = Prompt.ask(
+            kind_choice = _safe_ask(
                 "Deseja exportar [1] Versão desduplicada, [2] Versão bruta (ou 0 para voltar)",
                 default="1",
-            ).strip()
-            if kind_choice in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if kind_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             is_raw = kind_choice == "2"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -666,12 +716,12 @@ def _results_menu(protocol_path: str) -> None:  # pragma: no cover
             if not selected_run:
                 continue
             _statistical_analyses_menu(selected_run, protocol_path)
+        else:
+            console.print("[red]Opção inválida! Escolha entre 0 e 4.[/red]")
 
 
 def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None:  # pragma: no cover
     """Submenu for statistical analyses A1-A6 supporting RQ1-RQ5."""
-    from rich.prompt import Prompt
-
     from msrkit.cli.analyze import (
         analyze_compare,
         analyze_coverage,
@@ -693,8 +743,8 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
         console.print("  [cyan]6[/cyan] - A5: Descoberta de Tópicos e Clusters (LDA / k-means)")
         console.print("  [cyan]0[/cyan] - ↩ Voltar")
 
-        sub = Prompt.ask("\n[bold green]Escolha uma opção de análise[/bold green]", default="1")
-        if sub == "0":
+        sub = _safe_ask("\n[bold green]Escolha uma opção de análise[/bold green]", default="1")
+        if sub in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             break
 
         if sub in ("1", "2"):
@@ -747,12 +797,12 @@ def _statistical_analyses_menu(run_id: str | None, protocol_path: str) -> None: 
                 "\n[bold green]✓ Bateria de análises concluída! CSVs em data/reports/[/bold green]"
             )
             break
+        elif sub not in ("1", "2", "3", "4", "5", "6"):
+            console.print("[red]Opção inválida! Escolha entre 1 e 6, ou 0 para voltar.[/red]")
 
 
 def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
     """Submenu for advanced tools: sources, CSV sheets, agreement, audit & Zenodo."""
-    from rich.prompt import Prompt
-
     from msrkit.cli.collect import plan, sources, validate
     from msrkit.cli.corpus import dedupe, package
     from msrkit.cli.evidence import enrich, extract
@@ -785,8 +835,8 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
         console.print("  [cyan]13[/cyan] - Gerar pacote reprodutível para o Zenodo (package)")
         console.print("\n  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
 
-        choice = Prompt.ask("\n[bold green]Escolha uma opção avançada[/bold green]", default="0")
-        if choice == "0":
+        choice = _safe_ask("\n[bold green]Escolha uma opção avançada[/bold green]", default="0")
+        if choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
             break
         if choice == "1":
             _manage_sources_menu(protocol_path)
@@ -797,11 +847,11 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
         elif choice == "4":
             validate(protocol=protocol_path, verbose=False)
         elif choice == "5":
-            which = Prompt.ask(
+            which = _safe_ask(
                 "Desduplicar [1] Apenas última coleta, [2] Histórico (ou 0 para voltar)",
                 default="1",
-            ).strip()
-            if which in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if which in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             dedupe(run_id=None, all_runs=(which == "2"), verbose=False)
         elif choice == "6":
@@ -821,11 +871,11 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 continue
             extract(run_id=selected_run, protocol=protocol_path, top=25, verbose=False)
         elif choice == "8":
-            sub_choice = Prompt.ask(
+            sub_choice = _safe_ask(
                 "Deseja [1] Exportar CSV, [2] Importar CSV preenchido (ou 0 para voltar)?",
                 default="0",
-            ).strip()
-            if sub_choice in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             from msrkit.cli.review import screen_export, screen_import
 
@@ -833,10 +883,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = Prompt.ask(
+                coder = _safe_ask(
                     "Nome do avaliador (ou 0 para voltar)", default="revisor"
-                ).strip()
-                if coder in ("0", "v", "q", "voltar", "cancelar"):
+                )
+                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                     continue
                 screen_export(
                     run_id=selected_run,
@@ -851,10 +901,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                sheet_file = Prompt.ask(
+                sheet_file = _safe_ask(
                     "Caminho do arquivo CSV preenchido (ou 0 para voltar)"
-                ).strip()
-                if sheet_file in ("0", "v", "q", "voltar", "cancelar", ""):
+                )
+                if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 screen_import(
                     sheet=sheet_file,
@@ -863,11 +913,11 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                     coder="",
                 )
         elif choice == "9":
-            sub_choice = Prompt.ask(
+            sub_choice = _safe_ask(
                 "Deseja [1] Exportar Anexo A CSV, [2] Importar CSV (ou 0 para voltar)?",
                 default="0",
-            ).strip()
-            if sub_choice in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             from msrkit.cli.review import coding_export, coding_import
 
@@ -875,10 +925,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = Prompt.ask(
+                coder = _safe_ask(
                     "Nome do avaliador (ou 0 para voltar)", default="revisor"
-                ).strip()
-                if coder in ("0", "v", "q", "voltar", "cancelar"):
+                )
+                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                     continue
                 coding_export(
                     run_id=selected_run,
@@ -894,10 +944,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                sheet_file = Prompt.ask(
+                sheet_file = _safe_ask(
                     "Caminho do arquivo CSV preenchido (ou 0 para voltar)"
-                ).strip()
-                if sheet_file in ("0", "v", "q", "voltar", "cancelar", ""):
+                )
+                if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 coding_import(
                     sheet=sheet_file,
@@ -909,12 +959,12 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             if not selected_run:
                 continue
-            sub_choice = Prompt.ask(
+            sub_choice = _safe_ask(
                 "Deseja [1] Calcular índice Kappa e exportar divergências, "
                 "[2] Aplicar resolução de divergências (disagreements.csv) (ou 0 para voltar)?",
                 default="1",
-            ).strip()
-            if sub_choice in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             if sub_choice == "1":
                 from msrkit.cli.review import agreement
@@ -923,11 +973,11 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             else:
                 from msrkit.cli.review import resolve_disagreements_cmd
 
-                sheet_file = Prompt.ask(
+                sheet_file = _safe_ask(
                     "Caminho do arquivo disagreements.csv (Enter para padrão ou 0 para voltar)",
                     default=f"data/coding/{selected_run}/disagreements.csv",
-                ).strip()
-                if sheet_file in ("0", "v", "q", "voltar", "cancelar"):
+                )
+                if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                     continue
                 resolve_disagreements_cmd(sheet=sheet_file, run_id=selected_run)
         elif choice == "11":
@@ -939,10 +989,10 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 if Path("protocols/gold_set.yaml").exists()
                 else "protocols/gold_set.example.yaml"
             )
-            gold_file = Prompt.ask(
+            gold_file = _safe_ask(
                 "Arquivo do Gold Set YAML (ou 0 para voltar)", default=default_gold
-            ).strip()
-            if gold_file in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if gold_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             from msrkit.cli.validation import recall
 
@@ -955,22 +1005,22 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             if not selected_run:
                 continue
-            sub_choice = Prompt.ask(
+            sub_choice = _safe_ask(
                 "Deseja [1] Gerar amostra estratificada (.csv), "
                 "[2] Calcular precisão de planilha avaliada (ou 0 para voltar)?",
                 default="1",
-            ).strip()
-            if sub_choice in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if sub_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             if sub_choice == "1":
                 from msrkit.cli.validation import precision_sample_cmd
 
                 precision_sample_cmd(run_id=selected_run, n=50, seed=20260928)
             else:
-                sheet_file = Prompt.ask(
+                sheet_file = _safe_ask(
                     "Caminho do arquivo CSV avaliado (ou 0 para voltar)"
-                ).strip()
-                if sheet_file in ("0", "v", "q", "voltar", "cancelar", ""):
+                )
+                if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 from msrkit.cli.validation import precision_score_cmd
 
@@ -979,11 +1029,11 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
             selected_run = _select_screening_run_id()
             if not selected_run:
                 continue
-            creator_name = Prompt.ask(
+            creator_name = _safe_ask(
                 "Nome do autor/criador para Zenodo (ex: Lima, Matheus) (ou 0 para voltar)",
                 default="",
-            ).strip()
-            if creator_name in ("0", "v", "q", "voltar", "cancelar"):
+            )
+            if creator_name in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
                 continue
             creators = [creator_name] if creator_name else []
             package(
@@ -994,120 +1044,124 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 creator=creators,
                 keep_authors=False,
             )
+        else:
+            console.print("[red]Opção inválida! Escolha entre 0 e 13.[/red]")
 
 
 @app.command(name="menu")
 def menu() -> None:  # pragma: no cover
     """Interactive terminal menu to navigate MSR-Kit easily."""
     from rich.panel import Panel
-    from rich.prompt import Prompt
 
-    while True:
-        console.print()
-        console.print(
-            Panel.fit(
-                f"[bold cyan]MSR-Kit[/bold cyan] [dim]v{__version__}[/dim]\n"
-                "[italic]Mining grey literature through official APIs[/italic]",
-                border_style="cyan",
+    try:
+        while True:
+            console.print()
+            console.print(
+                Panel.fit(
+                    f"[bold cyan]MSR-Kit[/bold cyan] [dim]v{__version__}[/dim]\n"
+                    "[italic]Mining grey literature through official APIs[/italic]",
+                    border_style="cyan",
+                )
             )
-        )
-        console.print("\n[bold]Fluxo Principal da Pesquisa:[/bold]")
-        console.print(
-            "  [bold cyan]1[/bold cyan] - [bold]🎯 1. Minerar & Preparar[/bold] "
-            "([dim]coleta guiada + deduplicação + extração automática de sinais[/dim])"
-        )
-        console.print(
-            "  [bold cyan]2[/bold cyan] - [bold]🖥️  2. Triagem Interativa / TUI[/bold] "
-            "([dim]revisão visual com Textual: [I] Incluir ou [E] Excluir[/dim])"
-        )
-        console.print(
-            "  [bold cyan]3[/bold cyan] - [bold]📝 3. Extração Técnica (Annex A)[/bold] "
-            "([dim]codificação qualitativa de oráculos, ferramentas e evidências[/dim])"
-        )
-        console.print(
-            "  [bold cyan]4[/bold cyan] - [bold]📊 4. Resultados do Artigo & PRISMA[/bold] "
-            "([dim]PRISMA 2020 TikZ, estatísticas e análises do estudo[/dim])"
-        )
-        console.print("  ────────────────────────────────────────────────────")
-        console.print(
-            "  [bold cyan]5[/bold cyan] - [bold]🛠️  Opções Avançadas & Auditoria[/bold] "
-            "([dim]fontes, planilhas Excel, métricas Kappa e Zenodo[/dim])"
-        )
-        console.print("  [cyan]0[/cyan] - Sair")
+            console.print("\n[bold]Fluxo Principal da Pesquisa:[/bold]")
+            console.print(
+                "  [bold cyan]1[/bold cyan] - [bold]🎯 1. Minerar & Preparar[/bold] "
+                "([dim]coleta guiada + deduplicação + extração automática de sinais[/dim])"
+            )
+            console.print(
+                "  [bold cyan]2[/bold cyan] - [bold]🖥️  2. Triagem Interativa / TUI[/bold] "
+                "([dim]revisão visual com Textual: [I] Incluir ou [E] Excluir[/dim])"
+            )
+            console.print(
+                "  [bold cyan]3[/bold cyan] - [bold]📝 3. Extração Técnica (Annex A)[/bold] "
+                "([dim]codificação qualitativa de oráculos, ferramentas e evidências[/dim])"
+            )
+            console.print(
+                "  [bold cyan]4[/bold cyan] - [bold]📊 4. Resultados do Artigo & PRISMA[/bold] "
+                "([dim]PRISMA 2020 TikZ, estatísticas e análises do estudo[/dim])"
+            )
+            console.print("  ────────────────────────────────────────────────────")
+            console.print(
+                "  [bold cyan]5[/bold cyan] - [bold]🛠️  Opções Avançadas & Auditoria[/bold] "
+                "([dim]fontes, planilhas Excel, métricas Kappa e Zenodo[/dim])"
+            )
+            console.print("  [cyan]0[/cyan] - Sair")
 
-        choice = Prompt.ask("\n[bold green]Digite o número da opção[/bold green]", default="0")
+            choice = _safe_ask("\n[bold green]Digite o número da opção[/bold green]", default="0")
 
-        if choice == "0":
-            console.print("[dim]Encerrado.[/dim]")
-            break
-        if choice == "1":
-            _interactive_mining_menu(DEFAULT_PROTOCOL)
-        elif choice == "2":
-            selected_run = _select_screening_run_id()
-            if not selected_run:
-                continue
-            mode = Prompt.ask(
-                "Modo: [1] TUI (Textual), [2] Linha a Linha (ou 0 para cancelar)",
-                default="1",
-            ).strip()
-            if mode in ("0", "v", "q", "voltar", "cancelar"):
-                continue
-            coder = Prompt.ask(
-                "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
-                default="revisor",
-            ).strip()
-            if coder in ("0", "v", "q", "voltar", "cancelar"):
-                continue
-            try:
-                if mode == "2":
-                    from msrkit.cli.review import screen_interactive
+            if choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                console.print("[dim]Encerrado com sucesso. Até logo![/dim]")
+                break
+            if choice == "1":
+                _interactive_mining_menu(DEFAULT_PROTOCOL)
+            elif choice == "2":
+                selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
+                mode = _safe_ask(
+                    "Modo: [1] TUI (Textual), [2] Linha a Linha (ou 0 para cancelar)",
+                    default="1",
+                )
+                if mode in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    continue
+                coder = _safe_ask(
+                    "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
+                    default="revisor",
+                )
+                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    continue
+                try:
+                    if mode == "2":
+                        from msrkit.cli.review import screen_interactive
 
-                    screen_interactive(
-                        coder=coder,
+                        screen_interactive(
+                            coder=coder,
+                            run_id=selected_run,
+                            protocol=DEFAULT_PROTOCOL,
+                            batch=None,
+                            limit=50,
+                        )
+                    else:
+                        from msrkit.cli.review import screen_tui
+
+                        screen_tui(
+                            coder=coder,
+                            run_id=selected_run,
+                            protocol=DEFAULT_PROTOCOL,
+                            batch=None,
+                            limit=None,
+                        )
+                except Exception as e:
+                    console.print(f"[yellow]Retorno da triagem: {e}[/yellow]")
+            elif choice == "3":
+                selected_run = _select_screening_run_id()
+                if not selected_run:
+                    continue
+                coder = _safe_ask(
+                    "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
+                    default="revisor",
+                )
+                if coder in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    continue
+                try:
+                    from msrkit.cli.review import coding_tui
+
+                    coding_tui(
                         run_id=selected_run,
                         protocol=DEFAULT_PROTOCOL,
-                        batch=None,
-                        limit=50,
-                    )
-                else:
-                    from msrkit.cli.review import screen_tui
-
-                    screen_tui(
                         coder=coder,
-                        run_id=selected_run,
-                        protocol=DEFAULT_PROTOCOL,
-                        batch=None,
+                        status="include",
                         limit=None,
                     )
-            except Exception as e:
-                console.print(f"[yellow]Retorno da triagem: {e}[/yellow]")
-        elif choice == "3":
-            selected_run = _select_screening_run_id()
-            if not selected_run:
-                continue
-            coder = Prompt.ask(
-                "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
-                default="revisor",
-            ).strip()
-            if coder in ("0", "v", "q", "voltar", "cancelar"):
-                continue
-            try:
-                from msrkit.cli.review import coding_tui
+                except Exception as e:
+                    console.print(f"[yellow]Retorno da extração: {e}[/yellow]")
+            elif choice == "4":
+                _results_menu(DEFAULT_PROTOCOL)
+            elif choice == "5":
+                _advanced_menu(DEFAULT_PROTOCOL)
+            else:
+                console.print("[red]Opção inválida! Escolha entre 0 e 5.[/red]")
 
-                coding_tui(
-                    run_id=selected_run,
-                    protocol=DEFAULT_PROTOCOL,
-                    coder=coder,
-                    status="include",
-                    limit=None,
-                )
-            except Exception as e:
-                console.print(f"[yellow]Retorno da extração: {e}[/yellow]")
-        elif choice == "4":
-            _results_menu(DEFAULT_PROTOCOL)
-        elif choice == "5":
-            _advanced_menu(DEFAULT_PROTOCOL)
-        else:
-            console.print("[red]Opção inválida![/red]")
-
-        Prompt.ask("\n[dim]Pressione Enter para continuar...[/dim]")
+            _safe_ask("\n[dim]Pressione Enter para continuar...[/dim]")
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[yellow]Sessão encerrada com segurança. Até logo![/yellow]")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -79,8 +80,17 @@ class ExclusionModal(ModalScreen[str | None]):
     def on_key(self, event: Any) -> None:
         if event.key in ("1", "2", "3", "4", "5", "6"):
             self.dismiss(f"E{event.key}")
-        elif event.key == "escape":
+        elif event.key in ("escape", "q", "c", "0", "backspace"):
             self.dismiss(None)
+        elif event.key in ("enter", "space"):
+            pass
+        else:
+            with suppress(Exception):
+                self.notify(
+                    "Pressione de 1 a 6 para escolher o critério, ou [Esc] para cancelar.",
+                    severity="information",
+                )
+
 
 
 class ItemListItem(ListItem):
@@ -316,6 +326,8 @@ class ScreeningApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        for btn in self.query(Button):
+            btn.can_focus = False
         self._render_current_page(reset_selection=True)
 
     def _render_current_page(self, reset_selection: bool = True) -> None:
@@ -439,6 +451,10 @@ class ScreeningApp(App[None]):
     def action_include_item(self) -> None:
         it = self.current_item
         if not it:
+            self.notify(
+                "Nenhum item selecionado ou disponível nesta página.",
+                severity="warning",
+            )
             return
         now = datetime.now(UTC).isoformat()
         dec = ScreeningDecision(
@@ -455,6 +471,10 @@ class ScreeningApp(App[None]):
     def action_exclude_item(self) -> None:
         it = self.current_item
         if not it:
+            self.notify(
+                "Nenhum item selecionado ou disponível nesta página.",
+                severity="warning",
+            )
             return
 
         def handle_modal_result(crit: str | None) -> None:
@@ -480,6 +500,10 @@ class ScreeningApp(App[None]):
     def action_uncertain_item(self) -> None:
         it = self.current_item
         if not it:
+            self.notify(
+                "Nenhum item selecionado ou disponível nesta página.",
+                severity="warning",
+            )
             return
         now = datetime.now(UTC).isoformat()
         dec = ScreeningDecision(
@@ -495,6 +519,7 @@ class ScreeningApp(App[None]):
 
     def action_skip_item(self) -> None:
         if not self.current_item:
+            self.notify("Nenhum item para pular.", severity="information")
             return
         self._advance()
 
@@ -607,12 +632,12 @@ class CodingApp(App[None]):
     SUB_TITLE = "[G] Gravar, [S] Pular, [N/P] Páginas, [F] Filtrar Fonte, [Q/Esc] Sair"
 
     BINDINGS = [
-        Binding("g", "save_and_advance", "Gravar (G)", priority=True),
-        Binding("s", "skip_item", "Pular (S)", priority=True),
-        Binding("n", "next_page", "Próx Pág (N)", priority=True),
-        Binding("p", "prev_page", "Pág Ant (P)", priority=True),
-        Binding("f", "cycle_source", "Filtrar Fonte (F)", priority=True),
-        Binding("q", "quit_app", "Sair e Salvar (Q)", priority=True),
+        Binding("g", "save_and_advance", "Gravar (G)"),
+        Binding("s", "skip_item", "Pular (S)"),
+        Binding("n", "next_page", "Próx Pág (N)"),
+        Binding("p", "prev_page", "Pág Ant (P)"),
+        Binding("f", "cycle_source", "Filtrar Fonte (F)"),
+        Binding("q", "quit_app", "Sair e Salvar (Q)"),
         Binding("escape", "quit_app", "Voltar / Sair (Esc)", priority=True),
         Binding("pageup", "prev_page", "Pág Ant", show=False),
         Binding("pagedown", "next_page", "Próx Pág", show=False),
@@ -860,7 +885,16 @@ class CodingApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        for btn in self.query(Button):
+            btn.can_focus = False
         self._render_current_page(reset_selection=True)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "input-tools":
+            self.query_one("#input-notes", Input).focus()
+        elif event.input.id == "input-notes":
+            self.action_save_and_advance()
+
 
     def _render_current_page(self, reset_selection: bool = True) -> None:
         list_view = self.query_one("#coding-item-list", ListView)
@@ -1051,6 +1085,10 @@ class CodingApp(App[None]):
     def action_save_and_advance(self) -> None:
         it = self.current_item
         if not it:
+            self.notify(
+                "Nenhum item selecionado ou disponível para codificação.",
+                severity="warning",
+            )
             return
         tools_val = self.query_one("#input-tools", Input).value.strip()
         notes_val = self.query_one("#input-notes", Input).value.strip()
@@ -1097,6 +1135,7 @@ class CodingApp(App[None]):
 
     def action_skip_item(self) -> None:
         if not self.current_item:
+            self.notify("Nenhum item para pular.", severity="information")
             return
         self._advance()
 
@@ -1140,6 +1179,13 @@ class CodingApp(App[None]):
         self.notify(f"Filtro de fonte: {active_name} ({count} itens)")
 
     def action_quit_app(self) -> None:
+        if isinstance(self.focused, Input):
+            self.set_focus(None)
+            self.notify(
+                "Edição desativada. Pressione [Esc] ou [Q] novamente para sair.",
+                severity="information",
+            )
+            return
         if self.recorded_codings:
             append_codings(self.data_dir, self.run_id, self.recorded_codings)
             try:

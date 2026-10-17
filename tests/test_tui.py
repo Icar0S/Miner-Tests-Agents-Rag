@@ -414,3 +414,88 @@ def test_coding_app_pagination_and_source_filter(
 
     asyncio.run(_run())
 
+
+def test_tui_input_and_mouse_resilience(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from textual.widgets import Button
+
+    from msrkit.cli.menu import _safe_ask
+    from msrkit.tui import ExclusionModal
+
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+
+    # 1. Test _safe_ask resilience to KeyboardInterrupt and EOFError
+    monkeypatch.setattr(
+        "rich.prompt.Prompt.ask",
+        lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt),
+    )
+    assert _safe_ask("Prompt?") == "0"
+
+    monkeypatch.setattr(
+        "rich.prompt.Prompt.ask",
+        lambda *args, **kwargs: (_ for _ in ()).throw(EOFError),
+    )
+    assert _safe_ask("Prompt?") == "0"
+
+    async def _run() -> None:
+        # 2. Test ExclusionModal invalid key resilience
+        modal = ExclusionModal()
+        # Test modal key events directly
+        from unittest.mock import MagicMock
+
+        ev_x = MagicMock()
+        ev_x.key = "x"
+        modal.on_key(ev_x)  # Does not crash, shows notification
+
+        ev_cancel = MagicMock()
+        ev_cancel.key = "c"
+        dismissed = []
+        modal.dismiss = lambda val=None: dismissed.append(val)  # type: ignore[method-assign]
+        modal.on_key(ev_cancel)
+        assert dismissed == [None]
+
+        # 3. Test CodingApp input escape trap resilience and can_focus=False on buttons
+        item1 = _make_item(1)
+        app = CodingApp(
+            items=[item1],
+            data_dir=tmp_path,
+            run_id="test-run",
+            coder="joao",
+        )
+
+        async with app.run_test() as pilot:
+            # Verify action buttons do not steal focus
+            for btn in app.query(Button):
+                assert not btn.can_focus
+
+            # Focus the tools input
+            tools_inp = app.query_one("#input-tools", Input)
+            app.set_focus(tools_inp)
+            assert app.focused == tools_inp
+
+            # Pressing escape while editing must NOT quit the app; it must blur the input
+            await pilot.press("escape")
+            assert app.is_running
+            assert app.focused != tools_inp
+
+            # Test Enter submission chaining from tools to notes
+            app.set_focus(tools_inp)
+            await pilot.press("enter")
+            notes_inp = app.query_one("#input-notes", Input)
+            assert app.focused == notes_inp
+
+            # Press Enter on notes to save and advance
+            await pilot.press("enter")
+            assert len(app.recorded_codings) == 1
+
+            # When notes is focused, first escape blurs it without quitting the app
+            await pilot.press("escape")
+            assert app.is_running
+            assert app.focused != notes_inp
+
+            # Second escape (with no input focused) safely exits the app
+            await pilot.press("escape")
+            assert not app.is_running
+
+    asyncio.run(_run())
+
+
