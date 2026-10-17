@@ -92,6 +92,8 @@ class GitHubAdapter(BaseAdapter):
             "Max 1,000 results per query. Code search requires auth and is "
             "limited to 10 req/min. Partitioning by date and language is essential."
         ),
+        has_official_api=True,
+        official_api_name="GitHub REST v3 / GraphQL v4",
     )
 
     def _build_client(self) -> httpx.Client:

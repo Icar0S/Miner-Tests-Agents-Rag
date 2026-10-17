@@ -71,6 +71,8 @@ class StackExchangeAdapter(BaseAdapter):
             "Requires Accept-Encoding: gzip. Honor 'backoff' field from response. "
             "Without STACKEXCHANGE_KEY, daily quota is very low (~300 requests)."
         ),
+        has_official_api=True,
+        official_api_name="StackExchange API v2.3",
     )
 
     def _build_client(self) -> httpx.Client:

@@ -66,6 +66,14 @@ class RedditAdapter(BaseAdapter):
             "Free tier is limited. Custom User-Agent mandatory. "
             "Non-commercial use only on free tier."
         ),
+        has_official_api=True,
+        official_api_name="Reddit OAuth2 API",
+        exclusion_category="access_gated",
+        exclusion_rationale=(
+            "Desativada pelo protocolo: desde nov/2025 (Responsible Builder Policy), "
+            "credenciais novas exigem aprovação manual prévia da empresa sem garantia "
+            "de prazo (ADR-014); sem filtro cronológico nativo estrito."
+        ),
     )
 
     _access_token: str | None = None

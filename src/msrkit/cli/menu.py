@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from msrkit.adapters.base import BaseAdapter
 
 from rich.table import Table
 
@@ -55,6 +59,64 @@ def _toggle_source_in_protocol(protocol_path: str, source_name: str, new_state: 
     return False
 
 
+def _get_source_display_info(
+    s_name: str, is_enabled: bool, registry: dict[str, type[BaseAdapter]]
+) -> tuple[str, str, str, str]:
+    """Return (group, status_label, api_label, rationale) for a source."""
+    if s_name not in registry:
+        return (
+            "no_api",
+            "[dim]○ Desconhecida[/dim]",
+            "[dim][Sem Adaptador][/dim]",
+            "Fonte não registrada no MSR-Kit.",
+        )
+
+    adapter_cls = registry[s_name]
+    policy = adapter_cls.policy
+    avail = adapter_cls().available()
+
+    if is_enabled:
+        group = "active"
+        status_label = "[bold green]● Ativada[/bold green]"
+        if avail.status == "OK":
+            api_label = "[bold green][API Oficial: OK][/bold green]"
+        elif avail.status == "DEGRADED":
+            api_label = "[bold yellow][API Oficial: Parcial/Faltam Chaves][/bold yellow]"
+        else:
+            api_label = "[bold red][API Oficial: Indisponível][/bold red]"
+        rationale = policy.notes or "Fonte primária ativa no protocolo E2 (§6.1)."
+    elif policy.has_official_api:
+        group = "official_disabled"
+        status_label = "[dim]○ Desativada[/dim]"
+        if policy.exclusion_category == "methodological":
+            api_label = (
+                "[cyan][API Oficial: Excluída por Metodologia (Microblog sem Código)][/cyan]"
+            )
+        elif policy.exclusion_category == "access_gated":
+            api_label = "[yellow][API Oficial: Desativada (Exige Aprovação Reddit nov/25)][/yellow]"
+        elif policy.exclusion_category == "commercial_paywall":
+            api_label = (
+                "[yellow][API Oficial: Desativada (Inviável: API Paga Pay-per-use)][/yellow]"
+            )
+        else:
+            api_label = "[cyan][API Oficial: Desativada no Protocolo][/cyan]"
+        rationale = policy.exclusion_rationale or policy.notes or "Desativada no protocolo."
+    else:
+        group = "no_api"
+        status_label = "[dim red]○ Inviável[/dim red]"
+        if policy.exclusion_category == "no_public_api":
+            api_label = "[red][Sem API Pública (Termos Vedam Scraping)][/red]"
+        elif policy.exclusion_category == "private_enclave":
+            api_label = "[red][Sem Busca Global (Chat Privado / Requer Ética)][/red]"
+        else:
+            api_label = "[red][Sem API Pública][/red]"
+        rationale = (
+            policy.exclusion_rationale or policy.notes or "Sem suporte a API pública de busca."
+        )
+
+    return (group, status_label, api_label, rationale)
+
+
 def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
     """Interactive screen to toggle sources on/off based on availability."""
     from rich.prompt import Prompt
@@ -72,47 +134,64 @@ def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
         all_sources = sorted(set(list(config.sources.keys()) + list(registry.keys())))
 
         table = Table(
-            title="[bold cyan]Gerenciamento de Fontes de Pesquisa[/bold cyan]",
+            title="[bold cyan]Gerenciamento de Fontes de Pesquisa (§6.1 Protocolo E2)[/bold cyan]",
             border_style="cyan",
             header_style="bold magenta",
         )
         table.add_column("#", style="bold cyan", width=4)
-        table.add_column("Fonte", style="bold")
-        table.add_column("No Protocolo", justify="center")
-        table.add_column("Disponibilidade API", justify="center")
-        table.add_column("Status / Requisitos")
+        table.add_column("Fonte", style="bold", width=14)
+        table.add_column("No Protocolo", justify="center", width=15)
+        table.add_column("API Oficial", justify="center", width=26)
+        table.add_column("Status / Justificativa Científica (§6.1)")
 
         source_list: list[tuple[str, bool]] = []
         for idx, s_name in enumerate(all_sources, 1):
             is_enabled = config.sources[s_name].enabled if s_name in config.sources else False
             source_list.append((s_name, is_enabled))
 
+            grp, status_str, _, rationale = _get_source_display_info(s_name, is_enabled, registry)
             if s_name in registry:
-                adapter = registry[s_name]()
-                avail = adapter.available()
-                if avail.status == "OK":
-                    avail_str = "[bold green]✓ OK[/bold green]"
-                    notes = "[green]Pronta (Pública/Sem chaves)[/green]"
-                elif avail.status == "DEGRADED":
-                    avail_str = "[bold yellow]⚠ PARCIAL[/bold yellow]"
-                    notes = f"[yellow]{avail.reason}[/yellow]"
+                pol = registry[s_name].policy
+                av = registry[s_name]().available()
+                if pol.has_official_api:
+                    if av.status == "OK":
+                        api_str = "[bold green]✓ API Oficial (OK)[/bold green]"
+                    elif av.status == "DEGRADED":
+                        api_str = "[bold yellow]⚠ API Oficial (Parcial)[/bold yellow]"
+                    elif pol.exclusion_category == "methodological":
+                        api_str = "[bold cyan]✓ API Oficial (Excluída)[/bold cyan]"
+                    elif pol.exclusion_category == "access_gated":
+                        api_str = "[bold yellow]✓ API Oficial (Aprovação)[/bold yellow]"
+                    elif pol.exclusion_category == "commercial_paywall":
+                        api_str = "[bold yellow]✓ API Oficial (Paga)[/bold yellow]"
+                    else:
+                        api_str = "[bold yellow]✓ API Oficial[/bold yellow]"
                 else:
-                    avail_str = "[bold red]✗ INDISPONÍVEL[/bold red]"
-                    notes = f"[red]{avail.reason}[/red]"
+                    if pol.exclusion_category == "no_public_api":
+                        api_str = "[bold red]✗ Sem API Pública[/bold red]"
+                    elif pol.exclusion_category == "private_enclave":
+                        api_str = "[bold red]✗ Sem Busca Aberta[/bold red]"
+                    else:
+                        api_str = "[bold red]✗ Sem API Oficial[/bold red]"
             else:
-                avail_str = "[dim]DESCONHECIDA[/dim]"
-                notes = "-"
+                api_str = "[dim]Desconhecida[/dim]"
 
-            status_str = (
-                "[bold green]● ATIVADA[/bold green]" if is_enabled else "[dim]○ Desativada[/dim]"
-            )
-            table.add_row(str(idx), s_name, status_str, avail_str, notes)
+            table.add_row(str(idx), s_name, status_str, api_str, rationale)
 
         console.print()
         console.print(table)
-        console.print("[dim]• Digite o número da fonte para alternar (Ativar ⇄ Desativar).[/dim]")
         console.print(
-            "[dim]• Fontes com '✓ OK' podem ser ativadas e usadas imediatamente sem chaves.[/dim]"
+            "[dim]• Digite o número da fonte para alternar (Ativar ⇄ Desativar no protocolo).[/dim]"
+        )
+        console.print(
+            "[dim]• Fontes '✓ API Oficial (OK)' estão ativas e prontas para mineração.[/dim]"
+        )
+        console.print(
+            "[dim]• Fontes '✓ API Oficial (Excluída/Paga)' possuem API oficial mas foram\n"
+            "  desativadas por critérios metodológicos ou de custo comercial (§6.1).[/dim]"
+        )
+        console.print(
+            "[dim]• Fontes '✗ Sem API Pública' não expõem busca aberta (auditoria PRISMA).[/dim]"
         )
 
         choice = Prompt.ask(
@@ -126,7 +205,26 @@ def _manage_sources_menu(protocol_path: str) -> None:  # pragma: no cover
             chosen_idx = int(choice)
             if 1 <= chosen_idx <= len(source_list):
                 target_source, curr_state = source_list[chosen_idx - 1]
+                target_policy = (
+                    registry[target_source].policy if target_source in registry else None
+                )
                 new_state = not curr_state
+                if target_policy and not target_policy.has_official_api and new_state:
+                    console.print(
+                        f"\n[bold red]✗ A fonte '{target_source}' não pode ser ativada:[/bold red] "
+                        "[red]não possui API pública de busca e scraping é proibido (§6.1 C).[/red]"
+                    )
+                    continue
+                if (
+                    target_policy
+                    and target_policy.exclusion_category == "methodological"
+                    and new_state
+                ):
+                    console.print(
+                        f"\n[bold yellow]⚠ Aviso Metodológico:[/bold yellow] "
+                        f"[yellow]'{target_source}' foi excluída no protocolo E2 (§6.1) por ser "
+                        "microblog sem código. Ativá-la alterará o escopo do estudo.[/yellow]"
+                    )
                 success = _toggle_source_in_protocol(protocol_path, target_source, new_state)
                 if success:
                     word = (
@@ -163,23 +261,67 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
     registry = _get_registry()
 
     console.print("\n[bold cyan]─── 1. Escolha a Fonte para Minerar ───[/bold cyan]")
-    console.print("  [bold cyan]0[/bold cyan] - [bold]Todas as fontes ativadas no protocolo[/bold]")
+    active_sources = [s for s, c in sorted(config.sources.items()) if c.enabled]
+    console.print(
+        f"  [bold cyan]0[/bold cyan] - [bold]Todas as {len(active_sources)} fontes ativadas[/bold] "
+        f"[dim]({', '.join(active_sources)})[/dim]"
+    )
 
     sources_options: list[str] = []
-    for idx, (s_name, s_cfg) in enumerate(sorted(config.sources.items()), 1):
-        sources_options.append(s_name)
-        status_label = "[green]● Ativada[/green]" if s_cfg.enabled else "[dim]○ Desativada[/dim]"
-        avail_label = ""
-        if s_name in registry:
-            avail = registry[s_name]().available()
-            if avail.status == "OK":
-                avail_label = "[bold green][API: OK][/bold green]"
-            elif avail.status == "DEGRADED":
-                avail_label = "[yellow][API: Parcial/Faltam Chaves][/yellow]"
-            else:
-                avail_label = "[red][API: Não Suportada][/red]"
+    all_s_names = sorted(config.sources.keys())
 
-        console.print(f"  [cyan]{idx}[/cyan] - {s_name:<14} {status_label:<22} {avail_label}")
+    group_items: dict[str, list[str]] = {
+        "active": [],
+        "official_disabled": [],
+        "no_api": [],
+    }
+
+    for s_name in all_s_names:
+        is_en = config.sources[s_name].enabled if s_name in config.sources else False
+        grp, _, _, _ = _get_source_display_info(s_name, is_en, registry)
+        if grp not in group_items:
+            group_items["no_api"].append(s_name)
+        else:
+            group_items[grp].append(s_name)
+
+    # Grupo 1: Ativadas no Protocolo
+    if group_items["active"]:
+        console.print(
+            "\n  [bold green]● Fontes Ativadas no Protocolo (Prontas para Coleta):[/bold green]"
+        )
+        for s_name in group_items["active"]:
+            sources_options.append(s_name)
+            idx = len(sources_options)
+            _, status_label, api_label, _ = _get_source_display_info(s_name, True, registry)
+            console.print(
+                f"    [cyan]{idx:<2}[/cyan] - {s_name:<14} {status_label:<20} {api_label}"
+            )
+
+    # Grupo 2: Têm API Oficial, mas Desativadas Metodologicamente ou por Barreira
+    if group_items["official_disabled"]:
+        console.print(
+            "\n  [bold yellow]○ Com API Oficial, mas Inativas (Metodologia/Política):[/bold yellow]"
+        )
+        for s_name in group_items["official_disabled"]:
+            sources_options.append(s_name)
+            idx = len(sources_options)
+            _, status_label, api_label, _ = _get_source_display_info(s_name, False, registry)
+            console.print(
+                f"    [cyan]{idx:<2}[/cyan] - {s_name:<14} {status_label:<20} {api_label}"
+            )
+
+    # Grupo 3: Inviáveis por Ausência de API Pública ou Natureza Fechada
+    if group_items["no_api"]:
+        console.print(
+            "\n  [bold red]○ Inviáveis por Ausência de API Aberta ou Natureza Fechada:[/bold red]"
+        )
+        for s_name in group_items["no_api"]:
+            sources_options.append(s_name)
+            idx = len(sources_options)
+            _, status_label, api_label, _ = _get_source_display_info(s_name, False, registry)
+            console.print(
+                f"    [cyan]{idx:<2}[/cyan] - {s_name:<14} {status_label:<20} {api_label}"
+            )
 
     src_choice = Prompt.ask(
         "\n[bold green]Escolha o número da fonte desejada[/bold green]",
@@ -192,6 +334,35 @@ def _interactive_mining_menu(protocol_path: str) -> None:  # pragma: no cover
             s_idx = int(src_choice)
             if 1 <= s_idx <= len(sources_options):
                 selected_source = sources_options[s_idx - 1]
+                if selected_source in registry:
+                    sel_policy = registry[selected_source].policy
+                    if not sel_policy.has_official_api:
+                        desc = sel_policy.exclusion_rationale or "Scraping é proibido."
+                        err_text = (
+                            f"\n[bold red]⚠ '{selected_source}' não tem API pública.[/bold red]\n"
+                            f"[dim]{desc}[/dim]\n"
+                            "[yellow]Mantida apenas como registro formal PRISMA.[/yellow]"
+                        )
+                        console.print(err_text)
+                        return
+                    elif not (
+                        config.sources.get(selected_source)
+                        and config.sources[selected_source].enabled
+                    ):
+                        api_n = sel_policy.official_api_name or "Sim"
+                        motivo = sel_policy.exclusion_rationale or sel_policy.notes
+                        console.print(
+                            f"\n[bold yellow]ℹ '{selected_source}' tem API ({api_n}), "
+                            "mas está inativa no E2.[/bold yellow]\n"
+                            f"[cyan]Motivo:[/cyan] {motivo}\n"
+                        )
+                        prompt_msg = (
+                            "[bold cyan]Forçar coleta experimental desta fonte?[/bold cyan] [s/N]"
+                        )
+                        confirm = Prompt.ask(prompt_msg, default="N")
+                        if confirm.strip().lower() not in ("s", "sim", "y", "yes"):
+                            console.print("[yellow]Operação cancelada.[/yellow]")
+                            return
             else:
                 console.print(
                     "[yellow]Opção inválida, minerando todas as fontes ativadas.[/yellow]"

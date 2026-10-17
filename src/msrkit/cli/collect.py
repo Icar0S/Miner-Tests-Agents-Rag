@@ -49,9 +49,10 @@ def sources(
 def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
     """Display sources as a Rich table."""
     table = Table(title="MSR-Kit Sources", show_lines=True)
-    table.add_column("Source", style="bold")
+    table.add_column("Source", style="bold", no_wrap=True)
     table.add_column("Status")
-    table.add_column("Reason")
+    table.add_column("API Oficial")
+    table.add_column("Reason / Exclusion Rationale")
     table.add_column("Auth Vars")
     table.add_column("Rate Limit")
     table.add_column("Search")
@@ -77,10 +78,19 @@ def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
         if policy.rate_limit.daily_cap:
             rate_str += f"\nDaily: {policy.rate_limit.daily_cap}"
 
+        api_col = "[green]✓ Sim[/green]" if policy.has_official_api else "[red]✗ Não[/red]"
+
+        display_reason = (
+            policy.exclusion_rationale
+            if (avail.status == "UNSUPPORTED" and policy.exclusion_rationale)
+            else avail.reason
+        )
+
         table.add_row(
             name,
             f"[{status_style}]{avail.status}[/{status_style}]",
-            avail.reason[:80] + ("..." if len(avail.reason) > 80 else ""),
+            api_col,
+            display_reason[:70] + ("..." if len(display_reason) > 70 else ""),
             "\n".join(policy.auth_env_vars) + missing_info if policy.auth_env_vars else "none",
             rate_str,
             "✓" if policy.supports_full_text_search else "✗",
@@ -103,6 +113,14 @@ def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
 
         lines.append(f"## {name}\n")
         lines.append(f"- **Status:** {avail.status}")
+        api_text = (
+            f"Yes ({policy.official_api_name})" if policy.has_official_api else "No (no public API)"
+        )
+        lines.append(f"- **Official API:** {api_text}")
+        if policy.exclusion_category:
+            lines.append(f"- **Exclusion category:** {policy.exclusion_category}")
+        if policy.exclusion_rationale:
+            lines.append(f"- **Exclusion rationale:** {policy.exclusion_rationale}")
         lines.append(f"- **Reason:** {avail.reason}")
         lines.append(f"- **Version:** {adapter_cls.version}")
         lines.append(f"- **Auth required:** {'Yes' if policy.requires_auth else 'No'}")

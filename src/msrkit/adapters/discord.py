@@ -65,6 +65,13 @@ class DiscordAdapter(BaseAdapter):
             "Requires privileged message content intent and explicit admin authorization. "
             "Must pass ethical review before collection."
         ),
+        has_official_api=False,
+        official_api_name="",
+        exclusion_category="private_enclave",
+        exclusion_rationale=(
+            "Inviável no protocolo: rede privada fechada sem busca global pública; "
+            "exigiria bot autorizado em cada servidor e submissão a Comitê de Ética (§6.1 C)."
+        ),
     )
 
     def available(self) -> Availability:

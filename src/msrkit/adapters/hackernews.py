@@ -68,6 +68,8 @@ class HackerNewsAdapter(BaseAdapter):
             "Free, no auth. Full-text search with date filters via numericFilters. "
             "Every query is capped at 1,000 hits; partition by date window."
         ),
+        has_official_api=True,
+        official_api_name="Algolia HN Search API",
     )
 
     def available(self) -> Availability:

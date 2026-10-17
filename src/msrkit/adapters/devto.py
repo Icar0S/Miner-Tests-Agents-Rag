@@ -69,6 +69,8 @@ class DevToAdapter(BaseAdapter):
             "No full-text search API. Collection by tag, then local term filtering. "
             "The manifest must record that selection was performed locally."
         ),
+        has_official_api=True,
+        official_api_name="Forem API v1",
     )
 
     def available(self) -> Availability:

@@ -67,6 +67,8 @@ class HuggingFaceAdapter(BaseAdapter):
         tos_url="https://huggingface.co/terms-of-service",
         docs_url="https://huggingface.co/docs/hub/api",
         notes="Search across models, datasets, and spaces. Auth optional but increases limits.",
+        has_official_api=True,
+        official_api_name="HuggingFace Hub API",
     )
 
     def _build_client(self) -> httpx.Client:

@@ -67,6 +67,8 @@ class RSSAdapter(BaseAdapter):
             "No historical coverage. Manifest must record truncated=true "
             "and historical_coverage=false."
         ),
+        has_official_api=True,
+        official_api_name="Feeds Públicos RSS/Atom",
     )
 
     def available(self) -> Availability:

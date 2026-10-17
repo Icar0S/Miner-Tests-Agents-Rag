@@ -60,6 +60,13 @@ class XTwitterAdapter(BaseAdapter):
             "include search. Do not fix plan numbers or prices in code — "
             "they change frequently. See docs/api-notes.md."
         ),
+        has_official_api=True,
+        official_api_name="X API v2",
+        exclusion_category="commercial_paywall",
+        exclusion_rationale=(
+            "Inviabilizada pelo protocolo: API oficial exige plano pago (pay-per-use, "
+            "US$ 100+/mês), sem nível acadêmico gratuito para reprodução aberta (§6.1 C)."
+        ),
     )
 
     def available(self) -> Availability:

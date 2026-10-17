@@ -69,6 +69,14 @@ class BlueskyAdapter(BaseAdapter):
             "Free with real search. Substitute for X/Twitter since X paywalled "
             "read access. Document the substitution in the study paper."
         ),
+        has_official_api=True,
+        official_api_name="AT Protocol (app.bsky.feed.searchPosts)",
+        exclusion_category="methodological",
+        exclusion_rationale=(
+            "Excluída pelo protocolo (§6.1 Tab 6.1 B): microblogging (limite de 300 caracteres), "
+            "de alta volatilidade e sem artefatos de código verificáveis para análise "
+            "de oráculos/testes."
+        ),
     )
 
     _session_token: str | None = None
