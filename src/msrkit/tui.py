@@ -92,7 +92,6 @@ class ExclusionModal(ModalScreen[str | None]):
                 )
 
 
-
 class ItemListItem(ListItem):
     """List item widget for an item being screened."""
 
@@ -234,8 +233,7 @@ class ScreeningApp(App[None]):
 
     TITLE = "MSR-Kit — Triagem Interativa de Literatura Cinza"
     SUB_TITLE = (
-        "[I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, "
-        "[N/P] Páginas, [F] Fonte, [Q/Esc] Sair"
+        "[I] Incluir, [E] Excluir, [U] Dúvida, [S] Pular, [N/P] Páginas, [F] Fonte, [Q/Esc] Sair"
     )
 
     BINDINGS = [
@@ -961,9 +959,7 @@ class CodingApp(App[None]):
                     yield Button(
                         "Fonte (F)", id="btn-cycle-source", variant="primary", classes="action-btn"
                     )
-                    yield Button(
-                        "Sair (Q)", id="btn-quit", variant="error", classes="action-btn"
-                    )
+                    yield Button("Sair (Q)", id="btn-quit", variant="error", classes="action-btn")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -976,7 +972,6 @@ class CodingApp(App[None]):
             self.query_one("#input-notes", Input).focus()
         elif event.input.id == "input-notes":
             self.action_save_and_advance()
-
 
     def _render_current_page(self, reset_selection: bool = True) -> None:
         list_view = self.query_one("#coding-item-list", ListView)

@@ -321,9 +321,9 @@ sources:
       note: "RSS entrega apenas itens recentes; sem cobertura histórica."
 
   bluesky:
-    # Coletada quando BLUESKY_HANDLE e BLUESKY_APP_PASSWORD estiverem no .env;
-    # sem credencial, a execução pula a fonte e registra o motivo.
-    enabled: true
+    # Desativado por decisão metodológica da equipe (baixa densidade de artefatos
+    # de teste e conteúdo curto, conforme Tabela 6.1 do Protocolo E2 v2).
+    enabled: false
 
   x_twitter:
     enabled: false  # requer plano pago

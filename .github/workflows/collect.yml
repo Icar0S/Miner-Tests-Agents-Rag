@@ -62,7 +62,7 @@ jobs:
       MSRKIT_SOURCES_PUBLIC: ${{ github.event_name == 'schedule' && 'rss' || inputs.sources }}
       MSRKIT_SOURCES_MANUAL: ${{ inputs.manual_sources }}
       MSRKIT_SOURCES_PAID: x_twitter
-      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord
+      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord,bluesky
       # Opcionais: sem o secret, a variável fica vazia e a fonte segue sem ela
       # (ou é pulada, se a credencial for obrigatória).
       GITHUB_TOKEN: ${{ secrets.MSRKIT_GITHUB_TOKEN }}

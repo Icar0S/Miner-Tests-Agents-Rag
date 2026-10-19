@@ -212,7 +212,7 @@ def is_valid_coder_name(coder: str) -> tuple[bool, str]:
     if cleaned.startswith((".", "-")) or cleaned.endswith("."):
         return False, "O nome não pode iniciar com '.' ou '-' nem terminar com '.'."
     if re.search(r'[\\/:*?"<>|\s]', cleaned):
-        return False, "Não são permitidos espaços, barras ou caracteres especiais (\\/:*?\"<>|)."
+        return False, 'Não são permitidos espaços, barras ou caracteres especiais (\\/:*?"<>|).'
     reserved = {
         "CON",
         "PRN",
@@ -226,4 +226,3 @@ def is_valid_coder_name(coder: str) -> tuple[bool, str]:
     if not re.match(r"^[\w\-\.]+$", cleaned, flags=re.ASCII):
         return False, "Use apenas caracteres alfanuméricos ASCII, sublinhado (_) ou hífen (-)."
     return True, ""
-

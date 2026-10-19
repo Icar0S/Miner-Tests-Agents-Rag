@@ -150,10 +150,11 @@ class TestEnricher:
         assert sig.has_tests and sig.test_paths == ["tests/test_rag.py"]
         assert sig.has_ci and "npx promptfoo eval" in sig.workflows[".github/workflows/eval.yml"]
         assert list(sig.manifests) == ["pyproject.toml"]
-        assert sig.contributors == 15
+        assert sig.contributors == 7
         assert sig.commit_months == ["2024-03", "2024-05"]
-        # In GraphQL mode: 1 (metadata) + 1 (tree) + 1 (graphql batch) = 3 requests
-        assert sig.requests == 3
+        # In GraphQL mode: 1 metadata + 1 tree + 1 graphql batch +
+        # 1 contributors + 1 commits = 5 requests
+        assert sig.requests == 5
 
     def test_graphql_failure_falls_back_to_rest(self, monkeypatch) -> None:
         adapter = GitHubAdapter()
@@ -246,7 +247,7 @@ class TestEnrichCommand:
         assert "1 items updated" in result.stdout
         enriched = ItemStorage(tmp_path).read_items("run-gql")[0]
         assert enriched.tech.has_ci is True
-        assert enriched.tech.contributors == 15
+        assert enriched.tech.contributors == 7
 
 
 def test_core_rate_limit_is_under_quota_and_above_search_rate():

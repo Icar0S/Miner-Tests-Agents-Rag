@@ -207,9 +207,7 @@ def _get_source_display_info(
         elif policy.exclusion_category == "access_gated":
             api_label = "[yellow][API Oficial: Desativada (Exige Aprovação Reddit nov/25)][/yellow]"
         elif policy.exclusion_category == "commercial_paywall":
-            api_label = (
-                "[yellow][API Oficial: Desativada (API Paga Pay-per-use)][/yellow]"
-            )
+            api_label = "[yellow][API Oficial: Desativada (API Paga Pay-per-use)][/yellow]"
         else:
             api_label = "[cyan][API Oficial: Desativada no Protocolo][/cyan]"
         rationale = policy.exclusion_rationale or policy.notes or "Desativada no protocolo."
@@ -985,9 +983,7 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask_coder(
-                    "Nome do avaliador (ou 0 para voltar)", default="revisor"
-                )
+                coder = _safe_ask_coder("Nome do avaliador (ou 0 para voltar)", default="revisor")
                 if coder is None:
                     continue
                 screen_export(
@@ -1003,9 +999,7 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                sheet_file = _safe_ask(
-                    "Caminho do arquivo CSV preenchido (ou 0 para voltar)"
-                )
+                sheet_file = _safe_ask("Caminho do arquivo CSV preenchido (ou 0 para voltar)")
                 if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 screen_import(
@@ -1028,9 +1022,7 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask_coder(
-                    "Nome do avaliador (ou 0 para voltar)", default="revisor"
-                )
+                coder = _safe_ask_coder("Nome do avaliador (ou 0 para voltar)", default="revisor")
                 if coder is None:
                     continue
                 coding_export(
@@ -1047,9 +1039,7 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                sheet_file = _safe_ask(
-                    "Caminho do arquivo CSV preenchido (ou 0 para voltar)"
-                )
+                sheet_file = _safe_ask("Caminho do arquivo CSV preenchido (ou 0 para voltar)")
                 if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 coding_import(
@@ -1122,9 +1112,7 @@ def _advanced_menu(protocol_path: str) -> None:  # pragma: no cover
 
                 precision_sample_cmd(run_id=selected_run, n=50, seed=20260928)
             else:
-                sheet_file = _safe_ask(
-                    "Caminho do arquivo CSV avaliado (ou 0 para voltar)"
-                )
+                sheet_file = _safe_ask("Caminho do arquivo CSV avaliado (ou 0 para voltar)")
                 if sheet_file in ("0", "v", "q", "voltar", "sair", "exit", "cancelar", ""):
                     continue
                 from msrkit.cli.validation import precision_score_cmd
@@ -1243,24 +1231,94 @@ def menu() -> None:  # pragma: no cover
                 selected_run = _select_screening_run_id()
                 if not selected_run:
                     continue
-                coder = _safe_ask_coder(
-                    "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
-                    default="revisor",
+                console.print(
+                    "\n[bold cyan]─── 📝 Extração Técnica de Dados (Anexo A) ───[/bold cyan]"
                 )
-                if coder is None:
-                    continue
-                try:
-                    from msrkit.cli.review import coding_tui
+                console.print(
+                    "  [bold green]1[/bold green] - "
+                    "[bold]📄 Exportar Planilha Oficial CSV (Recomendado — 20 variáveis)[/bold]\n"
+                    "      [dim]Gera extraction_<coder>.csv com campos, vocabulários e "
+                    "auto-sugestões (ADR-028)[/dim]"
+                )
+                console.print(
+                    "  [bold green]2[/bold green] - "
+                    "[bold]📥 Importar Planilha Oficial Preenchida[/bold]\n"
+                    "      [dim]Valida esquema, léxicos do gazetteer e grava codings.jsonl[/dim]"
+                )
+                console.print(
+                    "  [bold yellow]3[/bold yellow] - "
+                    "[bold]🖥️  Interface Rápida TUI (Exploratória — grava 5 variáveis)[/bold]\n"
+                    "      [dim]Aviso: grava apenas sistema, nível, oráculo, confiança e "
+                    "ferramentas[/dim]"
+                )
+                console.print("  [cyan]0[/cyan] - ↩ Voltar ao Menu Principal")
 
-                    coding_tui(
-                        run_id=selected_run,
-                        protocol=DEFAULT_PROTOCOL,
-                        coder=coder,
-                        status="include",
-                        limit=None,
+                ext_choice = _safe_ask(
+                    "\n[bold green]Escolha uma opção de extração[/bold green]", default="1"
+                )
+                if ext_choice in ("0", "v", "q", "voltar", "sair", "exit", "cancelar"):
+                    continue
+
+                if ext_choice == "1":
+                    coder = _safe_ask_coder(
+                        "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
+                        default="revisor",
                     )
-                except Exception as e:
-                    console.print(f"[yellow]Retorno da extração: {e}[/yellow]")
+                    if not coder:
+                        continue
+                    try:
+                        from msrkit.cli.review import coding_export
+
+                        coding_export(
+                            run_id=selected_run,
+                            protocol=DEFAULT_PROTOCOL,
+                            coder=coder,
+                            output=None,
+                            status="include",
+                            prefill=True,
+                            pending_only=True,
+                            double_sample=False,
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Erro ao exportar planilha: {e}[/red]")
+                elif ext_choice == "2":
+                    sheet_path = _safe_ask(
+                        "\n[bold green]Caminho da planilha (.csv) (0 para cancelar)[/bold green]",
+                        default="",
+                    )
+                    cancel_tokens = ("0", "v", "q", "voltar", "sair", "exit", "cancelar")
+                    if sheet_path in cancel_tokens or not sheet_path:
+                        continue
+                    try:
+                        from msrkit.cli.review import coding_import
+
+                        coding_import(
+                            sheet=sheet_path,
+                            run_id=selected_run,
+                            protocol=DEFAULT_PROTOCOL,
+                            coder="",
+                        )
+                    except Exception as e:
+                        console.print(f"[red]Erro ao importar planilha: {e}[/red]")
+                elif ext_choice == "3":
+                    coder = _safe_ask_coder(
+                        "[bold cyan]Nome do avaliador (coder) (ou 0 para cancelar)[/bold cyan]",
+                        default="revisor",
+                    )
+                    if coder is None:
+                        continue
+                    try:
+                        from msrkit.cli.review import coding_tui
+
+                        coding_tui(
+                            run_id=selected_run,
+                            protocol=DEFAULT_PROTOCOL,
+                            coder=coder,
+                            status="include",
+                            limit=None,
+                        )
+                    except Exception as e:
+                        console.print(f"[yellow]Retorno da extração: {e}[/yellow]")
             elif choice == "4":
                 _results_menu(DEFAULT_PROTOCOL)
             elif choice == "5":

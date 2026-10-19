@@ -996,6 +996,45 @@ class TestSearchLoopsAndQueryBuilding:
         assert "stars:" not in qs
         assert captured_params[0]["sort"] == "indexed"
 
+    def test_github_bot_filtering_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        adapter = GitHubAdapter()
+        monkeypatch.setattr(
+            adapter, "_env", lambda k: "mock_token" if k == "GITHUB_TOKEN" else None
+        )
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "total_count": 2,
+            "items": [
+                {
+                    "id": 101,
+                    "title": "Dependabot PR",
+                    "user": {"login": "dependabot[bot]"},
+                    "html_url": "https://github.com/o/r/issues/1",
+                },
+                {
+                    "id": 102,
+                    "title": "Human Issue",
+                    "user": {"login": "alice"},
+                    "html_url": "https://github.com/o/r/issues/2",
+                },
+            ],
+        }
+        monkeypatch.setattr(adapter, "_governed_get", lambda *args, **kwargs: resp)
+
+        # Default: filter_bots is False -> all items yielded (matches upstream Icar0S)
+        q_default = Query(source="github", terms=["t"], kind="issue", limit=10)
+        items_default = list(adapter.search(q_default))
+        assert len(items_default) == 2
+
+        # Opt-in: filter_bots is True -> bot items discarded
+        q_filtered = Query(
+            source="github", terms=["t"], kind="issue", extra={"filter_bots": True}, limit=10
+        )
+        items_filtered = list(adapter.search(q_filtered))
+        assert len(items_filtered) == 1
+        assert items_filtered[0].native_id == "102"
+
     def test_reddit_quotes_multi_word_terms(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = RedditAdapter()
         adapter._access_token = "mock_token"

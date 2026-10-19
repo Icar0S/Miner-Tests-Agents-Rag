@@ -181,32 +181,17 @@ class GitHubEnricher:
 
         blobs_subquery = "\n    ".join(blob_fields) if blob_fields else ""
 
+        if not blob_fields:
+            return True
+
         query = f"""
-query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: GitTimestamp) {{
+query RepoEnrich($owner: String!, $name: String!) {{
   repository(owner: $owner, name: $name) {{
-    mentionableUsers {{
-      totalCount
-    }}
-    defaultBranchRef {{
-      target {{
-        ... on Commit {{
-          history(since: $since, until: $until, first: 100) {{
-            nodes {{
-              committedDate
-            }}
-          }}
-        }}
-      }}
-    }}
     {blobs_subquery}
   }}
 }}
 """
         variables: dict[str, Any] = {"owner": owner, "name": name}
-        if self._since:
-            variables["since"] = f"{self._since.isoformat()}T00:00:00Z"
-        if self._until:
-            variables["until"] = f"{self._until.isoformat()}T23:59:59Z"
 
         resp = self._post_graphql(sig, query, variables)
         if resp.status_code != 200:
@@ -222,22 +207,6 @@ query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: 
         repo_data = data.get("repository")
         if not isinstance(repo_data, dict):
             return False
-
-        # 1. Contributors
-        mentions = repo_data.get("mentionableUsers")
-        if isinstance(mentions, dict):
-            sig.contributors = mentions.get("totalCount")
-
-        # 2. Commit months
-        target = (repo_data.get("defaultBranchRef") or {}).get("target") or {}
-        history = target.get("history") or {}
-        nodes = history.get("nodes") or []
-        months: set[str] = set()
-        for node in nodes:
-            cdate = node.get("committedDate") or ""
-            if len(cdate) >= 7:
-                months.add(cdate[:7])
-        sig.commit_months = sorted(months)
 
         # 3. Workflows
         for alias, path in wf_aliases.items():
@@ -311,8 +280,8 @@ query RepoEnrich($owner: String!, $name: String!, $since: GitTimestamp, $until: 
                 if content is not None:
                     sig.manifests[path] = content
 
-            sig.contributors = self._contributors(sig)
-            sig.commit_months = self._commit_months(sig)
+        sig.contributors = self._contributors(sig)
+        sig.commit_months = self._commit_months(sig)
 
     def _file(self, sig: RepoSignals, path: str, ref: str | None) -> str | None:
         resp = self._get(

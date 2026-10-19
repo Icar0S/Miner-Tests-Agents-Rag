@@ -594,6 +594,3 @@ def test_cli_menu_input_resilience(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *args, **kwargs: (_ for _ in ()).throw(EOFError),
     )
     assert _safe_ask_coder() is None
-
-
-

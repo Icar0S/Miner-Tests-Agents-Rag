@@ -765,6 +765,7 @@ def resolve_disagreements_cmd(
         None, "--sheet", "-s", help="Path to filled disagreements.csv"
     ),
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
     resolver: str = typer.Option(
         "consenso", "--resolver", "-r", help="Default resolver coder name"
     ),
@@ -775,11 +776,19 @@ def resolve_disagreements_cmd(
     from datetime import UTC, datetime
     from pathlib import Path
 
-    from msrkit.coding import CodingRecord, append_codings, load_codings
+    from msrkit.coding import CodingRecord, _parse, append_codings, load_codings
     from msrkit.screening import DECISION_ALIASES, ScreeningDecision, append_decisions
 
     run_id = _resolve_run(_unwrap(run_id))
     resolver = _unwrap(resolver).strip() or "consenso"
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    field_map = {f.name: f for f in proto.coding.fields} if proto and proto.coding else {}
+    allowed = (
+        {f.name: proto.coding.allowed(f, proto.gazetteer_data) for f in proto.coding.fields}
+        if proto and proto.coding
+        else {}
+    )
+
     sheet_val = _unwrap(sheet)
     sheet_path = (
         Path(sheet_val) if sheet_val else _cli.DATA_DIR / "coding" / run_id / "disagreements.csv"
@@ -837,16 +846,32 @@ def resolve_disagreements_cmd(
             )
         else:
             item_vals = coding_resolutions.setdefault((item_id, row_resolver), {})
-            if "," in consensus_val or ";" in consensus_val:
-                item_vals[dimension] = [
-                    v.strip() for v in consensus_val.replace(";", ",").split(",") if v.strip()
-                ]
-            elif consensus_val.lower() in ("true", "sim", "yes", "s", "1"):
-                item_vals[dimension] = True
-            elif consensus_val.lower() in ("false", "não", "nao", "no", "n", "0"):
-                item_vals[dimension] = False
+            if field_map and dimension in field_map:
+                f = field_map[dimension]
+                parse_problems: list[str] = []
+                val = _parse(
+                    f,
+                    consensus_val,
+                    allowed.get(f.name, []),
+                    parse_problems,
+                    f"linha {line_no} ({dimension})",
+                )
+                if parse_problems:
+                    for p in parse_problems:
+                        console.print(f"[yellow]⚠ {p}. Ignorada.[/yellow]")
+                    continue
+                item_vals[dimension] = val
             else:
-                item_vals[dimension] = consensus_val
+                if "," in consensus_val or ";" in consensus_val:
+                    item_vals[dimension] = [
+                        v.strip() for v in consensus_val.replace(";", ",").split(",") if v.strip()
+                    ]
+                elif consensus_val.lower() in ("true", "sim", "yes", "s", "1"):
+                    item_vals[dimension] = True
+                elif consensus_val.lower() in ("false", "não", "nao", "no", "n", "0"):
+                    item_vals[dimension] = False
+                else:
+                    item_vals[dimension] = consensus_val
             if reason:
                 coding_reasons[(item_id, row_resolver)] = reason
 
@@ -975,6 +1000,14 @@ def coding_tui(
     sug_map = suggestions(items, detections, system_concepts)
 
     session_items = pending if limit is None or limit <= 0 else pending[:limit]
+    console.print(
+        "\n[bold yellow]⚠ AVISO METODOLÓGICO (ADR-028):[/bold yellow] "
+        "[yellow]A interface 'coding-tui' grava apenas 5 variáveis básicas "
+        "(sistema, nível, oráculo, confiança, ferramentas).\n"
+        "Para a extração científica do Anexo A com todas as 20 variáveis "
+        "(métodos, modos de falha, agregação e critérios q_*),\n"
+        "utilize o fluxo oficial CSV: 'msrkit coding export' e 'msrkit coding import'.[/yellow]\n"
+    )
     app_coding = CodingApp(
         items=session_items,
         data_dir=_cli.DATA_DIR,

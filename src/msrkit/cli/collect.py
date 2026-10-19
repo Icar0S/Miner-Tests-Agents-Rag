@@ -93,11 +93,7 @@ def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
 
         api_col = "[green]✓ Sim[/green]" if policy.has_official_api else "[red]✗ Não[/red]"
 
-        display_reason = (
-            policy.exclusion_rationale
-            if policy.exclusion_rationale
-            else avail.reason
-        )
+        display_reason = policy.exclusion_rationale if policy.exclusion_rationale else avail.reason
 
         table.add_row(
             name,

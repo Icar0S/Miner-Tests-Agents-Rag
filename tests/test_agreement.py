@@ -261,3 +261,32 @@ class TestAgreementCommands:
         items = [_item(1), _item(1), _item(2), _item(3)]
         sample = double_sample(items, rate=0.5, seed=42)
         assert len(sample) == len(set(sample))
+
+    def test_resolve_multi_field_and_schema_validation(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        target = "item-schema"
+        dis_path = tmp_path / "coding/run-s/disagreements.csv"
+        dis_path.parent.mkdir(parents=True, exist_ok=True)
+        header = (
+            "item_id;dimension;coder_a;value_a;coder_b;value_b;consensus_value;resolved_by;reason\n"
+        )
+        dis_path.write_text(
+            f"{header}"
+            f"{target};sistema;ana;rag;bia;agente;rag;consenso;foco em busca\n"
+            f"{target};modos_falha;ana;FP1;bia;FP2;FP1, FP2;consenso;ambos ocorreram\n"
+            f"{target};nivel_evidencia;ana;N1;bia;N2;INVALIDO;consenso;teste invalido\n",
+            encoding="utf-8-sig",
+        )
+        runner = CliRunner()
+        r = runner.invoke(app, ["resolve", "--run", "run-s"])
+        assert r.exit_code == 0, r.stdout
+        assert "nivel_evidencia has unknown value 'INVALIDO'" in r.stdout
+
+        from msrkit.coding import load_codings
+
+        latest_cod = load_codings(tmp_path, "run-s")
+        assert (target, "consenso") in latest_cod
+        rec = latest_cod[(target, "consenso")]
+        assert rec.values["sistema"] == ["rag"]
+        assert rec.values["modos_falha"] == ["FP1", "FP2"]
+        assert "nivel_evidencia" not in rec.values
