@@ -978,9 +978,10 @@ def fetch(
 
     done: set[str] = set()
     if out_path.exists():
-        for line in out_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                done.add(json.loads(line)["item_id"])
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                if line_s := line.strip():
+                    done.add(json.loads(line_s)["item_id"])
 
     targets = [
         it

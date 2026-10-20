@@ -800,8 +800,10 @@ def resolve_disagreements_cmd(
     raw_bytes = sheet_path.read_bytes()
     sheet_hash = hashlib.sha256(raw_bytes).hexdigest()
     text = raw_bytes.decode("utf-8-sig")
+    import io
+
     delim = ";" if text.split("\n", 1)[0].count(";") else ","
-    reader = csv.DictReader(text.splitlines(), delimiter=delim)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
 
     screening_resolutions: list[ScreeningDecision] = []
     coding_resolutions: dict[tuple[str, str], dict[str, Any]] = {}

@@ -84,11 +84,12 @@ def prisma(
             for r in runs:
                 src_df = _cli.DATA_DIR / "runs" / r / "discarded.jsonl"
                 if src_df.exists():
-                    for line in src_df.read_text(encoding="utf-8").splitlines():
-                        line_str = line.strip()
-                        if line_str and line_str not in seen_discards:
-                            seen_discards.add(line_str)
-                            out_df.write(line_str + "\n")
+                    with open(src_df, encoding="utf-8") as in_df:
+                        for line in in_df:
+                            line_str = line.strip()
+                            if line_str and line_str not in seen_discards:
+                                seen_discards.add(line_str)
+                                out_df.write(line_str + "\n")
 
         decisions = load_decisions(_cli.DATA_DIR, "consolidated")
         if not decisions:

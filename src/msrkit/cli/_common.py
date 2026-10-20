@@ -122,24 +122,27 @@ def _load_repo_signals(run_id: str) -> dict[str, Any]:
         if enrich_dir.exists():
             for p in enrich_dir.glob("*/github_repos.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8-sig").splitlines():
-                        if line.strip():
-                            sig = RepoSignals.model_validate_json(line)
-                            signals[sig.repo] = sig
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                sig = RepoSignals.model_validate_json(line_s)
+                                signals[sig.repo] = sig
         path = _cli.DATA_DIR / "enrich" / "consolidated" / "github_repos.jsonl"
         if path.exists():
-            for line in path.read_text(encoding="utf-8-sig").splitlines():
-                if line.strip():
-                    sig = RepoSignals.model_validate_json(line)
-                    signals[sig.repo] = sig
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        sig = RepoSignals.model_validate_json(line_s)
+                        signals[sig.repo] = sig
         return signals
 
     path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     if path.exists():
-        for line in path.read_text(encoding="utf-8-sig").splitlines():
-            if line.strip():
-                sig = RepoSignals.model_validate_json(line)
-                signals[sig.repo] = sig
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    sig = RepoSignals.model_validate_json(line_s)
+                    signals[sig.repo] = sig
     return signals
 
 
@@ -167,14 +170,16 @@ def _load_detections(run_id: str) -> list[Any]:
         if extract_dir.exists():
             for p in extract_dir.glob("*/detections.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8-sig").splitlines():
-                        if line.strip():
-                            all_dets.append(Detection.model_validate_json(line))
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                all_dets.append(Detection.model_validate_json(line_s))
         path = _cli.DATA_DIR / "extract" / "consolidated" / "detections.jsonl"
         if path.exists():
-            for line in path.read_text(encoding="utf-8-sig").splitlines():
-                if line.strip():
-                    all_dets.append(Detection.model_validate_json(line))
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        all_dets.append(Detection.model_validate_json(line_s))
         seen: set[tuple[str, str, str, str]] = set()
         deduped_dets = []
         for d in all_dets:
@@ -186,11 +191,8 @@ def _load_detections(run_id: str) -> list[Any]:
 
     path = _cli.DATA_DIR / "extract" / run_id / "detections.jsonl"
     if path.exists():
-        return [
-            Detection.model_validate_json(line)
-            for line in path.read_text(encoding="utf-8-sig").splitlines()
-            if line.strip()
-        ]
+        with open(path, encoding="utf-8-sig") as f:
+            return [Detection.model_validate_json(line_s) for line in f if (line_s := line.strip())]
     return []
 
 

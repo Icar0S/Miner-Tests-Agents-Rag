@@ -133,6 +133,12 @@ def extract(
         None, "--protocol", "-p", help="Protocol (defaults to the one in the run manifest)"
     ),
     top: int = typer.Option(25, "--top", help="Rows shown in the summary table"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force overwrite even if existing detections are more complete",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Detect gazetteer tools and methods with evidence level N1/N2/N3 (§3.4, §12.1).
@@ -143,6 +149,7 @@ def extract(
     run_id = _unwrap(run_id)
     protocol = _unwrap(protocol)
     top = _unwrap(top)
+    force = _unwrap(force)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
@@ -170,7 +177,34 @@ def extract(
 
     out_dir = _cli.DATA_DIR / "extract" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    with open(out_dir / "detections.jsonl", "w", encoding="utf-8") as fh:
+    det_file = out_dir / "detections.jsonl"
+    if det_file.exists() and not force:
+        with open(det_file, encoding="utf-8-sig") as f:
+            existing_count = sum(1 for line in f if line.strip())
+
+        is_stripped_signals = (
+            bool(signals)
+            and any((sig.workflows or sig.manifests) for sig in signals.values())
+            and all(
+                all(not c for c in sig.workflows.values())
+                and all(not c for c in sig.manifests.values())
+                for sig in signals.values()
+                if (sig.workflows or sig.manifests)
+            )
+        )
+        has_redacted_bodies = any(
+            it.body is None and it.source in ("stackexchange", "reddit", "twitter") for it in items
+        )
+        if existing_count > len(detections) and (is_stripped_signals or has_redacted_bodies):
+            console.print(
+                f"[yellow]⚠ Existing detections file has {existing_count} records, but current "
+                f"extraction only produced {len(detections)} (input data appears package-redacted "
+                "with stripped repository contents or omitted item bodies). Preserving existing "
+                f"'{det_file}'. Pass --force to overwrite.[/yellow]"
+            )
+            return
+
+    with open(det_file, "w", encoding="utf-8") as fh:
         for d in detections:
             fh.write(d.model_dump_json() + "\n")
     fields = list(detections[0].model_dump()) if detections else []

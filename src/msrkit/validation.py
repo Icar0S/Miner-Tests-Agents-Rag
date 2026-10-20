@@ -270,6 +270,8 @@ def score_precision(path: Path, sizes: dict[str, int] | None = None) -> Precisio
     sheet's own counts weight the strata. Rows with an empty `correct` are skipped;
     any other value that is neither yes nor no raises SheetError.
     """
+    import io
+
     from msrkit.coding import FALSE_MARKS, _fold
     from msrkit.screening import TRUE_MARKS, SheetError
 
@@ -277,7 +279,7 @@ def score_precision(path: Path, sizes: dict[str, int] | None = None) -> Precisio
     delim = ";" if text.split("\n", 1)[0].count(";") else ","
     judged: dict[str, list[bool]] = {}
     problems: list[str] = []
-    for line_no, row in enumerate(csv.DictReader(text.splitlines(), delimiter=delim), start=2):
+    for line_no, row in enumerate(csv.DictReader(io.StringIO(text), delimiter=delim), start=2):
         mark = _fold(row.get("correct") or "")
         if not mark:
             continue

@@ -214,3 +214,45 @@ class TestPrismaCommand:
         )
         assert flow.excluded == 1
         assert "E1" in flow.exclusion_reasons
+
+    def test_build_flow_uses_manifest_query_items_when_deduped_pool_given(
+        self, tmp_path: Path
+    ) -> None:
+        """When pre-deduped items.jsonl is absent, PRISMA uses manifest queries count."""
+        manifest = Manifest(
+            run_id="r1",
+            msrkit_version="0.1.0",
+            protocol_path="proto.yaml",
+            protocol_sha256="abc",
+            started_at=datetime.now(UTC),
+            sources=[
+                SourceManifestEntry(
+                    name="github",
+                    adapter_version="1",
+                    availability=OK,
+                    queries=[
+                        QueryManifestEntry(
+                            query_string="q1",
+                            partitions=1,
+                            requests=1,
+                            items=100,
+                            truncated=False,
+                            discarded=10,
+                        )
+                    ],
+                )
+            ],
+        )
+        pool_items = [_item(i, "github") for i in range(80)]
+        flow = build_flow(
+            run_id="r1",
+            manifest=manifest,
+            items=pool_items,
+            pool=pool_items,
+            dedupe_report={"removed": {"github": 20}},
+            discard_file=tmp_path / "discard.jsonl",
+            decisions={},
+            coded_ids=set(),
+        )
+        assert flow.identified["github"] == 110
+        assert flow.filtered["unspecified"] == 10

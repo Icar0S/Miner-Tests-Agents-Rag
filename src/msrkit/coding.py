@@ -283,8 +283,10 @@ def import_form(
     raw = path.read_bytes()
     sheet_hash = hashlib.sha256(raw).hexdigest()
     text = raw.decode("utf-8-sig")
+    import io
+
     delim = DELIMITER if text.split("\n", 1)[0].count(DELIMITER) else ","
-    reader = csv.DictReader(text.splitlines(), delimiter=delim)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     allowed = {f.name: form.allowed(f, gazetteer) for f in form.fields}
 
     now = datetime.now(UTC).isoformat()
@@ -347,22 +349,25 @@ def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRec
         if coding_dir.exists():
             for p in coding_dir.glob("*/codings.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8-sig").splitlines():
-                        if line.strip():
-                            r = CodingRecord.model_validate(json.loads(line))
-                            latest[(r.item_id, r.coder)] = r
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                r = CodingRecord.model_validate(json.loads(line_s))
+                                latest[(r.item_id, r.coder)] = r
         path = codings_path(data_dir, "consolidated")
         if path.exists():
-            for line in path.read_text(encoding="utf-8-sig").splitlines():
-                if line.strip():
-                    r = CodingRecord.model_validate(json.loads(line))
-                    latest[(r.item_id, r.coder)] = r
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        r = CodingRecord.model_validate(json.loads(line_s))
+                        latest[(r.item_id, r.coder)] = r
         return latest
 
     path = codings_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8-sig").splitlines():
-            if line.strip():
-                r = CodingRecord.model_validate(json.loads(line))
-                latest[(r.item_id, r.coder)] = r
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    r = CodingRecord.model_validate(json.loads(line_s))
+                    latest[(r.item_id, r.coder)] = r
     return latest

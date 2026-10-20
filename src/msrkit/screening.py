@@ -289,8 +289,10 @@ def import_sheet(
     raw = path.read_bytes()
     sheet_hash = hashlib.sha256(raw).hexdigest()
     text = raw.decode("utf-8-sig")
+    import io
+
     dialect_delim = DELIMITER if text.split("\n", 1)[0].count(DELIMITER) else ","
-    reader = csv.DictReader(text.splitlines(), delimiter=dialect_delim)
+    reader = csv.DictReader(io.StringIO(text), delimiter=dialect_delim)
 
     now = datetime.now(UTC).isoformat()
     decisions: list[ScreeningDecision] = []
@@ -362,24 +364,27 @@ def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], Screeni
         if screen_dir.exists():
             for p in screen_dir.glob("*/decisions.jsonl"):
                 if p.parent.name != "consolidated":
-                    for line in p.read_text(encoding="utf-8-sig").splitlines():
-                        if line.strip():
-                            d = ScreeningDecision.model_validate(json.loads(line))
-                            latest[(d.item_id, d.coder)] = d
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                d = ScreeningDecision.model_validate(json.loads(line_s))
+                                latest[(d.item_id, d.coder)] = d
         path = decisions_path(data_dir, "consolidated")
         if path.exists():
-            for line in path.read_text(encoding="utf-8-sig").splitlines():
-                if line.strip():
-                    d = ScreeningDecision.model_validate(json.loads(line))
-                    latest[(d.item_id, d.coder)] = d
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        d = ScreeningDecision.model_validate(json.loads(line_s))
+                        latest[(d.item_id, d.coder)] = d
         return latest
 
     path = decisions_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8-sig").splitlines():
-            if line.strip():
-                d = ScreeningDecision.model_validate(json.loads(line))
-                latest[(d.item_id, d.coder)] = d
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    d = ScreeningDecision.model_validate(json.loads(line_s))
+                    latest[(d.item_id, d.coder)] = d
     return latest
 
 

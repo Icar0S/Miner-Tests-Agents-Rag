@@ -436,3 +436,39 @@ def test_is_consensus_coder_detection() -> None:
     assert is_consensus_coder("tiebreaker")
     assert not is_consensus_coder("ana")
     assert not is_consensus_coder("joao_silva")
+
+
+def test_load_decisions_handles_unicode_line_separator(tmp_path: Path) -> None:
+    """JSONL containing \u2028 inside string fields must not crash line parsing."""
+    from msrkit.screening import ScreeningDecision, load_decisions
+
+    run_dir = tmp_path / "screening" / "r1"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    dec_file = run_dir / "decisions.jsonl"
+    record = ScreeningDecision(
+        item_id="item-u2028",
+        coder="ana",
+        decision="include",
+        criteria_met=["I1"],
+        reason="note with \u2028 unicode separator",
+        decided_at="2026-10-14T00:00:00Z",
+        sheet_sha256="abc",
+    )
+    dec_file.write_text(record.model_dump_json() + "\n", encoding="utf-8")
+    loaded = load_decisions(tmp_path, "r1")
+    assert ("item-u2028", "ana") in loaded
+    assert loaded[("item-u2028", "ana")].reason == "note with \u2028 unicode separator"
+
+
+def test_import_sheet_handles_multiline_quoted_csv_cell(tmp_path: Path) -> None:
+    """Quoted CSV fields containing embedded newlines must not break sheet importing."""
+    sheet = tmp_path / "sheet.csv"
+    sheet.write_text(
+        "item_id;decision;criteria_met;coder;notes\n"
+        'it0;include;I1;ana;"first line\nsecond line in note"\n',
+        encoding="utf-8-sig",
+    )
+    decisions = import_sheet(sheet, criteria=CRIT, known_ids={"it0"})
+    assert len(decisions) == 1
+    assert decisions[0].item_id == "it0"
+    assert decisions[0].coder == "ana"

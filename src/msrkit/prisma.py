@@ -55,9 +55,10 @@ class PrismaFlow(BaseModel):
 def _discard_reasons(path: Path) -> Counter[str]:
     reasons: Counter[str] = Counter()
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                reasons[json.loads(line).get("reason") or "unspecified"] += 1
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line_s := line.strip():
+                    reasons[json.loads(line_s).get("reason") or "unspecified"] += 1
     return reasons
 
 
@@ -73,18 +74,21 @@ def build_flow(
 ) -> PrismaFlow:
     kept = Counter(it.source for it in items)
     filtered_by_source: Counter[str] = Counter()
+    manifest_kept: Counter[str] = Counter()
     not_retrieved: Counter[str] = Counter()
     truncated = 0
     for src in manifest.sources if manifest else []:
         for q in src.queries:
+            manifest_kept[src.name] += q.items
             filtered_by_source[src.name] += q.discarded
             if "source_cap" in q.truncation_reasons:
                 truncated += 1
                 if q.estimated_total is not None:
                     gap = q.estimated_total - q.items - q.discarded
                     not_retrieved[src.name] += max(gap, 0)
-    sources = sorted(kept.keys() | filtered_by_source.keys())
-    identified = {s: kept[s] + filtered_by_source[s] for s in sources}
+    effective_kept = manifest_kept if manifest and sum(manifest_kept.values()) > 0 else kept
+    sources = sorted(effective_kept.keys() | filtered_by_source.keys())
+    identified = {s: effective_kept[s] + filtered_by_source[s] for s in sources}
 
     reasons = _discard_reasons(discard_file)
     # The manifest count is authoritative; the file gives the reasons.
