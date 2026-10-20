@@ -609,6 +609,9 @@ def run(
             queries = [Query.model_validate(d) for d in source_entry.planned]
         else:
             queries = config.build_queries(source_name)
+            if per_query_limit is not None:
+                for q in queries:
+                    q.limit = min(q.limit or per_query_limit, per_query_limit)
             if limit is not None:
                 for q in queries:
                     q.limit = limit
@@ -648,6 +651,11 @@ def run(
             # text queries cannot exhaust the source budget and starve the rest.
             budget = limit if limit is not None else config.limits.max_items_per_source
             open_queries = [q for q in queries if not q.raw]
+            raw_queries = [q for q in queries if q.raw]
+            if raw_queries:
+                raw_share = max(50, int(budget / len(queries) * 3))
+                for q in raw_queries:
+                    q.limit = min(q.limit or raw_share, raw_share)
             if open_queries:
                 fair_share = max(25, int(budget / len(open_queries) * 2))
                 for q in open_queries:

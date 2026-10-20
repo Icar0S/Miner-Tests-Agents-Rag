@@ -219,10 +219,10 @@ sources:
     queries:
       - kind: repo
         label: repos-rag
-        q: '("RAG" OR "retrieval augmented") (eval OR test OR testing) in:name,description,readme stars:>5'
+        q: 'RAG (eval OR test OR testing) in:name,description,readme stars:>5'
       - kind: repo
         label: repos-agentes
-        q: '("agent" OR "agentic") (eval OR test OR testing) in:name,description,readme stars:>5'
+        q: 'agentic (eval OR test OR testing) in:name,description,readme stars:>5'
       - {kind: code, label: ragas-import, evidence: N2, q: '"from ragas import" language:Python'}
       - {kind: code, label: deepeval-import, evidence: N2, q: '"import deepeval" language:Python'}
       - {kind: code, label: promptfoo-config, evidence: N2, q: 'filename:promptfooconfig.yaml'}
@@ -269,6 +269,7 @@ sources:
         - agents
         - llmops
         - testing
+      max_pages: 10
 
   reddit:
     # Desabilitado no Estudo E2: credenciais novas exigem aprovação manual
@@ -336,6 +337,6 @@ sources:
 
 # ---- Limites globais ----
 limits:
-  max_items_per_source: 5000
-  max_requests_per_source: 2000
+  max_items_per_source: 10000
+  max_requests_per_source: 2500
   stop_on_quota_exhausted: true

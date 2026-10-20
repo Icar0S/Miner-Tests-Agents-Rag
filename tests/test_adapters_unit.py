@@ -1362,3 +1362,29 @@ class TestSearchLoopsAndQueryBuilding:
         resp = adapter._governed_get("https://api.github.com/test")
         assert resp.status_code == 200
         assert call_count == 2
+
+    def test_devto_respects_max_pages_and_dedupes_discards(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = DevToAdapter()
+        pages_requested: list[tuple[str, int]] = []
+
+        def fake_get(url: str, params: dict[str, Any] | None = None) -> httpx.Response:
+            assert params is not None
+            pages_requested.append((params["tag"], params["page"]))
+            articles = [
+                {"id": i, "title": f"Unrelated post {i}", "description": "no match"}
+                for i in range(1, 1001)
+            ]
+            return httpx.Response(200, json=articles, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(adapter, "_governed_get", fake_get)
+        q = Query(
+            source="devto",
+            terms=["RAG evaluation"],
+            extra={"tags": ["rag", "llm"], "max_pages": 2},
+            limit=10,
+        )
+        assert list(adapter.search(q)) == []
+        assert pages_requested == [("rag", 1), ("rag", 2), ("llm", 1), ("llm", 2)]
+        assert len(adapter.pop_discards()) == 1000

@@ -58,7 +58,7 @@ class DevToAdapter(BaseAdapter):
         ),
         max_results_per_query=None,
         max_page_size=1000,
-        max_pages=None,
+        max_pages=50,
         supports_full_text_search=False,
         supports_date_filter=False,
         searches_each_term=False,  # fetched by tag/feed, filtered locally
@@ -101,7 +101,8 @@ class DevToAdapter(BaseAdapter):
             page = 1
             per_page = min(self.policy.max_page_size, 1000)
 
-            while total_yielded < limit:
+            max_pages = q.extra.get("max_pages", self.policy.max_pages)
+            while total_yielded < limit and (max_pages is None or page <= max_pages):
                 params: dict[str, Any] = {
                     "tag": tag,
                     "page": page,
@@ -132,6 +133,7 @@ class DevToAdapter(BaseAdapter):
                     if not art_id or art_id in seen_ids:
                         continue
 
+                    seen_ids.add(art_id)
                     pub_str = article.get("published_at") or article.get("created_at")
                     if pub_str and (q.since or q.until):
                         try:

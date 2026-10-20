@@ -52,3 +52,9 @@ No divergences found during initial implementation. All endpoints, parameters, a
 - **Docs say:** Algolia's `paginationLimitedTo` caps any query at 1,000 hits regardless of `page`.
 - **Decision:** Treat HN like GitHub: estimate with `nbHits` and partition by date window (see `docs/PLANO.md`, step C1).
 - **Link:** https://github.com/algolia/hn-search/issues/230
+
+### GitHub Search API — 2026-10-20
+- **Spec says:** Protocol §7.3 defines literal repository search queries with quoted boolean groups (`("RAG" OR "retrieval augmented") (eval OR test OR testing)`) and expands `{repo}` over seed gazetteer repositories (`explodinggradients/ragas`, `Giskard-AI/giskard`, `NVIDIA/NeMo-Guardrails`).
+- **Docs say:** (1) GitHub REST `/search/issues` does not follow repository HTTP 301 redirects on `repo:owner/name` qualifiers and instead returns `422 Unprocessable Entity` when a repository has been renamed or transferred. (2) GitHub REST `/search/repositories` legacy parser returns `total_count: 0` when quoted strings appear immediately inside an opening parenthesis (`("RAG" OR ...)`).
+- **Decision:** Update `protocols/gazetteer.yaml` and `protocols/gold_set.yaml` to canonical post-redirect repository names (`vibrantlabsai/ragas`, `Giskard-AI/giskard-oss`, `NVIDIA-NeMo/Guardrails`) and simplify literal `kind: repo` queries in `protocols/v0_rag_agents_testing.yaml` to unquoted parenthesized syntax (`RAG (eval OR test OR testing)` and `agentic (eval OR test OR testing)`), which returns 27,338 and 170,656 repositories respectively.
+- **Link:** https://docs.github.com/en/rest/search/search
