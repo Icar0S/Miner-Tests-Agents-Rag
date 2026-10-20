@@ -15,7 +15,7 @@ on:
         description: "Fontes com credencial (vírgula), coletadas se o secret existir: github, bluesky."
         default: "github"
       per_query_limit:
-        description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
+        description: "Máximo de itens por consulta. Digite 'none' ou deixe vazio para sem teto."
         default: "10"
       limit:
         description: "Máximo de itens por fonte. Vazio = limite do protocolo (o teto por consulta já limita a amostra)."
@@ -110,8 +110,12 @@ jobs:
           LIMIT: ${{ inputs.limit }}
         run: |
           args=()
-          [ -n "$PER_QUERY" ] && args+=(--per-query-limit "$PER_QUERY")
-          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          if [ -n "$PER_QUERY" ] && [ "$PER_QUERY" != "none" ] && [ "$PER_QUERY" != "sem" ] && [ "$PER_QUERY" != "all" ] && [ "$PER_QUERY" != "0" ]; then
+            args+=(--per-query-limit "$PER_QUERY")
+          fi
+          if [ -n "$LIMIT" ] && [ "$LIMIT" != "none" ] && [ "$LIMIT" != "sem" ]; then
+            args+=(--limit "$LIMIT")
+          fi
           msrkit run "$PROTOCOL" "${args[@]}"
 
       - name: Deduplicate, enrich, extract, screening sheet, PRISMA

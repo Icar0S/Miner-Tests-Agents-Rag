@@ -183,7 +183,7 @@ class BaseAdapter(ABC):
         Applies rate limiting before the request. On 429/403 responses,
         handles Retry-After and rate limit headers, retrying if backoff slept.
         """
-        max_rate_retries = 2
+        max_rate_retries = 5
         for attempt in range(max_rate_retries + 1):
             if self._governor:
                 self._governor.acquire()
@@ -195,6 +195,10 @@ class BaseAdapter(ABC):
 
             # Handle rate limit response headers
             if self._governor and response.status_code in (429, 403):
+                # Never retry if credentials themselves are rejected (invalid/revoked token)
+                if response.status_code == 403 and "Bad credentials" in response.text:
+                    return response
+
                 retry_after = response.headers.get("Retry-After")
                 remaining = response.headers.get("x-ratelimit-remaining")
                 reset_at = response.headers.get("x-ratelimit-reset")
@@ -204,6 +208,26 @@ class BaseAdapter(ABC):
                     remaining=int(remaining) if remaining else None,
                     reset_at=float(reset_at) if reset_at else None,
                 )
+
+                # Add clock-skew buffer if governor waited until reset_at
+                if waited > 0 and reset_at is not None:
+                    clock_buffer = 1.5
+                    self._governor._clock.sleep(clock_buffer)
+                    waited += clock_buffer
+
+                # If 403/429 without explicit reset wait (e.g. secondary rate limit), apply defensive backoff
+                if waited == 0.0 and attempt < max_rate_retries:
+                    fallback_sleep = min(60.0, 5.0 * (2 ** attempt))
+                    logger.info(
+                        "Governor: HTTP %d received without reset wait; defensive backoff %.1fs (%d/%d)",
+                        response.status_code,
+                        fallback_sleep,
+                        attempt + 1,
+                        max_rate_retries,
+                    )
+                    self._governor._clock.sleep(fallback_sleep)
+                    waited = fallback_sleep
+
                 if waited > 0 and attempt < max_rate_retries:
                     logger.info(
                         "Governor waited %.1fs on HTTP %d; retrying request (%d/%d)",
@@ -239,7 +263,7 @@ class BaseAdapter(ABC):
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make a POST request, respecting the rate governor."""
-        max_rate_retries = 2
+        max_rate_retries = 5
         for attempt in range(max_rate_retries + 1):
             if self._governor:
                 self._governor.acquire()
@@ -250,6 +274,9 @@ class BaseAdapter(ABC):
             self._response_hashes.append(self._last_response_sha256)
 
             if self._governor and response.status_code in (429, 403):
+                if response.status_code == 403 and "Bad credentials" in response.text:
+                    return response
+
                 retry_after = response.headers.get("Retry-After")
                 remaining = response.headers.get("x-ratelimit-remaining")
                 reset_at = response.headers.get("x-ratelimit-reset")
@@ -259,6 +286,24 @@ class BaseAdapter(ABC):
                     remaining=int(remaining) if remaining else None,
                     reset_at=float(reset_at) if reset_at else None,
                 )
+
+                if waited > 0 and reset_at is not None:
+                    clock_buffer = 1.5
+                    self._governor._clock.sleep(clock_buffer)
+                    waited += clock_buffer
+
+                if waited == 0.0 and attempt < max_rate_retries:
+                    fallback_sleep = min(60.0, 5.0 * (2 ** attempt))
+                    logger.info(
+                        "Governor: HTTP %d received without reset wait; defensive backoff %.1fs (%d/%d)",
+                        response.status_code,
+                        fallback_sleep,
+                        attempt + 1,
+                        max_rate_retries,
+                    )
+                    self._governor._clock.sleep(fallback_sleep)
+                    waited = fallback_sleep
+
                 if waited > 0 and attempt < max_rate_retries:
                     logger.info(
                         "Governor waited %.1fs on HTTP %d; retrying request (%d/%d)",
