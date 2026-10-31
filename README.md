@@ -40,6 +40,7 @@ msrkit run protocols/v0_rag_agents_testing.yaml --source hackernews --limit 20
 msrkit review-tui --coder seu_nome     # triagem interativa visual no terminal (TUI)
 msrkit coding-tui --coder seu_nome     # extração técnica do Anexo A (TUI)
 msrkit prisma                          # gera relatório e diagrama PRISMA (incluindo prisma.tikz)
+msrkit report                          # relatório da mineração: janela, fontes, termos e quantidades
 msrkit --help                          # lista todos os comandos disponíveis para automação
 ```
 
@@ -134,7 +135,7 @@ O Reddit tem variáveis na seção 3, mas fica fora dos grupos: credencial nova 
 
 ### Coleta no GitHub Actions
 
-O workflow **Coleta** (`.github/workflows/collect.yml`, disparo manual) roda o fluxo inicial num runner com internet aberta e publica um dataset de teste como artefato: CSV dos itens, manifesto, detecções, planilha de triagem em branco, PRISMA e pacote redigido. Os termos e a janela vêm do protocolo versionado; credenciais opcionais vêm dos secrets `MSRKIT_GITHUB_TOKEN`, `STACKEXCHANGE_KEY`, `HF_TOKEN`, `BLUESKY_HANDLE` e `BLUESKY_APP_PASSWORD`. Por padrão coleta as fontes públicas com no máximo 10 itens por consulta, uma amostra espalhada pelo léxico (`msrkit run --per-query-limit`).
+O workflow **Coleta** (`.github/workflows/collect.yml`, disparo manual) roda o fluxo inicial num runner com internet aberta e publica um dataset de teste como artefato: CSV dos itens, manifesto, detecções, planilha de triagem em branco, PRISMA, relatório da mineração (`relatorio_mineracao.md`) e pacote redigido. O relatório da mineração (janela, fontes, termos buscados, quantidades e avisos) também aparece no resumo da execução, na página do run no Actions. Os termos e a janela vêm do protocolo versionado; credenciais opcionais vêm dos secrets `MSRKIT_GITHUB_TOKEN`, `STACKEXCHANGE_KEY`, `HF_TOKEN`, `BLUESKY_HANDLE` e `BLUESKY_APP_PASSWORD`. Por padrão coleta as fontes públicas com no máximo 10 itens por consulta, uma amostra espalhada pelo léxico (`msrkit run --per-query-limit`).
 
 O mesmo workflow roda **todo dia (07:23 UTC) só com os feeds RSS** — Medium e blogs —, porque cada feed traz apenas os ~10 posts mais recentes e a API do Medium não tem leitura nem busca. Os dados acumulam entre execuções (cache do Actions) e o artefato traz `rss_acumulado.csv` consolidado e deduplicado. O agendamento só vale a partir do `main`; como os posts são novos, a execução agendada estende o fim da janela até a data do dia, o que fica registrado no manifesto.
 

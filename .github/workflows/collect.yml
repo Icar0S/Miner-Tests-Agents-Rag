@@ -101,6 +101,15 @@ jobs:
           key: msrkit-rss-${{ github.run_id }}
           restore-keys: msrkit-rss-
 
+      # Sem token o GitHub ainda responde (60 req/h, sem busca de código) e a coleta
+      # passaria do timeout do job: como fonte manual, só entra quando o secret existe.
+      - name: Skip GitHub without token
+        if: env.GITHUB_TOKEN == ''
+        run: |
+          manual=$(echo "$MSRKIT_SOURCES_MANUAL" | tr ',' '\n' | grep -vx 'github' | paste -sd, - || true)
+          echo "MSRKIT_SOURCES_MANUAL=$manual" >> "$GITHUB_ENV"
+          echo "::warning::Secret MSRKIT_GITHUB_TOKEN ausente: o GitHub fica fora desta coleta."
+
       - name: Validate protocol and credentials
         run: msrkit validate "$PROTOCOL"
 
@@ -118,7 +127,7 @@ jobs:
           fi
           msrkit run "$PROTOCOL" "${args[@]}"
 
-      - name: Deduplicate, enrich, extract, screening sheet, PRISMA
+      - name: Deduplicate, enrich, extract, screening sheet, PRISMA, mining report
         env:
           ENRICH_LIMIT: ${{ inputs.enrich_limit || '300' }}
           EVENT: ${{ github.event_name }}
@@ -131,6 +140,9 @@ jobs:
           msrkit extract -p "$PROTOCOL"
           msrkit screen export -p "$PROTOCOL"
           msrkit prisma
+          # Relatório da mineração (janela, fontes, termos, quantidades); antes do
+          # package para entrar no pacote de reprodutibilidade.
+          msrkit report
           msrkit export -f csv -o data/exports/itens.csv
           msrkit package -p "$PROTOCOL"
 
@@ -160,17 +172,24 @@ jobs:
           path: data
           key: msrkit-rss-${{ github.run_id }}
 
+      # Resumo do job = relatório desta execução. Na coleta agendada, data/ volta do
+      # cache com as execuções anteriores, então só a mais recente entra aqui.
       - name: Summary
         if: always()
         run: |
+          RUN=$(ls -1t data/runs 2>/dev/null | grep -v '^consolidated$' | head -n 1 || true)
+          if [ -z "$RUN" ]; then
+            echo "## Coleta sem execução registrada" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Se o fluxo parou antes do relatório, ele ainda descreve o que foi coletado.
+          [ -f "data/reports/$RUN/relatorio_mineracao.md" ] || msrkit report --run "$RUN" || true
           {
-            echo "## Coleta"
-            echo '```'
-            msrkit stats 2>&1 | tail -n 60 || true
-            echo '```'
-            cat data/reports/*/prisma.md 2>/dev/null || true
+            cat "data/reports/$RUN/relatorio_mineracao.md" 2>/dev/null || true
+            echo
+            cat "data/reports/$RUN/prisma.md" 2>/dev/null || true
           } >> "$GITHUB_STEP_SUMMARY"
-          msrkit stats || true
+          msrkit stats --run "$RUN" || true
 
       # Só arquivos redistribuíveis (protocolo §17): metadados, URLs, campos
       # extraídos e o pacote redigido. Respostas brutas e itens com corpo ficam fora.

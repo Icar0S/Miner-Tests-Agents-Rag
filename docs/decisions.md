@@ -482,3 +482,14 @@ This document records architectural, design, and technical decisions made during
     - P3 (exploratory): items created in 2025–2026 labelled only `agente` or only `rag`; Cliff's δ on E and OLS `E ~ agente + log(age) + stratum` with HC3 errors, restricted to strata where both systems occur.
 - **Consequences:** The script writes CSV files, `summary.json` and LaTeX (`macros.tex`, table bodies, the mention × adoption scatter). The paper takes every number from `macros.tex`, which records the package, run id, basis and parameters, so a changed decision is a re-run plus an update of this ADR. `--pending` writes placeholders so the paper compiles before the run.
 
+---
+
+## ADR-047: Mining Report After Each Collection
+
+- **Context:** After a collection, what was mined could only be read from `manifest.json`, `msrkit stats` and the PRISMA flow. None of them shows, in one place, the time window, the sources and their status, the terms searched and the counts. The PRISMA flow also hides one gap: the manifest lists executed queries only, so planned queries that never ran disappear. In run d28a, 4 of 182 GitHub queries never ran after the 10,000-item cap, and its PRISMA reported nothing missing.
+- **Decision:**
+  - `msrkit report` writes `reports/<run>/relatorio_mineracao.md` and `.json`, in Portuguese, the team's working language. Sections: summary, time window, sources ("locais"), terms searched, quantities and warnings.
+  - Identification, local-filter and duplicate counts come from `prisma.build_flow`, so the report and the PRISMA flow never disagree. Evidence (enrichment, N1/N2/N3 detections by unit via `extract.summarize`) is added when those files exist.
+  - Warnings list planned − executed queries per source, failed or incomplete queries, `source_cap` truncation, sources without historical coverage, the sample cut by the item limit, unique items dated outside the window, a missing dedupe, a missing manifest and an unfinished run.
+  - The Coleta workflow runs `msrkit report` after `msrkit prisma` and before `msrkit package`, so the report ships in the reproducibility package. The job summary shows the report of the latest run only; scheduled RSS runs restore earlier runs from the cache. If the pipeline stops early, the summary step still generates the report for whatever was collected.
+- **Consequences:** Every collection, including the daily RSS one, leaves a readable record of what was mined. The report adds no new data: rerunning `msrkit report` on the same files gives the same output.

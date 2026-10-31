@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from typing import Any
-from unittest.mock import MagicMock, patch
+from datetime import date
+from unittest.mock import patch
 
 import httpx
-import pytest
 
 from msrkit.adapters.base import BaseAdapter
 from msrkit.governor import Governor
@@ -122,7 +120,9 @@ class TestRateResilience:
             request=httpx.Request("GET", "https://api.example.com/test"),
         )
 
-        with patch.object(adapter, "_request_with_retry", side_effect=[resp_secondary_403, resp_200]):
+        with patch.object(
+            adapter, "_request_with_retry", side_effect=[resp_secondary_403, resp_200]
+        ):
             res = adapter._governed_get("https://api.example.com/test")
 
         assert res.status_code == 200

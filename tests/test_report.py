@@ -1,0 +1,293 @@
+"""Mining report of a run (Phase 3, R6)."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from typer.testing import CliRunner
+
+from msrkit.cli import app
+from msrkit.enrich import RepoSignals
+from msrkit.extract import Detection
+from msrkit.models import (
+    Availability,
+    AvailabilityStatus,
+    Item,
+    ItemKind,
+    Manifest,
+    Provenance,
+    QueryManifestEntry,
+    SourceManifestEntry,
+    TermHit,
+)
+from msrkit.provenance import save_manifest
+from msrkit.report import _duration, _n, build_report, render_markdown
+from msrkit.storage import ItemStorage
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+PROV = Provenance(
+    run_id="run-r", query_string="q", partition="p", adapter="a", adapter_version="1",
+    fetched_at=datetime(2026, 10, 1, tzinfo=UTC), response_sha256="", raw_ref="",
+)  # fmt: skip
+
+
+def _item(
+    i: int,
+    source: str,
+    kind: ItemKind = ItemKind.THREAD,
+    created: str | None = "2025-03-01",
+    terms: tuple[tuple[str, str], ...] = (),
+    concepts: tuple[str, ...] = (),
+) -> Item:
+    return Item(
+        id=f"{source[:2]}{i}",
+        source=source,
+        kind=kind,
+        url=f"https://x.example/{source}/{i}",  # type: ignore[arg-type]
+        created_at=datetime.fromisoformat(f"{created}T12:00:00+00:00") if created else None,
+        matched_terms=[TermHit(term=t, field="title", context="", lang=lang) for t, lang in terms],
+        concepts=list(concepts),
+        provenance=PROV,
+    )
+
+
+def _items() -> list[Item]:
+    return [
+        _item(0, "github", ItemKind.CODE, created=None),
+        _item(1, "github", ItemKind.ISSUE, terms=(("RAG testing", "en"),), concepts=("rag",)),
+        _item(2, "github", ItemKind.ISSUE, created="2022-05-01", terms=(("RAG testing", "en"),)),
+        _item(3, "hackernews", terms=(("teste de RAG", "pt"),), concepts=("rag", "teste")),
+        _item(4, "hackernews", created="2024-07-01"),  # removed as a duplicate below
+    ]
+
+
+def _q(items: int, *, discarded: int = 0, reasons: tuple[str, ...] = ()) -> QueryManifestEntry:
+    return QueryManifestEntry(
+        query_string="q", partitions=1, requests=2, items=items, truncated=bool(reasons),
+        truncation_reasons=list(reasons), discarded=discarded, completed=True,
+    )  # fmt: skip
+
+
+def _manifest() -> Manifest:
+    ok = Availability(status=AvailabilityStatus.OK, reason="ok")
+    return Manifest(
+        run_id="run-r",
+        msrkit_version="t",
+        protocol_path="protocols/p.yaml",
+        protocol_sha256="abcdef0123456789",
+        started_at=datetime(2026, 10, 1, 10, 0, tzinfo=UTC),
+        finished_at=datetime(2026, 10, 1, 11, 30, tzinfo=UTC),
+        effective_protocol={
+            "window": {"since": "2023-01-01", "until": "2026-08-31"},
+            "terms": ["RAG testing", "LLM as a judge"],
+            "terms_by_language": {"pt": ["teste de RAG"]},
+        },
+        run_options={"per_query_limit": 10},
+        sources=[
+            SourceManifestEntry(
+                name="github", adapter_version="1", availability=ok,
+                planned=[{"raw": True, "label": "ci:ragas"}, {"raw": True, "label": "ci:deepeval"},
+                         {"raw": False, "terms": ["RAG testing"]}],
+                queries=[_q(2, reasons=("item_limit",)), _q(1)],
+            ),
+            SourceManifestEntry(
+                name="hackernews", adapter_version="1", availability=ok,
+                planned=[{"terms": ["RAG testing"]}],
+                queries=[_q(2, discarded=3)],
+            ),
+            SourceManifestEntry(
+                name="linkedin", adapter_version="1",
+                availability=Availability(status=AvailabilityStatus.UNSUPPORTED, reason="no API"),
+            ),
+        ],
+    )  # fmt: skip
+
+
+def _evidence() -> tuple[dict[str, RepoSignals], list[Detection]]:
+    signals = {
+        "o/a": RepoSignals(repo="o/a", has_ci=True, has_tests=True),
+        "o/b": RepoSignals(repo="o/b", has_tests=True),
+    }
+
+    def det(item: str, repo: str | None, level: str, entry: str = "ragas") -> Detection:
+        kind = "method" if entry == "llm-as-judge" else "tool"
+        return Detection(
+            item_id=item, source="github", repo=repo, entry_id=entry,
+            entry_type=kind, level=level, signal="text", location="title", evidence="e",  # type: ignore[arg-type]
+        )  # fmt: skip
+
+    dets = [
+        det("gi0", "o/a", "N2"),
+        det("gi1", "o/a", "N3"),  # same unit as gi0: counted once, at N3
+        det("hn3", None, "N1"),
+        det("hn3", None, "N1", "llm-as-judge"),
+    ]
+    return signals, dets
+
+
+def _report(tmp_path: Path, **kwargs: object):  # type: ignore[no-untyped-def]
+    items = _items()
+    discards = tmp_path / "discarded.jsonl"
+    discards.write_text((json.dumps({"reason": "no_term_match"}) + "\n") * 3)
+    args = {
+        "manifest": _manifest(),
+        "dedupe_report": {"removed": {"url": 1, "content": 0, "near": 0}},
+        **kwargs,
+    }
+    return build_report(
+        "run-r", args["manifest"], items, items[:4], args["dedupe_report"], discards,  # type: ignore[arg-type]
+        signals=args.get("signals"), detections=args.get("detections"),  # type: ignore[arg-type]
+    )  # fmt: skip
+
+
+class TestBuildReport:
+    def test_window_terms_and_options(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        assert (r.since, r.until) == ("2023-01-01", "2026-08-31")
+        assert r.terms == {"en": ["RAG testing", "LLM as a judge"], "pt": ["teste de RAG"]}
+        assert r.run_options == {"per_query_limit": 10}
+        assert r.duration_s == 5400
+        assert not r.window_overridden
+
+    def test_sources(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        gh, hn, li = r.sources
+        assert (gh.planned, gh.executed, gh.not_executed) == (3, 2, 1)
+        assert (gh.requests, gh.returned, gh.unique) == (4, 3, 3)
+        assert gh.truncated == {"item_limit": 1}
+        assert gh.literal == {"ci": 2}
+        assert (hn.returned, hn.discarded, hn.unique) == (2, 3, 1)
+        assert (li.status, li.executed) == ("UNSUPPORTED", 0)
+
+    def test_counts_match_prisma_identification(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        assert r.identified == 8  # github 3 + hackernews 2 kept + 3 filtered
+        assert r.filtered == {"no_term_match": 3}
+        assert r.kept == 5
+        assert r.duplicates == {"url": 1, "content": 0, "near": 0}
+        assert r.unique == 4
+        assert r.by_source_kind == {"github": {"code": 1, "issue": 2}, "hackernews": {"thread": 1}}
+
+    def test_dates_terms_concepts(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        assert r.by_year == {"2022": 1, "2025": 2}
+        assert (r.undated, r.oldest, r.newest) == (1, "2022-05-01", "2025-03-01")
+        assert r.out_of_window == {"github": 1}
+        assert r.term_hits == {"RAG testing": 2, "teste de RAG": 1}
+        assert r.term_languages == {"en": 2, "": 1, "pt": 1}
+        assert r.concepts == {"": 2, "rag": 2, "teste": 1}
+
+    def test_evidence_counts_units_at_highest_level(self, tmp_path: Path) -> None:
+        signals, dets = _evidence()
+        r = _report(tmp_path, signals=signals, detections=dets)
+        assert r.evidence is not None
+        assert (r.evidence.repos_enriched, r.evidence.repos_with_ci) == (2, 1)
+        assert r.evidence.repos_with_tests == 2
+        assert r.evidence.detections == {"N1": 2, "N2": 1, "N3": 1}
+        assert r.evidence.items_with_detection == 3
+        top = {e.entry: (e.kind, e.n1, e.n2, e.n3) for e in r.evidence.top}
+        assert top == {"ragas": ("tool", 1, 0, 1), "llm-as-judge": ("method", 1, 0, 0)}
+        assert r.evidence.top[0].entry == "ragas"  # most units first
+
+    def test_no_evidence_when_nothing_extracted(self, tmp_path: Path) -> None:
+        assert _report(tmp_path).evidence is None
+
+    def test_warnings(self, tmp_path: Path) -> None:
+        w = "\n".join(_report(tmp_path).warnings)
+        assert "github: 1 de 3 consultas planejadas não foram executadas" in w
+        assert "1 consultas pararam no limite de itens configurado (limite = 10)" in w
+        assert "1 itens únicos têm data fora da janela (github 1)" in w
+        assert "linkedin" not in w  # unavailable sources are listed, not warned
+
+    def test_source_cap_failed_and_unfinished_run(self, tmp_path: Path) -> None:
+        m = _manifest()
+        m.finished_at = None
+        m.sources[0].queries[0].truncation_reasons = ["source_cap"]
+        m.sources[0].queries[1].failed_partitions = ["k"]
+        m.sources[1].queries[0].truncation_reasons = ["no_historical_coverage"]
+        w = "\n".join(_report(tmp_path, manifest=m).warnings)
+        assert "não registrou o término" in w
+        assert "github: 1 consultas bateram no teto de resultados" in w
+        assert "github: 1 consultas falharam ou ficaram incompletas" in w
+        assert "hackernews: a fonte só entrega itens recentes" in w
+
+    def test_without_manifest_or_dedupe(self, tmp_path: Path) -> None:
+        r = _report(tmp_path, manifest=None, dedupe_report=None)
+        assert r.sources == [] and r.terms == {}
+        assert r.duplicates is None
+        assert r.kept == 5  # falls back to the items
+        w = "\n".join(r.warnings)
+        assert "Sem manifesto" in w
+        assert "Deduplicação não executada" in w
+        md = render_markdown(r)
+        assert "| − Duplicatas | n/a |" in md
+        assert "duração desconhecida" in md
+
+
+class TestRender:
+    def test_sections_and_content(self, tmp_path: Path) -> None:
+        signals, dets = _evidence()
+        md = render_markdown(_report(tmp_path, signals=signals, detections=dets))
+        for heading in (
+            "# Relatório de mineração — run-r",
+            "## Resumo",
+            "## Espaço temporal",
+            "## Locais (fontes)",
+            "## Termos buscados",
+            "## Quantidades",
+            "### Evidência (enriquecimento e extração)",
+            "## Avisos",
+        ):
+            assert heading in md
+        assert "(`abcdef012345`)" in md
+        assert "**2023-01-01 a 2026-08-31**" in md
+        assert "(1 h 30 min)" in md
+        assert "| github | 2/3 | 4 | 3 | 0 | 3 | item_limit 1 |" in md
+        assert "- **linkedin** (UNSUPPORTED): no API" in md
+        assert "- **Português (1):** `teste de RAG`" in md
+        assert "- **Consultas literais em github** (protocolo `queries:`): ci (2)" in md
+        assert "Termos sem nenhum casamento: `LLM as a judge`" in md
+        assert "| `RAG testing` | en | 2 |" in md
+        assert "| **Itens únicos** | **4** |" in md
+        assert "| ragas | tool | 1 | 0 | 1 | 2 |" in md
+
+    def test_summary_mentions_enrichment_only_when_it_ran(self, tmp_path: Path) -> None:
+        signals, dets = _evidence()
+        with_repos = render_markdown(_report(tmp_path, signals=signals, detections=dets))
+        assert "O enriquecimento analisou 2 repositórios do GitHub." in with_repos
+        only_text = render_markdown(_report(tmp_path, signals={}, detections=dets))
+        assert "enriquecimento analisou" not in only_text
+        assert "A extração encontrou 4 detecções de ferramentas e métodos." in only_text
+
+    def test_no_warnings_message(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        r.warnings = []
+        assert render_markdown(r).rstrip().endswith("Nenhum aviso.")
+
+    def test_formatting_helpers(self) -> None:
+        assert _n(23541) == "23.541"
+        assert _duration(None) == "duração desconhecida"
+        assert _duration(42) == "42 s"
+        assert _duration(57 * 60 + 29) == "57 min"
+        assert _duration(6570) == "1 h 49 min"
+
+
+class TestReportCommand:
+    def test_writes_markdown_and_json(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        items = _items()
+        storage = ItemStorage(tmp_path)
+        storage.save_items(items, "run-r")
+        storage.rewrite_items(items[:4], "run-r", deduped=True)
+        save_manifest(_manifest(), tmp_path)
+        r = CliRunner().invoke(app, ["report", "--run", "run-r"])
+        assert r.exit_code == 0, r.stdout
+        assert "Identified" in r.stdout and "unique 4" in r.stdout
+        md = (tmp_path / "reports/run-r/relatorio_mineracao.md").read_text(encoding="utf-8")
+        assert "## Termos buscados" in md
+        data = json.loads((tmp_path / "reports/run-r/relatorio_mineracao.json").read_text())
+        assert data["unique"] == 4 and data["sources"][0]["name"] == "github"
