@@ -101,6 +101,15 @@ jobs:
           key: msrkit-rss-${{ github.run_id }}
           restore-keys: msrkit-rss-
 
+      # Sem token o GitHub ainda responde (60 req/h, sem busca de código) e a coleta
+      # passaria do timeout do job: como fonte manual, só entra quando o secret existe.
+      - name: Skip GitHub without token
+        if: env.GITHUB_TOKEN == ''
+        run: |
+          manual=$(echo "$MSRKIT_SOURCES_MANUAL" | tr ',' '\n' | grep -vx 'github' | paste -sd, - || true)
+          echo "MSRKIT_SOURCES_MANUAL=$manual" >> "$GITHUB_ENV"
+          echo "::warning::Secret MSRKIT_GITHUB_TOKEN ausente: o GitHub fica fora desta coleta."
+
       - name: Validate protocol and credentials
         run: msrkit validate "$PROTOCOL"
 
