@@ -136,7 +136,7 @@ publica os achados.
 | A2-2 | **Rodar no corpus oficial** (execução congelada do Artigo 1 ou d28a com desvios declarados) e preencher o artigo | ⏳ depende do pacote |
 | A2-3 | **Triagem** em duas trilhas (ordenada até saturar + amostra aleatória estratificada) com κ em ≥ 20% | ⏳ equipe |
 | A2-4 | **Codificação** pelo Anexo A com dupla codificação, κ por dimensão e síntese temática; habilita H2, QP4 e QP5 | ⏳ equipe |
-| A2-5 | **Artigo** reestruturado em torno dos resultados (método, uma subseção por QP, discussão, ameaças) | 🔄 |
+| A2-5 | **Artigo** reestruturado em torno dos resultados (`docs/artigo2/`): método, uma subseção por QP, discussão, ameaças e trabalhos relacionados. Esta versão usa os achados da execução a2a8 (pirâmide de 24 ferramentas, Kendall τ, coocorrência, métodos e oráculos, descoberta, prévia da QP5); QP3 aguarda o pacote | ✅ |
 
 ## Registro
 
