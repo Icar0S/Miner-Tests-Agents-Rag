@@ -82,7 +82,8 @@ def partition(
             and depth < 3
         ):
             logger.warning(
-                "Estimation returned None for %s (window %s..%s, %d days); splitting defensively by date (depth %d)",
+                "Estimation returned None for %s (window %s..%s, %d days); "
+                "splitting defensively by date (depth %d)",
                 q.terms,
                 q.since,
                 q.until,
@@ -124,7 +125,7 @@ def partition(
         delta = q.until - q.since
         if delta > timedelta(days=0):
             sub_queries = partition_by_date(q)
-            result: list[tuple[Query, bool]] = []
+            result = []
             for sq in sub_queries:
                 result.extend(
                     partition(

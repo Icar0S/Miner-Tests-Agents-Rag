@@ -215,11 +215,13 @@ class BaseAdapter(ABC):
                     self._governor._clock.sleep(clock_buffer)
                     waited += clock_buffer
 
-                # If 403/429 without explicit reset wait (e.g. secondary rate limit), apply defensive backoff
+                # If 403/429 without explicit reset wait (e.g. secondary rate limit),
+                # apply defensive backoff
                 if waited == 0.0 and attempt < max_rate_retries:
-                    fallback_sleep = min(60.0, 5.0 * (2 ** attempt))
+                    fallback_sleep = min(60.0, 5.0 * (2**attempt))
                     logger.info(
-                        "Governor: HTTP %d received without reset wait; defensive backoff %.1fs (%d/%d)",
+                        "Governor: HTTP %d received without reset wait; "
+                        "defensive backoff %.1fs (%d/%d)",
                         response.status_code,
                         fallback_sleep,
                         attempt + 1,
@@ -293,9 +295,10 @@ class BaseAdapter(ABC):
                     waited += clock_buffer
 
                 if waited == 0.0 and attempt < max_rate_retries:
-                    fallback_sleep = min(60.0, 5.0 * (2 ** attempt))
+                    fallback_sleep = min(60.0, 5.0 * (2**attempt))
                     logger.info(
-                        "Governor: HTTP %d received without reset wait; defensive backoff %.1fs (%d/%d)",
+                        "Governor: HTTP %d received without reset wait; "
+                        "defensive backoff %.1fs (%d/%d)",
                         response.status_code,
                         fallback_sleep,
                         attempt + 1,
