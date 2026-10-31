@@ -11,10 +11,8 @@ import gzip
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 from msrkit.models import Item, RawItem
 
@@ -27,8 +25,8 @@ class RawStorage:
     Files are stored at: data/raw/{source}/{run_id}/{partition_hash}.jsonl.gz
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
+    def __init__(self, data_dir: Path | str) -> None:
+        self.data_dir = Path(data_dir)
         self._offsets: dict[str, int] = {}
 
     def save_raw(
@@ -111,8 +109,8 @@ class ItemStorage:
     Files are stored at: data/items/{run_id}/items.jsonl
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
+    def __init__(self, data_dir: Path | str) -> None:
+        self.data_dir = Path(data_dir)
 
     def save_items(self, items: list[Item], run_id: str) -> Path:
         """Append normalized items to the run's item file.
@@ -147,14 +145,32 @@ class ItemStorage:
         items_dir = self.data_dir / "items" / run_id
         if prefer_deduped and (items_dir / "items_deduped.jsonl").exists():
             file_path = items_dir / "items_deduped.jsonl"
-        else:
+        elif (items_dir / "items.jsonl").exists():
             file_path = items_dir / "items.jsonl"
+        elif (items_dir / "items_deduped.jsonl").exists():
+            file_path = items_dir / "items_deduped.jsonl"
+        elif run_id == "consolidated":
+            runs = [r for r in self.list_runs() if r != "consolidated"]
+            all_items = []
+            for r in runs:
+                all_items.extend(self.read_items(r, prefer_deduped=prefer_deduped))
+            if prefer_deduped and all_items:
+                from msrkit.dedupe import deduplicate
 
-        if not file_path.exists():
+                unique_items, _ = deduplicate(all_items)
+                return unique_items
+            seen_ids: set[str] = set()
+            unique_by_id: list[Item] = []
+            for it in all_items:
+                if it.id not in seen_ids:
+                    seen_ids.add(it.id)
+                    unique_by_id.append(it)
+            return unique_by_id
+        else:
             return []
 
         items = []
-        with open(file_path, encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8-sig") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -173,12 +189,18 @@ class ItemStorage:
         tmp_path.replace(file_path)
         return file_path
 
-    def list_runs(self) -> list[str]:
+    def list_runs(self, include_consolidated: bool = False) -> list[str]:
         """List all run IDs that contain saved items."""
         items_dir = self.data_dir / "items"
         if not items_dir.exists():
             return []
-        runs = [p.name for p in items_dir.iterdir() if p.is_dir() and (p / "items.jsonl").exists()]
+        runs = [
+            p.name
+            for p in items_dir.iterdir()
+            if p.is_dir()
+            and ((p / "items.jsonl").exists() or (p / "items_deduped.jsonl").exists())
+            and (include_consolidated or p.name != "consolidated")
+        ]
         return sorted(runs)
 
     def items_hash(self, run_id: str) -> str:
@@ -276,12 +298,24 @@ class DuckDBStorage:
                         body_val,
                         item.body_hash,
                         item.author_handle,
-                        item.created_at.isoformat() if item.created_at else None,
-                        item.updated_at.isoformat() if item.updated_at else None,
+                        (
+                            item.created_at.isoformat()
+                            if item.created_at is not None and hasattr(item.created_at, "isoformat")
+                            else (str(item.created_at) if item.created_at is not None else None)
+                        ),
+                        (
+                            item.updated_at.isoformat()
+                            if item.updated_at is not None and hasattr(item.updated_at, "isoformat")
+                            else (str(item.updated_at) if item.updated_at is not None else None)
+                        ),
                         item.provenance.run_id,
                         item.provenance.adapter,
                         item.provenance.query_string,
-                        item.provenance.fetched_at.isoformat(),
+                        (
+                            item.provenance.fetched_at.isoformat()
+                            if hasattr(item.provenance.fetched_at, "isoformat")
+                            else str(item.provenance.fetched_at)
+                        ),
                         data_json,
                     ],
                 )

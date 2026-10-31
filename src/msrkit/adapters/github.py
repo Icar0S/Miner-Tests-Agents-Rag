@@ -50,6 +50,20 @@ _KIND_ENDPOINT = {
 }
 
 
+def is_bot_author(author: str | None) -> bool:
+    """Return True if the author handle matches automated bot accounts."""
+    if not author:
+        return False
+    lower = author.lower()
+    return (
+        lower.endswith("[bot]")
+        or lower.endswith("-bot")
+        or lower in {"dependabot", "renovate", "github-actions", "snyk-bot", "stale"}
+        or "dependabot" in lower
+        or "renovate" in lower
+    )
+
+
 @register
 class GitHubAdapter(BaseAdapter):
     """GitHub adapter using the REST search API."""
@@ -78,6 +92,8 @@ class GitHubAdapter(BaseAdapter):
             "Max 1,000 results per query. Code search requires auth and is "
             "limited to 10 req/min. Partitioning by date and language is essential."
         ),
+        has_official_api=True,
+        official_api_name="GitHub REST v3 / GraphQL v4",
     )
 
     def _build_client(self) -> httpx.Client:
@@ -113,6 +129,26 @@ class GitHubAdapter(BaseAdapter):
             reason="GitHub token configured. 5,000 req/h, code search available.",
         )
 
+    @classmethod
+    def effective_rate_limit(cls) -> RateLimit:
+        """Rate limit to enforce: 30 req/min with token, 10 req/min without token (burst 2)."""
+        base = cls.policy.rate_limit
+        if cls._env("GITHUB_TOKEN"):
+            return base
+        return RateLimit(
+            requests=10,
+            per_seconds=60,
+            burst=2,
+            daily_cap=None,
+        )
+
+    def graphql(self, query: str, variables: dict[str, Any] | None = None) -> httpx.Response:
+        """Execute a governed GraphQL query against GitHub API v4."""
+        return self._governed_post(
+            f"{_BASE_URL}/graphql",
+            json={"query": query, "variables": variables or {}},
+        )
+
     def estimate(self, q: Query) -> int | None:
         """Largest total_count among the API queries search() will issue.
 
@@ -141,6 +177,17 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         if kind == "code" and not self._env("GITHUB_TOKEN"):
             return [q]  # search() skips unauthenticated code search
+
+        from msrkit.partition import split_by_term
+
+        # If a small query limit is set (e.g. fast test with limit <= 100),
+        # or unauthenticated without monkeypatched estimate, skip pre-flight counting.
+        is_default_estimate = getattr(self.estimate, "__func__", None) is GitHubAdapter.estimate
+        if (q.limit is not None and q.limit <= 100) or (
+            not self._env("GITHUB_TOKEN") and is_default_estimate
+        ):
+            return split_by_term(q)
+
         # Code search has no date qualifier; a raw query that fixes its own
         # created: range cannot be split by date either.
         fixed_dates = q.raw and "created:" in (q.terms[0] if q.terms else "")
@@ -159,7 +206,7 @@ class GitHubAdapter(BaseAdapter):
             return
 
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -225,6 +272,24 @@ class GitHubAdapter(BaseAdapter):
                             native_id = str(item.get("id", ""))
                         if not native_id or native_id in seen_ids:
                             continue
+
+                        # Filter out automated bot-generated items if explicitly opted in
+                        filter_bots = bool((q.extra or {}).get("filter_bots", False))
+                        if filter_bots:
+                            author = (
+                                (item.get("user") or {}).get("login")
+                                if kind == "issue"
+                                else (item.get("owner") or {}).get("login")
+                            )
+                            if is_bot_author(author):
+                                self._record_discard(
+                                    native_id=native_id,
+                                    title=item.get("title") or item.get("name") or "",
+                                    url=item.get("html_url") or "",
+                                    reason="bot_author",
+                                )
+                                continue
+
                         seen_ids.add(native_id)
                         yield self._make_raw_item(
                             source=self.name,
@@ -401,9 +466,13 @@ class GitHubAdapter(BaseAdapter):
         kind = q.kind or "repo"
         if q.raw and term:
             # Literal protocol query: keep it verbatim, add only the date window.
-            if kind == "code" or "created:" in term or not (q.since and q.until):
+            if kind == "code" or "created:" in term or not (q.since or q.until):
                 return term
-            return f"{term} created:{q.since}..{q.until}"
+            if q.since and q.until:
+                return f"{term} created:{q.since}..{q.until}"
+            if q.since:
+                return f"{term} created:>={q.since}"
+            return f"{term} created:<={q.until}"
         parts = []
         if term:
             parts.append(f'"{term}"' if " " in term else term)

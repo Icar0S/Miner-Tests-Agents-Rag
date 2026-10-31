@@ -69,6 +69,14 @@ class BlueskyAdapter(BaseAdapter):
             "Free with real search. Substitute for X/Twitter since X paywalled "
             "read access. Document the substitution in the study paper."
         ),
+        has_official_api=True,
+        official_api_name="AT Protocol (app.bsky.feed.searchPosts)",
+        exclusion_category="methodological",
+        exclusion_rationale=(
+            "Excluída pelo protocolo (§6.1 Tab 6.1 B): microblogging (limite de 300 caracteres), "
+            "de alta volatilidade e sem artefatos de código verificáveis para análise "
+            "de oráculos/testes."
+        ),
     )
 
     _session_token: str | None = None
@@ -122,7 +130,7 @@ class BlueskyAdapter(BaseAdapter):
             logger.warning("Bluesky: cannot authenticate, skipping")
             return
 
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -207,8 +215,9 @@ class BlueskyAdapter(BaseAdapter):
 
         # Convert AT URI to web URL
         # at://did:plc:xxx/app.bsky.feed.post/yyy → https://bsky.app/profile/handle/post/yyy
-        if uri and handle:
-            url = f"https://bsky.app/profile/{handle}/post/{uri.split('/')[-1]}"
+        post_key = [x for x in uri.split("/") if x][-1] if uri else ""
+        if post_key and handle:
+            url = f"https://bsky.app/profile/{handle}/post/{post_key}"
         elif handle:
             url = f"https://bsky.app/profile/{handle}"
         else:
@@ -221,9 +230,8 @@ class BlueskyAdapter(BaseAdapter):
             source=self.name,
             kind=ItemKind.POST,
             url=url,  # type: ignore[arg-type]
-            title=None,
-            body=None,  # metadata_only
-            body_hash=None,
+            title=text[:100] if text else None,
+            body=text or None,
             author_handle=handle,
             created_at=created_at,
             engagement=Engagement(

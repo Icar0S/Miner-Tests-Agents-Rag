@@ -193,7 +193,9 @@ class ProtocolConfig(BaseModel):
             raise ValueError(f"query '{raw_q.q}' uses a template but no gazetteer is loaded")
         out: list[tuple[str, str]] = []
         for tool in self._gazetteer.anchors(raw_q.anchor_families):
-            repos = tool.repos if "{repo}" in raw_q.q else [""]
+            repos = (
+                [r.strip() for r in tool.repos if r and r.strip()] if "{repo}" in raw_q.q else [""]
+            )
             for repo in repos:
                 text = raw_q.q.replace("{anchor}", tool.token()).replace("{repo}", repo)
                 out.append((text, f"{raw_q.label}:{tool.id}" if raw_q.label else tool.id))
@@ -218,20 +220,9 @@ class ProtocolConfig(BaseModel):
         # Se a fonte tem kinds configurados, cria uma query por kind
         kinds = src_cfg.kinds if src_cfg.kinds else [None]
 
-        if src_cfg.use_terms:
-            for kind in kinds:
-                queries.append(
-                    Query(
-                        source=source_name,
-                        terms=self.all_terms(),
-                        kind=kind,
-                        since=since,
-                        until=until,
-                        extra=src_cfg.extra,
-                        limit=self.limits.max_items_per_source,
-                    )
-                )
-
+        # Priority 1: Literal queries (CI workflows, tool imports, configs, issues).
+        # These carry the strongest structural evidence (N2/N3) and must execute first
+        # so they are never starved if generic text queries exhaust the source quota.
         for raw_q in src_cfg.queries:
             for text, label in self._expand_template(raw_q):
                 queries.append(
@@ -245,6 +236,21 @@ class ProtocolConfig(BaseModel):
                         limit=self.limits.max_items_per_source,
                         raw=True,
                         label=label,
+                    )
+                )
+
+        # Priority 2: Generic open-text terms across kinds (repo, code, etc.)
+        if src_cfg.use_terms:
+            for kind in kinds:
+                queries.append(
+                    Query(
+                        source=source_name,
+                        terms=self.all_terms(),
+                        kind=kind,
+                        since=since,
+                        until=until,
+                        extra=src_cfg.extra,
+                        limit=self.limits.max_items_per_source,
                     )
                 )
 
@@ -363,7 +369,7 @@ def load_protocol(path: str | Path, environ: Mapping[str, str] | None = None) ->
     if not p.exists():
         raise FileNotFoundError(f"Protocol file not found: {p}")
 
-    raw = p.read_text(encoding="utf-8")
+    raw = p.read_text(encoding="utf-8-sig")
     data = yaml.safe_load(raw)
 
     if not isinstance(data, dict):

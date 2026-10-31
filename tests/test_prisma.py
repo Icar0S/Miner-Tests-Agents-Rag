@@ -77,9 +77,14 @@ def _manifest() -> Manifest:
 
 def _dec(item: str, coder: str, decision: str, crit: list[str] | None = None):
     return ScreeningDecision(
-        item_id=item, coder=coder, decision=decision, criteria_met=crit or [],  # type: ignore[arg-type]
-        reason="r", decided_at="t", sheet_sha256="h",
-    )  # fmt: skip
+        item_id=item,
+        coder=coder,
+        decision=decision,  # type: ignore[arg-type]
+        criteria_met=crit or [],
+        reason="r",
+        decided_at="t",
+        sheet_sha256="h",
+    )
 
 
 def _setup(tmp_path: Path) -> list[Item]:
@@ -119,6 +124,8 @@ class TestFlow:
         assert flow.included_by_source == {"github": 1}
 
     def test_missing_dedupe_is_na_not_zero(self, tmp_path: Path) -> None:
+        from msrkit.prisma import render_tikz
+
         items = _setup(tmp_path)
         flow = build_flow("r", None, items, items, None, tmp_path / "none.jsonl", {}, set())
         assert flow.duplicates is None
@@ -126,6 +133,9 @@ class TestFlow:
         md = render_markdown(flow)
         assert "Duplicates: n/a" in md
         assert "flowchart TD" in md
+        tikz = render_tikz(flow)
+        assert r"\begin{tikzpicture}" in tikz
+        assert r"Identificação" in tikz
 
 
 class TestPrismaCommand:
@@ -146,3 +156,103 @@ class TestPrismaCommand:
         data = json.loads((tmp_path / "reports/run-p/prisma.json").read_text())
         assert data["coded"] == 1
         assert (tmp_path / "reports/run-p/prisma.md").exists()
+        assert (tmp_path / "reports/run-p/prisma.tikz").exists()
+
+    def test_tikz_and_mermaid_escaping(self) -> None:
+        from msrkit.prisma import PrismaFlow, _latex_escape, render_mermaid, render_tikz
+
+        assert _latex_escape("rag_agent & testing % #1 $val {ok}") == (
+            r"rag\_agent \& testing \% \#1 \$val \{ok\}"
+        )
+        flow = PrismaFlow(
+            run_id="r1",
+            identified={"google_scholar": 10, 'quote_"source"': 5},
+            not_retrieved_estimate={},
+            truncated_queries=0,
+            filtered={"out_of_scope": 2},
+            after_filters=8,
+            duplicates=None,
+            screened=8,
+            excluded=3,
+            exclusion_reasons={'reason_"x"_with_underscore': 3},
+            uncertain=0,
+            pending=0,
+            included=5,
+            coded=2,
+        )
+        tikz = render_tikz(flow)
+        assert r"google\_scholar" in tikz
+        assert r"reason\_'x'\_with\_underscore" in tikz or r"reason\_" in tikz
+
+        mermaid = render_mermaid(flow)
+        assert "\"quote_'source'\"" not in mermaid  # inner double quotes replaced by single
+        assert "reason_'x'_with_underscore" in mermaid
+
+    def test_build_flow_non_string_criteria_met(self, tmp_path: Path) -> None:
+        decisions = {
+            ("it1", "coder1"): ScreeningDecision.model_construct(
+                item_id="it1",
+                coder="coder1",
+                decision="exclude",
+                criteria_met=["E1", None, 123],
+                reason="test",
+                decided_at="now",
+                sheet_sha256="s",
+            )
+        }
+        item = _item(1, "github")
+        item.id = "it1"
+        flow = build_flow(
+            run_id="r1",
+            manifest=None,
+            items=[item],
+            pool=[item],
+            dedupe_report=None,
+            discard_file=tmp_path / "discard.jsonl",
+            decisions=decisions,
+            coded_ids=set(),
+        )
+        assert flow.excluded == 1
+        assert "E1" in flow.exclusion_reasons
+
+    def test_build_flow_uses_manifest_query_items_when_deduped_pool_given(
+        self, tmp_path: Path
+    ) -> None:
+        """When pre-deduped items.jsonl is absent, PRISMA uses manifest queries count."""
+        manifest = Manifest(
+            run_id="r1",
+            msrkit_version="0.1.0",
+            protocol_path="proto.yaml",
+            protocol_sha256="abc",
+            started_at=datetime.now(UTC),
+            sources=[
+                SourceManifestEntry(
+                    name="github",
+                    adapter_version="1",
+                    availability=OK,
+                    queries=[
+                        QueryManifestEntry(
+                            query_string="q1",
+                            partitions=1,
+                            requests=1,
+                            items=100,
+                            truncated=False,
+                            discarded=10,
+                        )
+                    ],
+                )
+            ],
+        )
+        pool_items = [_item(i, "github") for i in range(80)]
+        flow = build_flow(
+            run_id="r1",
+            manifest=manifest,
+            items=pool_items,
+            pool=pool_items,
+            dedupe_report={"removed": {"github": 20}},
+            discard_file=tmp_path / "discard.jsonl",
+            decisions={},
+            coded_ids=set(),
+        )
+        assert flow.identified["github"] == 110
+        assert flow.filtered["unspecified"] == 10

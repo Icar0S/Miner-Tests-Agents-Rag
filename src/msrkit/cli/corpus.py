@@ -5,12 +5,14 @@ from __future__ import annotations
 import contextlib
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
 from msrkit import cli as _cli
 from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
     _get_latest_run_id,
     _get_registry,
     _load_run_protocol,
@@ -32,7 +34,7 @@ def prisma(
     Writes data/reports/<run_id>/prisma.json and prisma.md (with a Mermaid diagram).
     """
     from msrkit.coding import load_codings
-    from msrkit.prisma import build_flow, render_markdown
+    from msrkit.prisma import build_flow, render_markdown, render_tikz
     from msrkit.provenance import load_manifest
     from msrkit.screening import load_decisions
     from msrkit.storage import ItemStorage
@@ -40,25 +42,93 @@ def prisma(
     run_id = _resolve_run(_unwrap(run_id))
     storage = ItemStorage(_cli.DATA_DIR)
     manifest = None
-    with contextlib.suppress(FileNotFoundError):
-        manifest = load_manifest(_cli.DATA_DIR, run_id)
+
+    if run_id == "consolidated":
+        runs = [r for r in storage.list_runs() if r != "consolidated"]
+        raw_items = [it for r in runs for it in storage.read_items(r, prefer_deduped=False)]
+        pool_items = storage.read_items("consolidated", prefer_deduped=True)
+        if not pool_items:
+            from msrkit.dedupe import deduplicate
+
+            pool_items, _ = deduplicate(raw_items)
+
+        combined_sources: dict[str, Any] = {}
+        for r in runs:
+            with contextlib.suppress(FileNotFoundError):
+                m = load_manifest(_cli.DATA_DIR, r)
+                for s in m.sources:
+                    if s.name not in combined_sources:
+                        combined_sources[s.name] = s.model_copy(deep=True)
+                    else:
+                        combined_sources[s.name].queries.extend(s.queries)
+        if combined_sources:
+            from datetime import UTC, datetime
+
+            from msrkit import __version__
+            from msrkit.models import Manifest
+
+            manifest = Manifest(
+                run_id="consolidated",
+                msrkit_version=__version__,
+                protocol_path="consolidated",
+                protocol_sha256="",
+                started_at=datetime.now(UTC),
+                sources=list(combined_sources.values()),
+            )
+
+        discards_dir = _cli.DATA_DIR / "runs" / "consolidated"
+        discards_dir.mkdir(parents=True, exist_ok=True)
+        discard_file = discards_dir / "discarded.jsonl"
+        seen_discards: set[str] = set()
+        with discard_file.open("w", encoding="utf-8") as out_df:
+            for r in runs:
+                src_df = _cli.DATA_DIR / "runs" / r / "discarded.jsonl"
+                if src_df.exists():
+                    with open(src_df, encoding="utf-8") as in_df:
+                        for line in in_df:
+                            line_str = line.strip()
+                            if line_str and line_str not in seen_discards:
+                                seen_discards.add(line_str)
+                                out_df.write(line_str + "\n")
+
+        decisions = load_decisions(_cli.DATA_DIR, "consolidated")
+        if not decisions:
+            for r in runs:
+                decisions.update(load_decisions(_cli.DATA_DIR, r))
+
+        codings = dict(load_codings(_cli.DATA_DIR, "consolidated"))
+        if not codings:
+            for r in runs:
+                codings.update(load_codings(_cli.DATA_DIR, r))
+        coded_ids = {item_id for (item_id, _c) in codings}
+    else:
+        with contextlib.suppress(FileNotFoundError):
+            manifest = load_manifest(_cli.DATA_DIR, run_id)
+        raw_items = storage.read_items(run_id)
+        pool_items = storage.read_items(run_id, prefer_deduped=True)
+        discard_file = _cli.DATA_DIR / "runs" / run_id / "discarded.jsonl"
+        decisions = load_decisions(_cli.DATA_DIR, run_id)
+        coded_ids = {item_id for (item_id, _c) in load_codings(_cli.DATA_DIR, run_id)}
+
     report_path = _cli.DATA_DIR / "items" / run_id / "dedupe_report.json"
     report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
     flow = build_flow(
         run_id,
         manifest,
-        storage.read_items(run_id),
-        storage.read_items(run_id, prefer_deduped=True),
+        raw_items,
+        pool_items,
         report,
-        _cli.DATA_DIR / "runs" / run_id / "discarded.jsonl",
-        load_decisions(_cli.DATA_DIR, run_id),
-        {item_id for (item_id, _c) in load_codings(_cli.DATA_DIR, run_id)},
+        discard_file,
+        decisions,
+        coded_ids,
     )
     out_dir = _cli.DATA_DIR / "reports" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "prisma.json").write_text(flow.model_dump_json(indent=2), encoding="utf-8")
     markdown = render_markdown(flow)
     (out_dir / "prisma.md").write_text(markdown, encoding="utf-8")
+    tikz = render_tikz(flow)
+    (out_dir / "prisma.tikz").write_text(tikz, encoding="utf-8")
     dup = "n/a" if flow.duplicates is None else sum(flow.duplicates.values())
     console.print(
         f"Identified {flow.total_identified} → filtered {sum(flow.filtered.values())}, "
@@ -177,23 +247,38 @@ def stats(
 
     item_storage = ItemStorage(_cli.DATA_DIR)
 
-    if all_runs:
-        runs = item_storage.list_runs()
+    if all_runs or run_id == "consolidated":
+        runs = [r for r in item_storage.list_runs() if r != "consolidated"]
         if not runs:
             console.print("[red]✗ No runs found in data directory.[/red]")
             raise typer.Exit(1)
 
-        from msrkit.dedupe import deduplicate
+        consolidated_items = item_storage.read_items("consolidated", prefer_deduped=True)
+        report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+        if consolidated_items and report_path.exists():
+            unique_items = consolidated_items
+            try:
+                rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                total_raw = rep_data.get("input", len(unique_items))
+                num_duplicates = total_raw - len(unique_items)
+            except Exception:
+                total_raw = len(unique_items)
+                num_duplicates = 0
+        else:
+            from msrkit.dedupe import deduplicate
 
-        all_items = []
-        for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=True))
+            all_items = []
+            for r in runs:
+                all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
-        if not all_items:
-            console.print("[yellow]No items found across runs.[/yellow]")
-            return
+            if not all_items:
+                console.print("[yellow]No items found across runs.[/yellow]")
+                return
 
-        unique_items, duplicates = deduplicate(all_items)
+            unique_items, duplicates = deduplicate(all_items, near_threshold=0.85)
+            total_raw = len(all_items)
+            num_duplicates = len(duplicates)
+
         hist_by_source: dict[str, int] = {}
         for it in unique_items:
             hist_by_source[it.source] = hist_by_source.get(it.source, 0) + 1
@@ -219,8 +304,8 @@ def stats(
         )
         console.print(hist_table)
         console.print(
-            f"\n[dim]Total across history: {len(all_items)} raw items collected | "
-            f"{len(duplicates)} duplicates removed[/dim]"
+            f"\n[dim]Total across history: {total_raw} raw items collected | "
+            f"{num_duplicates} duplicates removed[/dim]"
         )
         return
 
@@ -298,16 +383,36 @@ def stats(
         console.print(f"\n[bold]Items file SHA-256:[/bold] {items_hash}")
 
     # Historical Consolidated Overview across all runs
-    runs = item_storage.list_runs()
+    runs = [r for r in item_storage.list_runs() if r != "consolidated"]
     if len(runs) > 1:
-        from msrkit.dedupe import deduplicate
+        consolidated_items = item_storage.read_items("consolidated", prefer_deduped=True)
+        report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+        if consolidated_items and report_path.exists():
+            unique_items = consolidated_items
+            try:
+                rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                total_raw = rep_data.get("input", len(unique_items))
+                duplicates_count = total_raw - len(unique_items)
+            except Exception:
+                total_raw = len(unique_items)
+                duplicates_count = 0
+        else:
+            from msrkit.dedupe import deduplicate
 
-        all_items = []
-        for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=True))
+            all_items = []
+            for r in runs:
+                all_items.extend(item_storage.read_items(r, prefer_deduped=False))
 
-        if all_items:
-            unique_items, duplicates = deduplicate(all_items)
+            if all_items:
+                unique_items, duplicates = deduplicate(all_items, near_threshold=0.85)
+                total_raw = len(all_items)
+                duplicates_count = len(duplicates)
+            else:
+                unique_items = []
+                total_raw = 0
+                duplicates_count = 0
+
+        if unique_items:
             hist_by_source = {}
             for it in unique_items:
                 hist_by_source[it.source] = hist_by_source.get(it.source, 0) + 1
@@ -333,8 +438,8 @@ def stats(
             )
             console.print(hist_table)
             console.print(
-                f"[dim]Historical total: {len(all_items)} raw items collected across runs | "
-                f"{len(duplicates)} duplicates removed[/dim]"
+                f"[dim]Historical total: {total_raw} raw items collected across runs | "
+                f"{duplicates_count} duplicates removed[/dim]"
             )
 
 
@@ -372,22 +477,39 @@ def export(
     item_storage = ItemStorage(_cli.DATA_DIR)
 
     if all_runs:
-        runs = item_storage.list_runs()
+        runs = [r for r in item_storage.list_runs() if r != "consolidated"]
         if not runs:
             console.print("[red]✗ No runs found in data directory.[/red]")
             raise typer.Exit(1)
         console.print(f"[bold]Consolidating items from {len(runs)} historical runs...[/bold]")
         all_items = []
         for r in runs:
-            all_items.extend(item_storage.read_items(r, prefer_deduped=not raw))
+            all_items.extend(item_storage.read_items(r, prefer_deduped=False))
         if not raw:
-            from msrkit.dedupe import deduplicate
+            deduped_existing = item_storage.read_items("consolidated", prefer_deduped=True)
+            if deduped_existing:
+                items = deduped_existing
+                report_path = _cli.DATA_DIR / "items" / "consolidated" / "dedupe_report.json"
+                dups_len = 0
+                if report_path.exists():
+                    try:
+                        rep_data = json.loads(report_path.read_text(encoding="utf-8"))
+                        dups_len = rep_data.get("input", len(items)) - len(items)
+                    except Exception:
+                        pass
+                console.print(
+                    f"  [green]Total consolidado (deduplicado em disco):[/green] "
+                    f"{len(items)} únicos "
+                    f"([dim]{dups_len} duplicatas removidas[/dim])"
+                )
+            else:
+                from msrkit.dedupe import deduplicate
 
-            items, dups = deduplicate(all_items)
-            console.print(
-                f"  [green]Total consolidado:[/green] {len(items)} únicos "
-                f"([dim]{len(dups)} duplicatas removidas[/dim])"
-            )
+                items, dups = deduplicate(all_items, near_threshold=0.85)
+                console.print(
+                    f"  [green]Total consolidado:[/green] {len(items)} únicos "
+                    f"([dim]{len(dups)} duplicatas removidas[/dim])"
+                )
         else:
             items = all_items
             console.print(f"  [green]Total consolidado bruto:[/green] {len(items)} achados")
@@ -464,14 +586,25 @@ def export(
                     row = item.model_dump(mode="json")
                     row["url"] = str(item.url)
                     row["kind"] = item.kind.value
-                    row["matched_terms"] = (
-                        ", ".join(sorted(set(hit.term for hit in item.matched_terms)))
-                        if item.matched_terms
-                        else ""
-                    )
-                    row["matched_languages"] = ", ".join(
-                        sorted({hit.lang for hit in item.matched_terms if hit.lang})
-                    )
+                    terms_set: set[str] = set()
+                    langs_set: set[str] = set()
+                    for hit in item.matched_terms:
+                        t = (
+                            hit.term
+                            if hasattr(hit, "term")
+                            else (hit.get("term", str(hit)) if isinstance(hit, dict) else str(hit))
+                        )
+                        if t:
+                            terms_set.add(t)
+                        l_val = (
+                            hit.lang
+                            if hasattr(hit, "lang")
+                            else (hit.get("lang") if isinstance(hit, dict) else None)
+                        )
+                        if l_val:
+                            langs_set.add(l_val)
+                    row["matched_terms"] = ", ".join(sorted(terms_set))
+                    row["matched_languages"] = ", ".join(sorted(langs_set))
                     row["concepts"] = ", ".join(item.concepts)
                     row["stars"] = (
                         item.engagement.stars
@@ -510,7 +643,7 @@ def export(
     console.print(f"[green]✓ Exported {len(items)} items to {out_path}[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def package(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
@@ -538,6 +671,8 @@ def package(
 
         with contextlib.suppress(FileNotFoundError):
             proto_path_str = load_manifest(_cli.DATA_DIR, run_id).protocol_path
+    if not proto_path_str and Path(DEFAULT_PROTOCOL).exists():
+        proto_path_str = DEFAULT_PROTOCOL
     proto_path = Path(proto_path_str) if proto_path_str else None
     extras: list[Path] = []
     proto = _load_run_protocol(run_id, proto_path_str)

@@ -61,14 +61,20 @@ terms_by_language:
   pt:
     - "teste de RAG"
     - "avaliação de RAG"
+    - "avaliacao de RAG"
     - "teste de LLM"
     - "avaliação de LLM"
+    - "avaliacao de LLM"
     - "LLM como juiz"
     - "teste de agentes"
     - "avaliação de agentes"
+    - "avaliacao de agentes"
     - "dataset de referência"
+    - "dataset de referencia"
     - "teste de alucinação"
+    - "teste de alucinacao"
     - "regressão de prompt"
+    - "regressao de prompt"
 
 # ---- Grupos de conceito (§3.1, RQ5) ----
 # Cada item recebe os conceitos cujo léxico casou. Rótulo de sistema do E2:
@@ -213,10 +219,10 @@ sources:
     queries:
       - kind: repo
         label: repos-rag
-        q: '("RAG" OR "retrieval augmented") (eval OR test OR testing) in:name,description,readme stars:>5'
+        q: 'RAG (eval OR test OR testing) in:name,description,readme stars:>5'
       - kind: repo
         label: repos-agentes
-        q: '("agent" OR "agentic") (eval OR test OR testing) in:name,description,readme stars:>5'
+        q: 'agentic (eval OR test OR testing) in:name,description,readme stars:>5'
       - {kind: code, label: ragas-import, evidence: N2, q: '"from ragas import" language:Python'}
       - {kind: code, label: deepeval-import, evidence: N2, q: '"import deepeval" language:Python'}
       - {kind: code, label: promptfoo-config, evidence: N2, q: 'filename:promptfooconfig.yaml'}
@@ -263,6 +269,7 @@ sources:
         - agents
         - llmops
         - testing
+      max_pages: 10
 
   reddit:
     # Desabilitado no Estudo E2: credenciais novas exigem aprovação manual
@@ -315,9 +322,9 @@ sources:
       note: "RSS entrega apenas itens recentes; sem cobertura histórica."
 
   bluesky:
-    # Coletada quando BLUESKY_HANDLE e BLUESKY_APP_PASSWORD estiverem no .env;
-    # sem credencial, a execução pula a fonte e registra o motivo.
-    enabled: true
+    # Desativado por decisão metodológica da equipe (baixa densidade de artefatos
+    # de teste e conteúdo curto, conforme Tabela 6.1 do Protocolo E2 v2).
+    enabled: false
 
   x_twitter:
     enabled: false  # requer plano pago
@@ -330,6 +337,6 @@ sources:
 
 # ---- Limites globais ----
 limits:
-  max_items_per_source: 5000
-  max_requests_per_source: 2000
+  max_items_per_source: 10000
+  max_requests_per_source: 2500
   stop_on_quota_exhausted: true

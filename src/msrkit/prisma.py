@@ -55,9 +55,10 @@ class PrismaFlow(BaseModel):
 def _discard_reasons(path: Path) -> Counter[str]:
     reasons: Counter[str] = Counter()
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                reasons[json.loads(line).get("reason") or "unspecified"] += 1
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line_s := line.strip():
+                    reasons[json.loads(line_s).get("reason") or "unspecified"] += 1
     return reasons
 
 
@@ -73,18 +74,21 @@ def build_flow(
 ) -> PrismaFlow:
     kept = Counter(it.source for it in items)
     filtered_by_source: Counter[str] = Counter()
+    manifest_kept: Counter[str] = Counter()
     not_retrieved: Counter[str] = Counter()
     truncated = 0
     for src in manifest.sources if manifest else []:
         for q in src.queries:
+            manifest_kept[src.name] += q.items
             filtered_by_source[src.name] += q.discarded
             if "source_cap" in q.truncation_reasons:
                 truncated += 1
                 if q.estimated_total is not None:
                     gap = q.estimated_total - q.items - q.discarded
                     not_retrieved[src.name] += max(gap, 0)
-    sources = sorted(kept.keys() | filtered_by_source.keys())
-    identified = {s: kept[s] + filtered_by_source[s] for s in sources}
+    effective_kept = manifest_kept if manifest and sum(manifest_kept.values()) > 0 else kept
+    sources = sorted(effective_kept.keys() | filtered_by_source.keys())
+    identified = {s: effective_kept[s] + filtered_by_source[s] for s in sources}
 
     reasons = _discard_reasons(discard_file)
     # The manifest count is authoritative; the file gives the reasons.
@@ -109,7 +113,7 @@ def build_flow(
             for (i, _coder), d in decisions.items()
             if i == item_id and d.decision == "exclude"
             for c in d.criteria_met
-            if c.upper().startswith("E")
+            if isinstance(c, str) and c.upper().startswith("E")
         }
         for c in sorted(marked) or ["other (reason given)"]:
             excl_reasons[c] += 1
@@ -166,11 +170,37 @@ def render_markdown(flow: PrismaFlow) -> str:
     return "\n".join(lines)
 
 
+def _latex_escape(text: str) -> str:
+    """Escape LaTeX special characters for safe rendering in TikZ nodes."""
+    specials = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    res = text.replace("\\", specials["\\"])
+    for char, replacement in specials.items():
+        if char != "\\":
+            res = res.replace(char, replacement)
+    return res
+
+
+def _mermaid_escape(text: str) -> str:
+    """Sanitize strings for Mermaid node text by replacing double quotes."""
+    return text.replace('"', "'")
+
+
 def render_mermaid(flow: PrismaFlow) -> str:
     dup = "n/a" if flow.duplicates is None else str(sum(flow.duplicates.values()))
     filtered = sum(flow.filtered.values())
-    per_source = "<br/>".join(f"{s}: {n}" for s, n in flow.identified.items())
-    excl = "<br/>".join(f"{r}: {n}" for r, n in flow.exclusion_reasons.items())
+    per_source = "<br/>".join(f"{_mermaid_escape(s)}: {n}" for s, n in flow.identified.items())
+    excl = "<br/>".join(f"{_mermaid_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items())
     return "\n".join(
         [
             "flowchart TD",
@@ -187,3 +217,73 @@ def render_mermaid(flow: PrismaFlow) -> str:
             "  C --> F",
         ]
     )
+
+
+def render_tikz(flow: PrismaFlow) -> str:
+    """Render PRISMA 2020 flow diagram as a standalone LaTeX TikZ snippet."""
+    dup = "n/a" if flow.duplicates is None else str(sum(flow.duplicates.values()))
+    filtered = sum(flow.filtered.values())
+    per_source = ", ".join(f"{_latex_escape(s)}: {n}" for s, n in flow.identified.items())
+    excl_reasons = (
+        ", ".join(f"{_latex_escape(r)}: {n}" for r, n in flow.exclusion_reasons.items())
+        or "critérios E1--E6"
+    )
+
+    box_style = (
+        r"  box/.style={rectangle, draw=black, thick, fill=gray!5, "
+        r"text width=6.2cm, align=left, minimum height=1.1cm, inner sep=5pt, font=\small},"
+    )
+    sidebox_style = (
+        r"  sidebox/.style={rectangle, draw=black!80, dashed, fill=gray!10, "
+        r"text width=5.0cm, align=left, minimum height=1.1cm, inner sep=5pt, font=\footnotesize},"
+    )
+    ident_text = (
+        rf"\node[box] (ident) {{\textbf{{Identificação}}\\"
+        rf"Registros identificados: {flow.total_identified}\\\scriptsize {per_source}}};"
+    )
+    rem_text = (
+        rf"\node[sidebox, right=of ident] (rem) {{\textbf{{Removidos pré-triagem}}\\"
+        rf"Filtros locais: {filtered}\\Duplicatas: {dup}}};"
+    )
+    screen_text = (
+        rf"\node[box, below=of ident] (screen) {{\textbf{{Triagem}}\\"
+        rf"Registros triados: {flow.screened}}};"
+    )
+    excl_text = (
+        rf"\node[sidebox, right=of screen] (excl) {{\textbf{{Excluídos}}\\"
+        rf"Total: {flow.excluded}\\\scriptsize {excl_reasons}}};"
+    )
+    inc_text = (
+        rf"\node[box, below=of screen] (inc) {{\textbf{{Incluídos no Estudo}}\\"
+        rf"Registros incluídos: {flow.included}\\Extração/Codificação: {flow.coded}}};"
+    )
+
+    lines = [
+        r"% PRISMA 2020 Flow Diagram - Auto-generated by MSR-Kit",
+        r"\begin{tikzpicture}[",
+        r"  node distance=1.4cm and 1.2cm,",
+        box_style,
+        sidebox_style,
+        r"  arrow/.style={-latex, thick, draw=black!80}",
+        r"]",
+        r"",
+        r"% Identificação",
+        ident_text,
+        rem_text,
+        r"",
+        r"% Triagem",
+        screen_text,
+        excl_text,
+        r"",
+        r"% Incluídos",
+        inc_text,
+        r"",
+        r"% Conexões",
+        r"\draw[arrow] (ident) -- (rem);",
+        r"\draw[arrow] (ident) -- (screen);",
+        r"\draw[arrow] (screen) -- (excl);",
+        r"\draw[arrow] (screen) -- (inc);",
+        r"",
+        r"\end{tikzpicture}",
+    ]
+    return "\n".join(lines)

@@ -238,6 +238,13 @@ class SourcePolicy(BaseModel):
     tos_url: str
     docs_url: str
     notes: str = ""
+    # Distinção metodológica vs. técnica de API (§6.1 Protocolo E2 e docs/sources.md)
+    has_official_api: bool = True
+    official_api_name: str = ""
+    # Categories: methodological, access_gated, commercial_paywall,
+    # no_public_api, private_enclave
+    exclusion_category: str | None = None
+    exclusion_rationale: str = ""
 
 
 # ---------------------------------------------------------------------------

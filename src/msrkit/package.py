@@ -94,9 +94,10 @@ class PackageBuilder:
         if transform is None:
             self.add_bytes(arcname, path.read_bytes())
         else:
-            lines = path.read_text(encoding="utf-8").splitlines()
-            text = "\n".join(transform(ln) for ln in lines if ln.strip())
-            self.add_bytes(arcname, (text + "\n").encode("utf-8"))
+            with open(path, encoding="utf-8-sig") as f:
+                lines = [transform(ln.strip()) for ln in f if ln.strip()]
+            text = "\n".join(lines)
+            self.add_bytes(arcname, (text + "\n" if text else "").encode("utf-8"))
         return True
 
     def add_tree(self, prefix: str, root: Path) -> int:
@@ -207,7 +208,10 @@ def build_package(
                    ensure_ascii=False)
         for it in items
     ]  # fmt: skip
-    b.add_bytes("corpus/items.jsonl", ("\n".join(lines) + "\n").encode("utf-8"))
+    b.add_bytes(
+        "corpus/items.jsonl",
+        (("\n".join(lines) + "\n") if lines else "").encode("utf-8"),
+    )
     b.add_file("corpus/dedupe_report.json", data_dir / "items" / run_id / "dedupe_report.json")
 
     b.add_file(
@@ -215,10 +219,34 @@ def build_package(
         data_dir / "enrich" / run_id / "github_repos.jsonl",
         transform=_strip_repo_contents,
     )
-    b.add_file("evidence/detections.jsonl", data_dir / "extract" / run_id / "detections.jsonl")
+    det_file = data_dir / "extract" / run_id / "detections.jsonl"
+    if not b.add_file("evidence/detections.jsonl", det_file):
+        from msrkit.cli._common import _load_detections
 
-    b.add_file("review/decisions.jsonl", data_dir / "screening" / run_id / "decisions.jsonl")
-    for name in ("codings.jsonl", "double_sample.json", "agreement.json", "disagreements.csv"):
+        dets = _load_detections(run_id)
+        if dets:
+            lines = [d.model_dump_json() for d in dets]
+            b.add_bytes("evidence/detections.jsonl", ("\n".join(lines) + "\n").encode("utf-8"))
+
+    dec_file = data_dir / "screening" / run_id / "decisions.jsonl"
+    if not b.add_file("review/decisions.jsonl", dec_file):
+        from msrkit.screening import load_decisions
+
+        decisions = load_decisions(data_dir, run_id)
+        if decisions:
+            lines = [d.model_dump_json() for d in decisions.values()]
+            b.add_bytes("review/decisions.jsonl", ("\n".join(lines) + "\n").encode("utf-8"))
+
+    coding_file = data_dir / "coding" / run_id / "codings.jsonl"
+    if not b.add_file("review/codings.jsonl", coding_file):
+        from msrkit.coding import load_codings
+
+        codings = load_codings(data_dir, run_id)
+        if codings:
+            lines = [r.model_dump_json() for r in codings.values()]
+            b.add_bytes("review/codings.jsonl", ("\n".join(lines) + "\n").encode("utf-8"))
+
+    for name in ("double_sample.json", "agreement.json", "disagreements.csv"):
         b.add_file(f"review/{name}", data_dir / "coding" / run_id / name)
 
     if gold is not None:

@@ -67,6 +67,8 @@ class RSSAdapter(BaseAdapter):
             "No historical coverage. Manifest must record truncated=true "
             "and historical_coverage=false."
         ),
+        has_official_api=True,
+        official_api_name="Feeds Públicos RSS/Atom",
     )
 
     def available(self) -> Availability:
@@ -88,7 +90,7 @@ class RSSAdapter(BaseAdapter):
         import feedparser
 
         feeds = q.extra.get("feeds", [])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -132,12 +134,27 @@ class RSSAdapter(BaseAdapter):
                 # Filter by terms if specified (RSS feeds lack server-side full-text search)
                 title_val = entry.get("title", "")
                 summary_val = entry.get("summary", "")
+                content_val = ""
+                raw_contents = entry.get("content")
+                if isinstance(raw_contents, list) and raw_contents:
+                    first_content = raw_contents[0]
+                    if isinstance(first_content, dict):
+                        raw_html = first_content.get("value", "")
+                        if raw_html:
+                            from msrkit.fulltext import html_to_text
+
+                            try:
+                                _, content_val = html_to_text(raw_html)
+                            except Exception:
+                                content_val = raw_html
+
+                full_text = content_val or summary_val
                 entry_tags = [
                     t.get("term", "") if isinstance(t, dict) else str(t)
                     for t in (entry.get("tags") or [])
                 ]
                 if q.terms and not match_terms(
-                    q.terms, title=title_val, body=summary_val, tags=entry_tags
+                    q.terms, title=title_val, body=full_text, tags=entry_tags
                 ):
                     self._record_discard(
                         entry_id, title_val, entry.get("link", ""), "no_term_match"
@@ -149,6 +166,7 @@ class RSSAdapter(BaseAdapter):
                     "title": title_val,
                     "link": entry.get("link", ""),
                     "summary": summary_val,
+                    "content": content_val,
                     "published": published_val,
                     "author": entry.get("author", ""),
                     "tags": entry_tags,
@@ -179,8 +197,16 @@ class RSSAdapter(BaseAdapter):
         if isinstance(tags, str):
             tags = [tags]
 
-        matched = match_terms(terms or [], title=p.get("title"), body=p.get("summary"), tags=tags)
-        url = p.get("link") or p.get("feed_url") or f"https://feed.local/{raw.native_id}"
+        body = p.get("content") or p.get("summary") or None
+        matched = match_terms(terms or [], title=p.get("title"), body=body, tags=tags)
+        raw_link = p.get("link")
+        raw_feed = p.get("feed_url")
+        if raw_link and str(raw_link).startswith(("http://", "https://")):
+            url = str(raw_link)
+        elif raw_feed and str(raw_feed).startswith(("http://", "https://")):
+            url = str(raw_feed)
+        else:
+            url = f"https://feed.local/{raw.native_id or 'entry'}"
 
         return Item(
             id=Item.make_id(self.name, str(raw.native_id)),
@@ -188,7 +214,7 @@ class RSSAdapter(BaseAdapter):
             kind=ItemKind.ARTICLE,
             url=url,  # type: ignore[arg-type]
             title=p.get("title"),
-            body=None,  # metadata_only
+            body=body,
             author_handle=p.get("author"),
             created_at=created_at,
             engagement=Engagement(),

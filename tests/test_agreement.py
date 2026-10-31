@@ -174,6 +174,119 @@ class TestAgreementCommands:
         with open(tmp_path / "coding/run-k/disagreements.csv", encoding="utf-8-sig") as fh:
             rows = list(csv.DictReader(fh, delimiter=";"))
         assert rows == [
-            {"item_id": target, "dimension": "nivel_evidencia", "coder_a": "ana",
-             "value_a": "N1", "coder_b": "bia", "value_b": "N2"}
-        ]  # fmt: skip
+            {
+                "item_id": target,
+                "dimension": "nivel_evidencia",
+                "coder_a": "ana",
+                "value_a": "N1",
+                "coder_b": "bia",
+                "value_b": "N2",
+                "consensus_value": "",
+                "resolved_by": "",
+                "reason": "",
+            }
+        ]
+
+        # Fill resolution and apply with `msrkit resolve`
+        dis_path = tmp_path / "coding/run-k/disagreements.csv"
+        header = (
+            "item_id;dimension;coder_a;value_a;coder_b;value_b;consensus_value;resolved_by;reason\n"
+        )
+        dis_path.write_text(
+            f"{header}"
+            f"{target};nivel_evidencia;ana;N1;bia;N2;N2;terceiro;evidencia mais forte\n"
+            f"{target};screening;ana;include;bia;exclude;include;consenso;escopo validado\n",
+            encoding="utf-8-sig",
+        )
+        r = runner.invoke(app, ["resolve", "--run", "run-k"])
+        assert r.exit_code == 0, r.stdout
+        assert "1 item(ns) de triagem" in r.stdout
+
+        from msrkit.analysis import consensus as compute_consensus
+        from msrkit.coding import load_codings
+        from msrkit.screening import final_decisions, load_decisions
+
+        latest_dec = load_decisions(tmp_path, "run-k")
+        assert final_decisions(latest_dec)[target] == "include"
+
+        latest_cod = load_codings(tmp_path, "run-k")
+        recs = [rec for (it, _c), rec in latest_cod.items() if it == target]
+        res_values = compute_consensus(recs)
+        assert res_values.get("nivel_evidencia") == "N2"
+
+    def test_agreement_excludes_fuzzy_consensus_coders(self) -> None:
+        decisions = {
+            ("i1", "ana"): ScreeningDecision(
+                item_id="i1",
+                coder="ana",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+            ("i1", "bia"): ScreeningDecision(
+                item_id="i1",
+                coder="bia",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+            ("i1", "supervisor_carlos"): ScreeningDecision(
+                item_id="i1",
+                coder="supervisor_carlos",
+                decision="include",
+                decided_at="t",
+                sheet_sha256="h",
+            ),
+        }
+        res = agreement(FORM, codings={}, decisions=decisions)
+        assert len(res) == 1
+        assert res[0].coders == ("ana", "bia")
+
+    def test_multi_field_agreement_with_scalar_strings_and_semicolons(self) -> None:
+        codings = {
+            ("i1", "ana"): _rec("i1", "ana", modos="FP1; AF1"),
+            ("i1", "bia"): _rec("i1", "bia", modos=["FP1", "AF1"]),
+            ("i2", "ana"): _rec("i2", "ana", modos="FP1"),
+            ("i2", "bia"): _rec("i2", "bia", modos=["FP1"]),
+        }
+        res = agreement(FORM, codings=codings, dimensions=["modos"])
+        assert len(res) == 1
+        pair = res[0]
+        assert pair.dimension == "modos"
+        assert pair.percent == 1.0
+        assert set(pair.per_value.keys()) == {"FP1", "AF1"}
+        assert len(pair.disagreements) == 0
+
+    def test_double_sample_distinct_ids(self) -> None:
+        items = [_item(1), _item(1), _item(2), _item(3)]
+        sample = double_sample(items, rate=0.5, seed=42)
+        assert len(sample) == len(set(sample))
+
+    def test_resolve_multi_field_and_schema_validation(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        target = "item-schema"
+        dis_path = tmp_path / "coding/run-s/disagreements.csv"
+        dis_path.parent.mkdir(parents=True, exist_ok=True)
+        header = (
+            "item_id;dimension;coder_a;value_a;coder_b;value_b;consensus_value;resolved_by;reason\n"
+        )
+        dis_path.write_text(
+            f"{header}"
+            f"{target};sistema;ana;rag;bia;agente;rag;consenso;foco em busca\n"
+            f"{target};modos_falha;ana;FP1;bia;FP2;FP1, FP2;consenso;ambos ocorreram\n"
+            f"{target};nivel_evidencia;ana;N1;bia;N2;INVALIDO;consenso;teste invalido\n",
+            encoding="utf-8-sig",
+        )
+        runner = CliRunner()
+        r = runner.invoke(app, ["resolve", "--run", "run-s"])
+        assert r.exit_code == 0, r.stdout
+        assert "nivel_evidencia has unknown value 'INVALIDO'" in r.stdout
+
+        from msrkit.coding import load_codings
+
+        latest_cod = load_codings(tmp_path, "run-s")
+        assert (target, "consenso") in latest_cod
+        rec = latest_cod[(target, "consenso")]
+        assert rec.values["sistema"] == ["rag"]
+        assert rec.values["modos_falha"] == ["FP1", "FP2"]
+        assert "nivel_evidencia" not in rec.values

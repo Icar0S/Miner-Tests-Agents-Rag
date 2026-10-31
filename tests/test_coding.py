@@ -233,3 +233,20 @@ class TestCodingCommands:
         assert "Coded items: 1 · double-coded: 0" in r.stdout
         r = runner.invoke(app, [*args, "-o", str(tmp_path / "next.csv")])
         assert "0 items written" in r.stdout
+
+
+def test_import_multi_field_semicolon_and_pipe_separators(tmp_path: Path) -> None:
+    sheet = tmp_path / "sheet.csv"
+    export_form([_item(0)], FORM, sheet, coder="coder1")
+    _fill(
+        sheet,
+        {
+            "it0": {
+                "sistema": "rag; agente",
+                "evidencia_textual": "tested",
+            }
+        },
+    )
+    records = import_form(sheet, FORM, {"it0"}, GAZ)
+    assert len(records) == 1
+    assert set(records[0].values["sistema"]) == {"rag", "agente"}

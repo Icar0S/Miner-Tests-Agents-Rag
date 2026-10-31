@@ -1076,3 +1076,72 @@ def test_module_entry_point_runs() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "msrkit" in result.stdout
+
+
+def test_extract_preserves_existing_detections_on_stripped_signals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """msrkit extract does not clobber detections if signals are stripped, unless --force."""
+    import json
+    from datetime import UTC, datetime
+
+    from typer.testing import CliRunner
+
+    from msrkit.cli import app
+    from msrkit.models import Item, ItemKind, Provenance
+    from msrkit.storage import ItemStorage
+
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+    runner = CliRunner()
+    run_id = "run-test-extract-guard"
+
+    item = Item(
+        id="it1",
+        source="github",
+        kind=ItemKind.REPO,
+        url="https://github.com/acme/plain",
+        provenance=Provenance(
+            run_id=run_id,
+            query_string="q",
+            partition="p",
+            adapter="github",
+            adapter_version="1",
+            fetched_at=datetime.now(UTC),
+            response_sha256="",
+            raw_ref="",
+        ),
+    )
+    storage = ItemStorage(tmp_path)
+    storage.save_items([item], run_id)
+
+    enrich_dir = tmp_path / "enrich" / run_id
+    enrich_dir.mkdir(parents=True, exist_ok=True)
+    stripped_sig = {
+        "repo": "acme/plain",
+        "workflows": [".github/workflows/ci.yml"],
+        "manifests": ["requirements.txt"],
+    }
+    (enrich_dir / "github_repos.jsonl").write_text(
+        json.dumps(stripped_sig) + "\n", encoding="utf-8"
+    )
+
+    extract_dir = tmp_path / "extract" / run_id
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    det_file = extract_dir / "detections.jsonl"
+    fake_dets = (
+        "\n".join(
+            [f'{{"item_id": "it{i}", "entry_id": "tool", "signal": "doc"}}' for i in range(5)]
+        )
+        + "\n"
+    )
+    det_file.write_text(fake_dets, encoding="utf-8")
+
+    res = runner.invoke(app, ["extract", "--run", run_id])
+    assert res.exit_code == 0
+    assert "Preserving existing" in res.stdout
+    assert len(det_file.read_text(encoding="utf-8").strip().splitlines()) == 5
+
+    res_force = runner.invoke(app, ["extract", "--run", run_id, "--force"])
+    assert res_force.exit_code == 0
+    assert "Preserving existing" not in res_force.stdout
+    assert len(det_file.read_text(encoding="utf-8").strip().splitlines()) == 0

@@ -19,7 +19,7 @@ app = typer.Typer(
     name="msrkit",
     help="MSR-Kit: Mining grey literature through official APIs.",
     epilog="💡 Dica: Digite 'msrkit menu' para navegar de forma interativa com menu visual.",
-    no_args_is_help=True,
+    no_args_is_help=False,
 )
 console = Console()
 
@@ -35,13 +35,13 @@ def _get_latest_run_id() -> str | None:
     """Find the most recent run ID in _cli.DATA_DIR/runs or _cli.DATA_DIR/items."""
     runs_dir = _cli.DATA_DIR / "runs"
     if runs_dir.exists():
-        subdirs = [p for p in runs_dir.iterdir() if p.is_dir()]
+        subdirs = [p for p in runs_dir.iterdir() if p.is_dir() and p.name != "consolidated"]
         if subdirs:
             return max(subdirs, key=lambda p: p.stat().st_mtime).name
 
     items_dir = _cli.DATA_DIR / "items"
     if items_dir.exists():
-        subdirs = [p for p in items_dir.iterdir() if p.is_dir()]
+        subdirs = [p for p in items_dir.iterdir() if p.is_dir() and p.name != "consolidated"]
         if subdirs:
             return max(subdirs, key=lambda p: p.stat().st_mtime).name
 
@@ -106,6 +106,8 @@ def _load_run_protocol(run_id: str, protocol: str | None) -> Any:
 
         with contextlib.suppress(FileNotFoundError):
             path = load_manifest(_cli.DATA_DIR, run_id).protocol_path
+    if not path and Path(DEFAULT_PROTOCOL).exists():
+        path = DEFAULT_PROTOCOL
     if path and Path(path).exists():
         return load_protocol(path)
     return None
@@ -114,13 +116,33 @@ def _load_run_protocol(run_id: str, protocol: str | None) -> Any:
 def _load_repo_signals(run_id: str) -> dict[str, Any]:
     from msrkit.enrich import RepoSignals
 
-    path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     signals: dict[str, Any] = {}
+    if run_id == "consolidated":
+        enrich_dir = _cli.DATA_DIR / "enrich"
+        if enrich_dir.exists():
+            for p in enrich_dir.glob("*/github_repos.jsonl"):
+                if p.parent.name != "consolidated":
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                sig = RepoSignals.model_validate_json(line_s)
+                                signals[sig.repo] = sig
+        path = _cli.DATA_DIR / "enrich" / "consolidated" / "github_repos.jsonl"
+        if path.exists():
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        sig = RepoSignals.model_validate_json(line_s)
+                        signals[sig.repo] = sig
+        return signals
+
+    path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                sig = RepoSignals.model_validate_json(line)
-                signals[sig.repo] = sig
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    sig = RepoSignals.model_validate_json(line_s)
+                    signals[sig.repo] = sig
     return signals
 
 
@@ -142,17 +164,67 @@ def _screening_criteria(run_id: str, protocol: str | None) -> Any:
 def _load_detections(run_id: str) -> list[Any]:
     from msrkit.extract import Detection
 
+    if run_id == "consolidated":
+        all_dets: list[Any] = []
+        extract_dir = _cli.DATA_DIR / "extract"
+        if extract_dir.exists():
+            for p in extract_dir.glob("*/detections.jsonl"):
+                if p.parent.name != "consolidated":
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                all_dets.append(Detection.model_validate_json(line_s))
+        path = _cli.DATA_DIR / "extract" / "consolidated" / "detections.jsonl"
+        if path.exists():
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        all_dets.append(Detection.model_validate_json(line_s))
+        seen: set[tuple[str, str, str, str]] = set()
+        deduped_dets = []
+        for d in all_dets:
+            key = (d.item_id, d.entry_id, d.signal, d.location)
+            if key not in seen:
+                seen.add(key)
+                deduped_dets.append(d)
+        return deduped_dets
+
     path = _cli.DATA_DIR / "extract" / run_id / "detections.jsonl"
-    if not path.exists():
-        return []
-    return [
-        Detection.model_validate_json(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    if path.exists():
+        with open(path, encoding="utf-8-sig") as f:
+            return [Detection.model_validate_json(line_s) for line in f if (line_s := line.strip())]
+    return []
 
 
 def _cell(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(value)
     return "" if value is None else str(value)
+
+
+def is_valid_coder_name(coder: str) -> tuple[bool, str]:
+    """Validate that a coder identifier is safe across filesystems and protocols."""
+    import re
+
+    cleaned = coder.strip()
+    if not cleaned:
+        return False, "O nome não pode estar em branco."
+    if len(cleaned) > 50:
+        return False, "O nome deve ter no máximo 50 caracteres."
+    if cleaned.startswith((".", "-")) or cleaned.endswith("."):
+        return False, "O nome não pode iniciar com '.' ou '-' nem terminar com '.'."
+    if re.search(r'[\\/:*?"<>|\s]', cleaned):
+        return False, 'Não são permitidos espaços, barras ou caracteres especiais (\\/:*?"<>|).'
+    reserved = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+    if cleaned.upper() in reserved:
+        return False, f"'{cleaned}' é um nome reservado do sistema operacional."
+    if not re.match(r"^[\w\-\.]+$", cleaned, flags=re.ASCII):
+        return False, "Use apenas caracteres alfanuméricos ASCII, sublinhado (_) ou hífen (-)."
+    return True, ""

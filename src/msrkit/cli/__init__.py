@@ -24,7 +24,13 @@ from pathlib import Path
 import typer
 
 from msrkit import __version__
-from msrkit.cli._common import DEFAULT_PROTOCOL, PROJECT_ROOT, app, console
+from msrkit.cli._common import (
+    DEFAULT_PROTOCOL,
+    PROJECT_ROOT,
+    app,
+    console,
+    is_valid_coder_name,
+)
 
 __all__ = [
     "DATA_DIR",
@@ -34,6 +40,7 @@ __all__ = [
     "_tag_concepts",
     "_tag_term_languages",
     "_toggle_source_in_protocol",
+    "is_valid_coder_name",
 ]
 
 # Ensure UTF-8 output on Windows consoles to avoid charmap encoding errors
@@ -55,8 +62,9 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         None,
         "--version",
@@ -69,8 +77,28 @@ def main(
     """MSR-Kit: Mining grey literature through official APIs."""
     from msrkit.envfile import load_dotenv
 
-    # Search parameters and credentials from ./.env (existing variables win).
-    load_dotenv(Path(".env"))
+    # Search parameters and credentials from ./.env or PROJECT_ROOT/.env (existing variables win).
+    env_path = Path(".env") if Path(".env").exists() else (PROJECT_ROOT / ".env")
+    load_dotenv(env_path)
+
+    if ctx.invoked_subcommand is None:
+        import os
+        import sys
+
+        is_interactive = (
+            sys.stdin
+            and sys.stdin.isatty()
+            and sys.stdout
+            and sys.stdout.isatty()
+            and not os.environ.get("CI")
+        )
+
+        if is_interactive:
+            from msrkit.cli.menu import menu
+
+            menu()
+        else:
+            console.print(ctx.get_help())
 
 
 # Register the commands (order = order in --help). Imported last: the command

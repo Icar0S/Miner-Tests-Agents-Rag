@@ -46,17 +46,23 @@ _TRACKING_PARAMS = {
 def canonicalize_url(url: str) -> str:
     """Canonicalize a URL for deduplication.
 
-    - Lowercase the scheme and host
+    - Normalize scheme to https (http -> https)
+    - Lowercase the scheme and host, stripping 'www.'
     - Remove tracking parameters (utm_*, ref, source, etc.)
     - Remove trailing slash (except for root paths)
+    - Strip '.git' from repository URLs (GitHub, GitLab, HuggingFace)
     - Sort remaining query parameters
     """
     parsed = urlparse(url)
 
-    # Lowercase scheme and host
+    # Normalize scheme (http -> https) and lowercase host
     scheme = parsed.scheme.lower()
+    if scheme == "http":
+        scheme = "https"
     host = parsed.hostname or ""
     host = host.lower()
+    if host.startswith("www."):
+        host = host[4:]
     port = f":{parsed.port}" if parsed.port and parsed.port not in (80, 443) else ""
 
     # Clean query parameters
@@ -70,6 +76,22 @@ def canonicalize_url(url: str) -> str:
         path = "/"
     elif path != "/" and path.endswith("/"):
         path = path.rstrip("/")
+
+    # Strip .git suffix and lowercase owner/repo for git forge repositories
+    git_forges = ("github.com", "gitlab.com", "huggingface.co")
+    if host in git_forges:
+        if path.endswith(".git"):
+            path = path[:-4]
+        parts = path.split("/")
+        if len(parts) >= 3:
+            if host == "huggingface.co" and parts[1].lower() in ("datasets", "spaces", "models"):
+                if len(parts) >= 4:
+                    parts[2] = parts[2].lower()
+                    parts[3] = parts[3].lower()
+            else:
+                parts[1] = parts[1].lower()
+                parts[2] = parts[2].lower()
+            path = "/".join(parts)
 
     return urlunparse((scheme, f"{host}{port}", path, "", sorted_query, ""))
 
@@ -127,28 +149,47 @@ class DedupeReport(BaseModel):
     duplicates: list[Any]
     # duplicate item id -> "url" | "content" | "near:<similarity>:<kept item id>"
     reasons: dict[str, str] = {}
+    duplicate_reasons: list[str] = []
 
     def counts(self) -> dict[str, int]:
         out = {"url": 0, "content": 0, "near": 0}
-        for reason in self.reasons.values():
-            out[reason.split(":", 1)[0]] += 1
+        source = self.duplicate_reasons if self.duplicate_reasons else list(self.reasons.values())
+        for reason in source:
+            kind = reason.split(":", 1)[0]
+            if kind in out:
+                out[kind] += 1
+            else:
+                out[kind] = 1
         return out
 
 
 def deduplicate_report(items: list[Item], near_threshold: float | None = 0.85) -> DedupeReport:
     """Three-pass deduplication; `near_threshold=None` disables pass 3."""
     unique, duplicates = _exact_passes(items)
-    reasons = {d.id: r for d, r in duplicates}
-    dups = [d for d, _ in duplicates]
+    reasons: dict[str, str] = {}
+    dup_reasons_list: list[str] = []
+    dups: list[Item] = []
+    for d, r in duplicates:
+        dups.append(d)
+        reasons[d.id] = r
+        dup_reasons_list.append(r)
+
     if near_threshold is not None:
         unique, near = _near_pass(unique, near_threshold)
         for item, reason in near:
             dups.append(item)
             reasons[item.id] = reason
+            dup_reasons_list.append(reason)
+
     logger.info(
         "Deduplication: %d input → %d unique + %d duplicates", len(items), len(unique), len(dups)
     )
-    return DedupeReport(unique=unique, duplicates=dups, reasons=reasons)
+    return DedupeReport(
+        unique=unique,
+        duplicates=dups,
+        reasons=reasons,
+        duplicate_reasons=dup_reasons_list,
+    )
 
 
 def _near_pass(items: list[Item], threshold: float) -> tuple[list[Item], list[tuple[Item, str]]]:

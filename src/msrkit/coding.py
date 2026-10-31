@@ -25,6 +25,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 import unicodedata
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -36,6 +37,7 @@ from msrkit.extract import LEVEL_RANK
 from msrkit.screening import DELIMITER, TRUE_MARKS, SheetError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from msrkit.extract import Detection
@@ -121,6 +123,20 @@ class CodingRecord(BaseModel):
     notes: str = ""
     coded_at: str
     sheet_sha256: str
+
+
+class CodingRecordList(list["CodingRecord"]):
+    """List of coding records with audit metadata on skipped rows."""
+
+    skipped: list[str] = []
+
+    def __init__(
+        self,
+        iterable: Sequence[CodingRecord] = (),
+        skipped: list[str] | None = None,
+    ) -> None:
+        super().__init__(iterable)
+        self.skipped = skipped or []
 
 
 # -- automatic suggestions --------------------------------------------------
@@ -219,10 +235,10 @@ def _parse(
     field: CodingField, raw: str, allowed: list[str], problems: list[str], where: str
 ) -> Any:
     text = raw.strip()
+    if not text:
+        return [] if field.type == "multi" else None
     if field.type == "bool":
         folded = _fold(text)
-        if not folded:
-            return None
         if folded in TRUE_MARKS:
             return True
         if folded in FALSE_MARKS:
@@ -232,11 +248,15 @@ def _parse(
     if field.type == "text":
         if field.max_length and len(text) > field.max_length:
             problems.append(f"{where}: {field.name} longer than {field.max_length} characters")
-        return text or None
+        return text
     folded_allowed = {_fold(v): v for v in allowed}
-    parts = [text] if field.type == "enum" else text.replace("|", ",").split(",")
+    parts = (
+        [text]
+        if field.type == "enum"
+        else [p.strip() for p in re.split(r"[,;|]", text) if p.strip()]
+    )
     values: list[str] = []
-    for part in (p.strip() for p in parts):
+    for part in parts:
         if not part:
             continue
         match = folded_allowed.get(_fold(part))
@@ -255,7 +275,7 @@ def import_form(
     known_ids: set[str],
     gazetteer: Gazetteer | None = None,
     default_coder: str = "",
-) -> list[CodingRecord]:
+) -> CodingRecordList:
     """Parse and validate a filled coding sheet. Rows with no field filled are skipped.
 
     Raises SheetError listing every invalid row, so nothing is half-imported.
@@ -263,17 +283,22 @@ def import_form(
     raw = path.read_bytes()
     sheet_hash = hashlib.sha256(raw).hexdigest()
     text = raw.decode("utf-8-sig")
+    import io
+
     delim = DELIMITER if text.split("\n", 1)[0].count(DELIMITER) else ","
-    reader = csv.DictReader(text.splitlines(), delimiter=delim)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
     allowed = {f.name: form.allowed(f, gazetteer) for f in form.fields}
 
     now = datetime.now(UTC).isoformat()
     records: list[CodingRecord] = []
     problems: list[str] = []
+    skipped: list[str] = []
     for line_no, row in enumerate(reader, start=2):
-        if not any((row.get(f.name) or "").strip() for f in form.fields):
-            continue
         item_id = (row.get("item_id") or "").strip()
+        if not any((row.get(f.name) or "").strip() for f in form.fields):
+            if item_id:
+                skipped.append(f"line {line_no} ({item_id})")
+            continue
         coder = (row.get("coder") or default_coder).strip()
         where = f"line {line_no} ({item_id or 'no item_id'})"
         if item_id not in known_ids:
@@ -299,8 +324,8 @@ def import_form(
             )
         )
     if problems:
-        raise SheetError(problems)
-    return records
+        raise SheetError(problems, sheet_name="extraction sheet")
+    return CodingRecordList(records, skipped=skipped)
 
 
 def codings_path(data_dir: Path, run_id: str) -> Path:
@@ -318,11 +343,31 @@ def append_codings(data_dir: Path, run_id: str, records: list[CodingRecord]) -> 
 
 def load_codings(data_dir: Path, run_id: str) -> dict[tuple[str, str], CodingRecord]:
     """Latest coding per (item_id, coder)."""
-    path = codings_path(data_dir, run_id)
     latest: dict[tuple[str, str], CodingRecord] = {}
+    if run_id == "consolidated":
+        coding_dir = data_dir / "coding"
+        if coding_dir.exists():
+            for p in coding_dir.glob("*/codings.jsonl"):
+                if p.parent.name != "consolidated":
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                r = CodingRecord.model_validate(json.loads(line_s))
+                                latest[(r.item_id, r.coder)] = r
+        path = codings_path(data_dir, "consolidated")
+        if path.exists():
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        r = CodingRecord.model_validate(json.loads(line_s))
+                        latest[(r.item_id, r.coder)] = r
+        return latest
+
+    path = codings_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                r = CodingRecord.model_validate(json.loads(line))
-                latest[(r.item_id, r.coder)] = r
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    r = CodingRecord.model_validate(json.loads(line_s))
+                    latest[(r.item_id, r.coder)] = r
     return latest

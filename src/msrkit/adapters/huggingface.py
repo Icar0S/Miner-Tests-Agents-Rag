@@ -67,6 +67,8 @@ class HuggingFaceAdapter(BaseAdapter):
         tos_url="https://huggingface.co/terms-of-service",
         docs_url="https://huggingface.co/docs/hub/api",
         notes="Search across models, datasets, and spaces. Auth optional but increases limits.",
+        has_official_api=True,
+        official_api_name="HuggingFace Hub API",
     )
 
     def _build_client(self) -> httpx.Client:
@@ -101,10 +103,16 @@ class HuggingFaceAdapter(BaseAdapter):
         """HF API does not provide result count estimates."""
         return None
 
+    def partition(self, q: Query) -> list[Query]:
+        """Split multi-term queries so each term runs as its own query."""
+        from msrkit.partition import split_by_term
+
+        return split_by_term(q)
+
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search models, datasets, and spaces."""
         kinds = q.extra.get("kinds", ["models", "datasets", "spaces"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -181,13 +189,14 @@ class HuggingFaceAdapter(BaseAdapter):
 
         native_key = f"{hf_kind}:{item_id}" if hf_kind != "models" else str(item_id)
 
+        desc = p.get("description")
         return Item(
             id=Item.make_id(self.name, native_key),
             source=self.name,
             kind=kind,
             url=url,  # type: ignore[arg-type]
             title=item_id,
-            body=None,
+            body=desc or None,
             author_handle=p.get("author"),
             created_at=created_at,
             updated_at=updated_at,

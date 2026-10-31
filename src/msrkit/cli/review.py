@@ -19,6 +19,7 @@ from msrkit.cli._common import (
     _unwrap,
     app,
     console,
+    is_valid_coder_name,
 )
 
 screen_app = typer.Typer(help="Screening sheets: export, import decisions, status (§8, §11).")
@@ -37,41 +38,68 @@ def screen_export(
         True, "--pending-only/--all", help="Skip items this coder already decided"
     ),
     order: str = typer.Option(
-        "relevance", "--order", help="relevance (fixed ranked batches) or collected"
+        "relevance", "--order", help="relevance (fixed ranked batches), collected or random"
     ),
     batch: list[int] = typer.Option(  # noqa: B008
         [], "--batch", "-b", help="Export only these batch numbers (repeatable)"
     ),
+    blind: bool = typer.Option(
+        False, "--blind", help="Mask score, terms, concepts and rank to prevent confirmation bias"
+    ),
+    seed: int = typer.Option(42, "--seed", help="Random seed when --order random is used"),
 ) -> None:
     """Write a screening sheet (CSV) with one column per eligibility criterion.
 
     By default items are ranked by relevance (matched terms, concepts, evidence
     level from `msrkit extract`, CI/tests) and cut into fixed batches over the
     whole run (§11), so batch numbers stay stable across coders and re-exports.
+    With --blind, automated scores, matched terms, and ranking are masked.
     """
+    import random
+
     from msrkit.screening import Ranked, export_sheet, load_decisions, rank_items
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
-    coder = _unwrap(coder)
+    coder = _unwrap(coder).strip()
+    if coder:
+        is_valid, reason = is_valid_coder_name(coder)
+        if not is_valid:
+            console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+            raise typer.Exit(1)
     order = _unwrap(order)
+    blind_val = _unwrap(blind)
+    if blind_val and order == "relevance":
+        console.print(
+            "[yellow]⚠ Modo cego ativado: ordenação por relevância forçada para 'random' "
+            "para evitar vazamento de ranking.[/yellow]"
+        )
+        order = "random"
     batches = set(_unwrap(batch) or [])
-    if order not in ("relevance", "collected"):
-        console.print("[red]✗ --order must be 'relevance' or 'collected'.[/red]")
+    if order not in ("relevance", "collected", "random"):
+        console.print("[red]✗ --order must be 'relevance', 'collected' or 'random'.[/red]")
         raise typer.Exit(1)
     criteria = _screening_criteria(run_id, _unwrap(protocol))
     items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
     detections = _load_detections(run_id) if order == "relevance" else []
-    ranking = (
-        rank_items(items, detections, criteria.batch_size)
-        if order == "relevance"
-        else {
+    if order == "relevance":
+        ranking = rank_items(items, detections, criteria.batch_size)
+    elif order == "random":
+        rng = random.Random(_unwrap(seed))
+        rng.shuffle(items)
+        ranking = {
             it.id: Ranked(
                 item_id=it.id, rank=i + 1, batch=i // max(criteria.batch_size, 1) + 1, score=0
             )
             for i, it in enumerate(items)
         }
-    )
+    else:
+        ranking = {
+            it.id: Ranked(
+                item_id=it.id, rank=i + 1, batch=i // max(criteria.batch_size, 1) + 1, score=0
+            )
+            for i, it in enumerate(items)
+        }
     if _unwrap(pending_only) and coder:
         done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder}
         items = [it for it in items if it.id not in done]
@@ -80,11 +108,12 @@ def screen_export(
     out = Path(
         _unwrap(output) or _cli.DATA_DIR / "screening" / run_id / f"sheet_{coder or 'blank'}.csv"
     )
-    n = export_sheet(items, criteria, out, coder=coder, ranking=ranking)
+    n = export_sheet(items, criteria, out, coder=coder, ranking=ranking, blind=_unwrap(blind))
     total_batches = max((r.batch for r in ranking.values()), default=0)
+    extra_info = f"order: {order}" + ("; blind: yes" if _unwrap(blind) else "")
     console.print(
         f"[green]✓ {n} items written to {out}[/green] "
-        f"(order: {order}; {total_batches} batches of {criteria.batch_size})"
+        f"({extra_info}; {total_batches} batches of {criteria.batch_size})"
     )
     if order == "relevance" and not detections:
         console.print(
@@ -115,6 +144,13 @@ def screen_import(
             console.print(f"  - {problem}")
         raise typer.Exit(1) from None
     path = append_decisions(_cli.DATA_DIR, run_id, decisions)
+    skipped = getattr(decisions, "skipped", [])
+    if skipped:
+        sample_str = ", ".join(skipped[:5]) + ("..." if len(skipped) > 5 else "")
+        console.print(
+            f"[yellow]⚠ {len(skipped)} linha(s) ignorada(s) por falta de decisão: "
+            f"{sample_str}[/yellow]"
+        )
     console.print(f"[green]✓ {len(decisions)} decisions recorded in {path}[/green]")
 
 
@@ -145,6 +181,317 @@ def screen_status(
     )
     console.print(table)
     console.print(f"Pending (no decision): {total - len(final)}")
+
+
+@screen_app.command("interactive")
+def screen_interactive(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
+    limit: int = typer.Option(
+        25, "--limit", "-l", help="Maximum number of items to screen in this session"
+    ),
+    blind: bool = typer.Option(
+        False,
+        "--blind",
+        help="Mask score, terms, signals and randomize order to prevent confirmation bias",
+    ),
+    seed: int = typer.Option(42, "--seed", help="Random seed when --blind is used"),
+) -> None:
+    """Screen items interactively in the terminal with colored highlighting and rapid keystrokes."""
+    from datetime import UTC, datetime
+
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+
+    from msrkit.screening import ScreeningDecision, append_decisions, load_decisions, rank_items
+    from msrkit.storage import ItemStorage
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
+
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    detections = _load_detections(run_id)
+    ranking = rank_items(items, detections, criteria.batch_size)
+
+    done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in items if it.id not in done]
+
+    target_batch = _unwrap(batch)
+    if target_batch is not None:
+        pending = [it for it in pending if ranking[it.id].batch == target_batch]
+
+    blind_val = _unwrap(blind)
+    if blind_val:
+        import random
+
+        rng = random.Random(_unwrap(seed))
+        rng.shuffle(pending)
+
+    if not pending:
+        console.print(
+            f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"
+        )
+        return
+
+    session_items = pending[:limit]
+    blind_tag = " [cyan](Modo Cego Ativado)[/cyan]" if blind_val else ""
+    console.print(
+        f"[bold green]Iniciando triagem interativa "
+        f"({len(session_items)} itens para {coder_str}){blind_tag}[/bold green]"
+    )
+    console.print(
+        "[dim]Comandos: [I]ncluir | [E]xcluir (E1-E6) | [U]ncertain | [S]kip | [Q]uit[/dim]\n"
+    )
+
+    recorded: list[ScreeningDecision] = []
+    now = datetime.now(UTC).isoformat()
+
+    for idx, it in enumerate(session_items, 1):
+        if not blind_val:
+            rk = ranking.get(it.id)
+            b_info = f"Batch {rk.batch} (Rank #{rk.rank}, Escore {rk.score:.1f})" if rk else ""
+            matched_str = (
+                ", ".join(t.term if hasattr(t, "term") else str(t) for t in it.matched_terms)
+                if it.matched_terms
+                else "nenhum"
+            )
+
+            info_lines = [
+                f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
+                f"[bold]URL:[/bold] {it.url}",
+                f"[bold]Termos casados:[/bold] [yellow]{matched_str}[/yellow]",
+            ]
+            tech_parts: list[str] = []
+            if it.engagement.stars is not None:
+                tech_parts.append(f"★ {it.engagement.stars} estrelas")
+            if it.engagement.forks is not None:
+                tech_parts.append(f"⑂ {it.engagement.forks} forks")
+            if it.tech.has_ci is not None:
+                ci_val = (
+                    "[green]CI/CD: [✓ Sim][/green]"
+                    if it.tech.has_ci
+                    else "[dim]CI/CD: [✗ Não][/dim]"
+                )
+                tech_parts.append(ci_val)
+            if it.tech.has_tests is not None:
+                tests_val = (
+                    "[green]Testes: [✓ Sim][/green]"
+                    if it.tech.has_tests
+                    else "[dim]Testes: [✗ Não][/dim]"
+                )
+                tech_parts.append(tests_val)
+            if it.tech.contributors is not None:
+                tech_parts.append(f"Contribuidores: {it.tech.contributors}")
+            if it.tech.active_months is not None:
+                tech_parts.append(f"Atividade: {it.tech.active_months}m")
+            if it.tech.tags:
+                tech_parts.append(f"Tags: [cyan]{', '.join(it.tech.tags[:5])}[/cyan]")
+            if tech_parts:
+                info_lines.append(f"[bold]Sinais de Código:[/bold] {' | '.join(tech_parts)}")
+        else:
+            b_info = "[bold cyan][Modo Cego — Scores e Sinais Ocultados][/bold cyan]"
+            info_lines = [
+                f"[bold]Fonte:[/bold] {it.source} ({it.kind.value})   [bold]ID:[/bold] {it.id}",
+                f"[bold]URL:[/bold] {it.url}",
+                "[dim][Termos casados, escores e popularidade ocultados para triagem cega][/dim]",
+            ]
+
+        if it.body:
+            preview = it.body[:600] + ("..." if len(it.body) > 600 else "")
+            info_lines.append(f"\n[dim]{preview}[/dim]")
+
+        title_str = (it.title or "Sem título")[:50]
+        panel = Panel(
+            "\n".join(info_lines),
+            title=f"[bold cyan]Item {idx}/{len(session_items)} — {title_str}[/bold cyan]",
+            subtitle=f"[dim]{b_info}[/dim]",
+            border_style="cyan",
+        )
+        console.print(panel)
+
+        prompt_label = (
+            "[bold white]Decisão[/bold white] "
+            "([green]I[/green]ncluir, [red]E[/red]xcluir, [yellow]U[/yellow]ncertain, "
+            "[dim]S[/dim]kip, [magenta]Q[/magenta]uit)"
+        )
+        choice = Prompt.ask(
+            prompt_label,
+            choices=["i", "e", "u", "s", "q", "I", "E", "U", "S", "Q"],
+            default="s",
+        ).lower()
+
+        if choice == "q":
+            console.print("[yellow]Sessão de triagem interrompida pelo usuário.[/yellow]")
+            break
+        elif choice == "s":
+            console.print("[dim]Item pulado.[/dim]\n")
+            continue
+        elif choice == "i":
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="include",
+                    criteria_met=["I1"],
+                    reason="Incluído via triagem interativa",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print("[green]✓ Marcado como INCLUÍDO.[/green]\n")
+        elif choice == "u":
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="uncertain",
+                    criteria_met=[],
+                    reason="Dúvida para terceiro avaliador",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print("[yellow]? Marcado como UNCERTAIN.[/yellow]\n")
+        elif choice == "e":
+            console.print(
+                "[dim]Critérios: 1=E1 (não é teste), 2=E2 (só modelo), 3=E3 (promo), "
+                "4=E4 (duplicata), 5=E5 (tutorial), 6=E6 (sem manutenção)[/dim]"
+            )
+            crit_choice = Prompt.ask(
+                "Motivo da exclusão (1-6 ou Enter para E1)", default="1"
+            ).strip()
+            clean_choice = crit_choice.upper().strip()
+            if clean_choice.startswith("E") and len(clean_choice) > 1:
+                clean_choice = clean_choice[1:]
+            crit_id = f"E{clean_choice}" if clean_choice in ("1", "2", "3", "4", "5", "6") else "E1"
+            recorded.append(
+                ScreeningDecision(
+                    item_id=it.id,
+                    coder=coder_str,
+                    decision="exclude",
+                    criteria_met=[crit_id],
+                    reason=f"Excluído por {crit_id}",
+                    decided_at=now,
+                    sheet_sha256="interactive_cli",
+                )
+            )
+            console.print(f"[red]✗ Marcado como EXCLUÍDO ({crit_id}).[/red]\n")
+
+    if recorded:
+        path = append_decisions(_cli.DATA_DIR, run_id, recorded)
+        console.print(
+            f"[bold green]✓ {len(recorded)} decisões gravadas com sucesso em "
+            f"{path.name}[/bold green]"
+        )
+        try:
+            from msrkit.cli.corpus import prisma
+
+            console.print("\n[bold cyan]Atualizando fluxo PRISMA 2020...[/bold cyan]")
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
+    else:
+        console.print("[dim]Nenhuma decisão registrada nesta sessão.[/dim]")
+
+
+@screen_app.command("tui")
+def screen_tui(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    batch: int | None = typer.Option(None, "--batch", "-b", help="Specific batch number to screen"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-l", help="Maximum items to load (default: all)"
+    ),
+) -> None:
+    """Launch full-screen Textual TUI for interactive screening with keyboard shortcuts."""
+    from rich.prompt import Prompt
+
+    from msrkit.screening import load_decisions, rank_items
+    from msrkit.storage import ItemStorage
+
+    try:
+        from msrkit.tui import ScreeningApp
+    except ImportError:
+        console.print(
+            "\n[bold yellow]⚠ Biblioteca 'textual' não instalada neste ambiente.[/bold yellow]\n"
+            "[cyan]→ Redirecionando para a triagem interativa nativa (Rich CLI)...[/cyan]\n"
+        )
+        return screen_interactive(
+            coder=coder,
+            run_id=run_id,
+            protocol=protocol,
+            batch=batch,
+            limit=limit or 50,
+        )
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
+
+    criteria = _screening_criteria(run_id, _unwrap(protocol))
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    detections = _load_detections(run_id)
+    ranking = rank_items(items, detections, criteria.batch_size)
+
+    done = {item_id for (item_id, c) in load_decisions(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in items if it.id not in done]
+
+    target_batch = _unwrap(batch)
+    if target_batch is not None:
+        pending = [it for it in pending if ranking[it.id].batch == target_batch]
+
+    pending.sort(key=lambda it: ranking[it.id].rank)
+
+    if not pending:
+        console.print(
+            f"[green]✓ Nenhum item pendente de triagem para o avaliador '{coder_str}'.[/green]"
+        )
+        return
+
+    session_items = pending if limit is None or limit <= 0 else pending[:limit]
+    app_tui = ScreeningApp(
+        items=session_items,
+        criteria=criteria,
+        data_dir=_cli.DATA_DIR,
+        run_id=run_id,
+        coder=coder_str,
+        detections=detections,
+    )
+    app_tui.run()
+    if app_tui.recorded_decisions:
+        from msrkit.cli.corpus import prisma
+
+        n_dec = len(app_tui.recorded_decisions)
+        console.print(f"\n[bold green]✓ {n_dec} decisões gravadas com sucesso![/bold green]")
+        try:
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
+
+
+# Top-level convenient alias
+app.command(name="review-tui", help="Launch full-screen Textual TUI for literature screening.")(
+    screen_tui
+)
 
 
 coding_app = typer.Typer(help="Extraction form (Annex A) and quality (§9): export, import, status.")
@@ -182,7 +529,12 @@ def coding_export(
     from msrkit.storage import ItemStorage
 
     run_id = _resolve_run(_unwrap(run_id))
-    coder = _unwrap(coder)
+    coder = _unwrap(coder).strip()
+    if coder:
+        is_valid, reason = is_valid_coder_name(coder)
+        if not is_valid:
+            console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+            raise typer.Exit(1)
     status = _unwrap(status)
     if status not in ("include", "uncertain", "all"):
         console.print("[red]✗ --status must be include, uncertain or all.[/red]")
@@ -248,6 +600,13 @@ def coding_import(
             console.print(f"  - {problem}")
         raise typer.Exit(1) from None
     path = append_codings(_cli.DATA_DIR, run_id, records)
+    skipped = getattr(records, "skipped", [])
+    if skipped:
+        sample_str = ", ".join(skipped[:5]) + ("..." if len(skipped) > 5 else "")
+        console.print(
+            f"[yellow]⚠ {len(skipped)} linha(s) ignorada(s) por falta de dados: "
+            f"{sample_str}[/yellow]"
+        )
     console.print(f"[green]✓ {len(records)} coded items recorded in {path}[/green]")
 
 
@@ -317,7 +676,7 @@ def coding_status(
     console.print(f"Coded items: {len(coders_by_item)} · double-coded: {double}")
 
 
-@app.command()
+@app.command(hidden=True)
 def agreement(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
@@ -377,12 +736,300 @@ def agreement(
         values.setdefault((item_id, coder), {})["screening"] = d.decision
     with open(out_dir / "disagreements.csv", "w", encoding="utf-8-sig", newline="") as fh:
         writer = csv.writer(fh, delimiter=";")
-        writer.writerow(["item_id", "dimension", "coder_a", "value_a", "coder_b", "value_b"])
+        writer.writerow(
+            [
+                "item_id",
+                "dimension",
+                "coder_a",
+                "value_a",
+                "coder_b",
+                "value_b",
+                "consensus_value",
+                "resolved_by",
+                "reason",
+            ]
+        )
         for r in results:
             a, b = r.coders
             for item_id in r.disagreements:
                 va = values.get((item_id, a), {}).get(r.dimension)
                 vb = values.get((item_id, b), {}).get(r.dimension)
-                writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb)])
+                writer.writerow([item_id, r.dimension, a, _cell(va), b, _cell(vb), "", "", ""])
     n_dis = sum(len(r.disagreements) for r in results)
     console.print(f"[green]✓ {n_dis} disagreement(s) written to {out_dir}[/green]")
+
+
+@app.command("resolve", help="Apply consensus resolutions from filled disagreements.csv (§15).")
+def resolve_disagreements_cmd(
+    sheet: str | None = typer.Option(
+        None, "--sheet", "-s", help="Path to filled disagreements.csv"
+    ),
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    resolver: str = typer.Option(
+        "consenso", "--resolver", "-r", help="Default resolver coder name"
+    ),
+) -> None:
+    """Apply resolved consensus decisions from disagreements.csv to screening and coding."""
+    import csv
+    import hashlib
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from msrkit.coding import CodingRecord, _parse, append_codings, load_codings
+    from msrkit.screening import DECISION_ALIASES, ScreeningDecision, append_decisions
+
+    run_id = _resolve_run(_unwrap(run_id))
+    resolver = _unwrap(resolver).strip() or "consenso"
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    field_map = {f.name: f for f in proto.coding.fields} if proto and proto.coding else {}
+    allowed = (
+        {f.name: proto.coding.allowed(f, proto.gazetteer_data) for f in proto.coding.fields}
+        if proto and proto.coding
+        else {}
+    )
+
+    sheet_val = _unwrap(sheet)
+    sheet_path = (
+        Path(sheet_val) if sheet_val else _cli.DATA_DIR / "coding" / run_id / "disagreements.csv"
+    )
+    if not sheet_path.exists():
+        console.print(f"[red]✗ Arquivo de divergências não encontrado: {sheet_path}[/red]")
+        raise typer.Exit(1)
+
+    raw_bytes = sheet_path.read_bytes()
+    sheet_hash = hashlib.sha256(raw_bytes).hexdigest()
+    text = raw_bytes.decode("utf-8-sig")
+    import io
+
+    delim = ";" if text.split("\n", 1)[0].count(";") else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delim)
+
+    screening_resolutions: list[ScreeningDecision] = []
+    coding_resolutions: dict[tuple[str, str], dict[str, Any]] = {}
+    coding_reasons: dict[tuple[str, str], str] = {}
+    skipped_unresolved = 0
+    now = datetime.now(UTC).isoformat()
+
+    for line_no, row in enumerate(reader, start=2):
+        item_id = (row.get("item_id") or "").strip()
+        dimension = (row.get("dimension") or "").strip()
+        consensus_val = (row.get("consensus_value") or "").strip()
+        row_resolver = (row.get("resolved_by") or resolver).strip() or resolver
+        reason = (row.get("reason") or "").strip()
+
+        if not consensus_val:
+            skipped_unresolved += 1
+            continue
+
+        if dimension.lower() in ("screening", "triagem"):
+            norm_dec = consensus_val.lower()
+            norm_dec = DECISION_ALIASES.get(norm_dec, norm_dec)
+            if norm_dec not in ("include", "exclude", "uncertain"):
+                console.print(
+                    f"[yellow]⚠ Linha {line_no}: decisão inválida '{consensus_val}' para item "
+                    f"{item_id}. Ignorada.[/yellow]"
+                )
+                continue
+            screening_resolutions.append(
+                ScreeningDecision(
+                    item_id=item_id,
+                    coder=row_resolver,
+                    decision=norm_dec,  # type: ignore[arg-type]
+                    criteria_met=[],
+                    reason=reason,
+                    notes=(
+                        f"Resolvido via disagreements.csv "
+                        f"({row.get('coder_a')} × {row.get('coder_b')})"
+                    ),
+                    decided_at=now,
+                    sheet_sha256=sheet_hash,
+                )
+            )
+        else:
+            item_vals = coding_resolutions.setdefault((item_id, row_resolver), {})
+            if field_map and dimension in field_map:
+                f = field_map[dimension]
+                parse_problems: list[str] = []
+                val = _parse(
+                    f,
+                    consensus_val,
+                    allowed.get(f.name, []),
+                    parse_problems,
+                    f"linha {line_no} ({dimension})",
+                )
+                if parse_problems:
+                    for p in parse_problems:
+                        console.print(f"[yellow]⚠ {p}. Ignorada.[/yellow]")
+                    continue
+                item_vals[dimension] = val
+            else:
+                if "," in consensus_val or ";" in consensus_val:
+                    item_vals[dimension] = [
+                        v.strip() for v in consensus_val.replace(";", ",").split(",") if v.strip()
+                    ]
+                elif consensus_val.lower() in ("true", "sim", "yes", "s", "1"):
+                    item_vals[dimension] = True
+                elif consensus_val.lower() in ("false", "não", "nao", "no", "n", "0"):
+                    item_vals[dimension] = False
+                else:
+                    item_vals[dimension] = consensus_val
+            if reason:
+                coding_reasons[(item_id, row_resolver)] = reason
+
+    saved_scr = 0
+    if screening_resolutions:
+        append_decisions(_cli.DATA_DIR, run_id, screening_resolutions)
+        saved_scr = len(screening_resolutions)
+
+    saved_cod = 0
+    if coding_resolutions:
+        existing_codings = load_codings(_cli.DATA_DIR, run_id)
+        new_codings: list[CodingRecord] = []
+        for (item_id, row_res), vals in coding_resolutions.items():
+            base_rec = existing_codings.get((item_id, row_res))
+            merged_vals = dict(base_rec.values) if base_rec else {}
+            merged_vals.update(vals)
+            new_codings.append(
+                CodingRecord(
+                    item_id=item_id,
+                    coder=row_res,
+                    values=merged_vals,
+                    notes=coding_reasons.get((item_id, row_res), "Resolvido via disagreements.csv"),
+                    coded_at=now,
+                    sheet_sha256=sheet_hash,
+                )
+            )
+        append_codings(_cli.DATA_DIR, run_id, new_codings)
+        saved_cod = len(new_codings)
+
+    console.print(
+        f"\n[bold green]✓ Resolução concluída:[/bold green] "
+        f"[cyan]{saved_scr}[/cyan] item(ns) de triagem e "
+        f"[cyan]{saved_cod}[/cyan] de codificação gravados como consenso."
+    )
+    if skipped_unresolved:
+        console.print(
+            f"[dim]({skipped_unresolved} linha(s) sem 'consensus_value' foram ignoradas)[/dim]"
+        )
+
+    if saved_scr > 0:
+        try:
+            from msrkit.cli.corpus import prisma
+
+            console.print("\n[bold cyan]Atualizando fluxo PRISMA 2020...[/bold cyan]")
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
+
+
+@coding_app.command("tui")
+def coding_tui(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+    protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    coder: str = typer.Option("", "--coder", "-c", help="Coder name / identifier"),
+    status: str = typer.Option(
+        "include", "--status", help="Items by screening decision: include, all"
+    ),
+    limit: int | None = typer.Option(
+        None, "--limit", "-l", help="Maximum items to load (default: all)"
+    ),
+) -> None:
+    """Launch full-screen Textual TUI for interactive Annex A data extraction."""
+    from rich.prompt import Prompt
+
+    from msrkit.coding import load_codings, suggestions
+    from msrkit.screening import final_decisions, load_decisions
+    from msrkit.storage import ItemStorage
+
+    try:
+        from msrkit.tui import CodingApp
+    except ImportError:
+        console.print(
+            "\n[bold yellow]⚠ Biblioteca 'textual' não instalada neste ambiente.[/bold yellow]\n"
+            "[cyan]→ Use 'msrkit coding export' para preencher a planilha CSV.[/cyan]\n"
+        )
+        return
+
+    run_id = _resolve_run(_unwrap(run_id))
+    coder_str = _unwrap(coder).strip()
+    if not coder_str:
+        coder_str = Prompt.ask(
+            "[bold cyan]Informe seu nome de avaliador (coder)[/bold cyan]"
+        ).strip()
+    is_valid, reason = is_valid_coder_name(coder_str)
+    if not is_valid:
+        console.print(f"[red]✗ Coder inválido: {reason}[/red]")
+        raise typer.Exit(1)
+
+    items = ItemStorage(_cli.DATA_DIR).read_items(run_id, prefer_deduped=True)
+    if not items:
+        console.print(f"[yellow]Nenhum item encontrado na coleta '{run_id}'.[/yellow]")
+        return
+
+    status_str = _unwrap(status)
+    if status_str != "all":
+        decisions = load_decisions(_cli.DATA_DIR, run_id)
+        final = final_decisions(decisions)
+        included_items = [it for it in items if final.get(it.id) == "include"]
+    else:
+        included_items = items
+
+    done = {item_id for (item_id, c) in load_codings(_cli.DATA_DIR, run_id) if c == coder_str}
+    pending = [it for it in included_items if it.id not in done]
+
+    if not pending:
+        if not included_items:
+            console.print(
+                "[yellow]⚠ Nenhum item marcado como 'include' na triagem para esta coleta.[/yellow]"
+            )
+            console.print(
+                "[dim]Dica: realize a triagem primeiro (Opção 2 - Triagem) "
+                "para incluir itens.[/dim]"
+            )
+        else:
+            console.print(
+                f"[green]✓ Todos os {len(included_items)} itens elegíveis já foram codificados por "
+                f"'{coder_str}'.[/green]"
+            )
+        return
+
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    system_concepts = (
+        tuple(proto.concepts.keys()) if proto and proto.concepts else ("rag", "agente")
+    )
+    detections = _load_detections(run_id)
+    sug_map = suggestions(items, detections, system_concepts)
+
+    session_items = pending if limit is None or limit <= 0 else pending[:limit]
+    console.print(
+        "\n[bold yellow]⚠ AVISO METODOLÓGICO (ADR-028):[/bold yellow] "
+        "[yellow]A interface 'coding-tui' grava apenas 5 variáveis básicas "
+        "(sistema, nível, oráculo, confiança, ferramentas).\n"
+        "Para a extração científica do Anexo A com todas as 20 variáveis "
+        "(métodos, modos de falha, agregação e critérios q_*),\n"
+        "utilize o fluxo oficial CSV: 'msrkit coding export' e 'msrkit coding import'.[/yellow]\n"
+    )
+    app_coding = CodingApp(
+        items=session_items,
+        data_dir=_cli.DATA_DIR,
+        run_id=run_id,
+        coder=coder_str,
+        suggestions_map=sug_map,
+    )
+    app_coding.run()
+    if app_coding.recorded_codings:
+        from msrkit.cli.corpus import prisma
+
+        n_cod = len(app_coding.recorded_codings)
+        console.print(f"\n[bold green]✓ {n_cod} itens codificados com sucesso![/bold green]")
+        try:
+            prisma(run_id=run_id)
+        except Exception as e:
+            console.print(f"[dim](Nota: geração do PRISMA automático: {e})[/dim]")
+
+
+# Top-level convenient alias
+app.command(name="coding-tui", help="Launch full-screen Textual TUI for Annex A data extraction.")(
+    coding_tui
+)

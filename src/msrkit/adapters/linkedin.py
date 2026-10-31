@@ -61,6 +61,13 @@ class LinkedInAdapter(BaseAdapter):
             "content-search API. Research/analytics on third-party content "
             "is not an approved use case. Scraping is prohibited."
         ),
+        has_official_api=False,
+        official_api_name="",
+        exclusion_category="no_public_api",
+        exclusion_rationale=(
+            "Desativada por ausência de API pública: LinkedIn não expõe endpoint para "
+            "busca aberta de conteúdo de terceiros; Termos de Serviço proíbem raspagem (§6.1 C)."
+        ),
     )
 
     def available(self) -> Availability:

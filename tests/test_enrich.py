@@ -134,6 +134,80 @@ class TestEnricher:
         assert code_item.tech.active_months == 2
         assert other.tech.has_ci is None
 
+    def test_collects_via_graphql_batches_in_single_query(self, monkeypatch) -> None:
+        adapter = GitHubAdapter()
+        monkeypatch.setattr(adapter, "_governed_get", _fake_get)
+        monkeypatch.setattr(adapter, "_governed_post", _fake_graphql_post)
+        enricher = GitHubEnricher(
+            adapter,
+            config_files={"promptfooconfig.yaml"},
+            since=date(2024, 1, 1),
+            until=date(2024, 12, 31),
+            use_graphql=True,
+        )
+        sig = enricher.enrich("acme/rag")
+        assert sig.error is None
+        assert sig.has_tests and sig.test_paths == ["tests/test_rag.py"]
+        assert sig.has_ci and "npx promptfoo eval" in sig.workflows[".github/workflows/eval.yml"]
+        assert list(sig.manifests) == ["pyproject.toml"]
+        assert sig.contributors == 7
+        assert sig.commit_months == ["2024-03", "2024-05"]
+        # In GraphQL mode: 1 metadata + 1 tree + 1 graphql batch +
+        # 1 contributors + 1 commits = 5 requests
+        assert sig.requests == 5
+
+    def test_graphql_failure_falls_back_to_rest(self, monkeypatch) -> None:
+        adapter = GitHubAdapter()
+        monkeypatch.setattr(adapter, "_governed_get", _fake_get)
+        fail_post = MagicMock()
+        fail_post.status_code = 500
+        monkeypatch.setattr(
+            adapter, "_governed_post", lambda url, json=None, headers=None: fail_post
+        )
+        enricher = GitHubEnricher(
+            adapter,
+            config_files={"promptfooconfig.yaml"},
+            since=date(2024, 1, 1),
+            until=date(2024, 12, 31),
+            use_graphql=True,
+        )
+        sig = enricher.enrich("acme/rag")
+        assert sig.error is None
+        assert sig.contributors == 7
+        assert "npx promptfoo eval" in sig.workflows[".github/workflows/eval.yml"]
+
+
+def _fake_graphql_post(url: str, json: dict[str, Any] | None = None, headers=None) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = {}
+    resp.json.return_value = {
+        "data": {
+            "repository": {
+                "mentionableUsers": {"totalCount": 15},
+                "defaultBranchRef": {
+                    "target": {
+                        "history": {
+                            "nodes": [
+                                {"committedDate": "2024-03-02T10:00:00Z"},
+                                {"committedDate": "2024-05-01T10:00:00Z"},
+                            ]
+                        }
+                    }
+                },
+                "wf_0": {
+                    "text": WORKFLOW,
+                    "byteSize": len(WORKFLOW),
+                },
+                "mf_0": {
+                    "text": '[project]\ndependencies = ["ragas>=0.1"]\n',
+                    "byteSize": 35,
+                },
+            }
+        }
+    }
+    return resp
+
 
 class TestEnrichCommand:
     def test_enriches_run_items_and_resumes(self, tmp_path: Path, monkeypatch) -> None:
@@ -154,9 +228,56 @@ class TestEnrichCommand:
         result = runner.invoke(app, ["enrich", "--run", "run-e"])
         assert "1 already enriched, 0 to go" in result.stdout
 
+    def test_enrich_cli_accepts_graphql_flag(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        monkeypatch.setattr(
+            GitHubAdapter,
+            "_governed_get",
+            lambda self, url, params=None, headers=None: _fake_get(url, params),
+        )
+        monkeypatch.setattr(
+            GitHubAdapter,
+            "_governed_post",
+            lambda self, url, json=None, headers=None: _fake_graphql_post(url, json),
+        )
+        ItemStorage(tmp_path).save_items([_item("https://github.com/acme/rag")], "run-gql")
+        runner = CliRunner()
+        result = runner.invoke(app, ["enrich", "--run", "run-gql", "--graphql"])
+        assert result.exit_code == 0, result.stdout
+        assert "1 items updated" in result.stdout
+        enriched = ItemStorage(tmp_path).read_items("run-gql")[0]
+        assert enriched.tech.has_ci is True
+        assert enriched.tech.contributors == 7
+
 
 def test_core_rate_limit_is_under_quota_and_above_search_rate():
     per_hour = CORE_RATE_LIMIT.requests * 3600 / CORE_RATE_LIMIT.per_seconds
     search = GitHubAdapter.policy.rate_limit
     assert per_hour < 5000  # core REST quota with a token
     assert per_hour > search.requests * 3600 / search.per_seconds
+
+
+def test_repo_of_case_insensitivity():
+    item = _item("https://github.com/AcmeCorp/RAG-Agent")
+    assert repo_of(item) == "acmecorp/rag-agent"
+
+
+def test_empty_repo_handling(monkeypatch):
+    adapter = GitHubAdapter()
+
+    def _empty_fake_get(url: str, params=None, headers=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = {}
+        if url.endswith("/repos/acme/empty"):
+            resp.json.return_value = {"default_branch": None}
+        elif url.endswith("/commits"):
+            resp.json.return_value = {"message": "Git Repository is empty."}
+        else:
+            resp.status_code = 404
+        return resp
+
+    monkeypatch.setattr(adapter, "_governed_get", _empty_fake_get)
+    enricher = GitHubEnricher(adapter)
+    sig = enricher.enrich("acme/empty")
+    assert sig.error == "empty repository (no default branch)"

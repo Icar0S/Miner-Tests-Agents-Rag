@@ -13,9 +13,9 @@ on:
         default: "hackernews,devto,stackexchange,huggingface,rss"
       manual_sources:
         description: "Fontes com credencial (vírgula), coletadas se o secret existir: github, bluesky."
-        default: ""
+        default: "github"
       per_query_limit:
-        description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
+        description: "Máximo de itens por consulta. Digite 'none' ou deixe vazio para sem teto."
         default: "10"
       limit:
         description: "Máximo de itens por fonte. Vazio = limite do protocolo (o teto por consulta já limita a amostra)."
@@ -38,7 +38,7 @@ on:
         default: "hackernews,devto,stackexchange,huggingface,rss"
       manual_sources:
         type: string
-        default: ""
+        default: "github"
       per_query_limit:
         type: string
         default: "10"
@@ -62,7 +62,7 @@ jobs:
       MSRKIT_SOURCES_PUBLIC: ${{ github.event_name == 'schedule' && 'rss' || inputs.sources }}
       MSRKIT_SOURCES_MANUAL: ${{ inputs.manual_sources }}
       MSRKIT_SOURCES_PAID: x_twitter
-      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord
+      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord,bluesky
       # Opcionais: sem o secret, a variável fica vazia e a fonte segue sem ela
       # (ou é pulada, se a credencial for obrigatória).
       GITHUB_TOKEN: ${{ secrets.MSRKIT_GITHUB_TOKEN }}
@@ -110,8 +110,12 @@ jobs:
           LIMIT: ${{ inputs.limit }}
         run: |
           args=()
-          [ -n "$PER_QUERY" ] && args+=(--per-query-limit "$PER_QUERY")
-          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          if [ -n "$PER_QUERY" ] && [ "$PER_QUERY" != "none" ] && [ "$PER_QUERY" != "sem" ] && [ "$PER_QUERY" != "all" ] && [ "$PER_QUERY" != "0" ]; then
+            args+=(--per-query-limit "$PER_QUERY")
+          fi
+          if [ -n "$LIMIT" ] && [ "$LIMIT" != "none" ] && [ "$LIMIT" != "sem" ]; then
+            args+=(--limit "$LIMIT")
+          fi
           msrkit run "$PROTOCOL" "${args[@]}"
 
       - name: Deduplicate, enrich, extract, screening sheet, PRISMA

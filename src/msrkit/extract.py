@@ -98,7 +98,14 @@ def dependency_names(path: str, content: str) -> dict[str, str]:
         if base.endswith(".txt"):
             match = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", stripped)
             candidates = [match.group(1)] if match else []
-        else:  # pyproject.toml / setup.cfg / setup.py: quoted specs and `name = ` keys
+        elif base == "go.mod":
+            go_match = re.search(r"(?:require\s+)?([A-Za-z0-9._/-]+)\s+v[0-9]", stripped)
+            if go_match:
+                pkg_full = go_match.group(1)
+                candidates = [pkg_full, pkg_full.split("/")[-1]]
+            else:
+                candidates = []
+        else:  # pyproject.toml / setup.cfg / setup.py / Cargo.toml: quoted specs and `name = ` keys
             candidates = re.findall(
                 r'["\']([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*[<>=!~;"\']', stripped
             )
@@ -284,17 +291,23 @@ class Extractor:
                     current.kind != ItemKind.REPO and item.kind == ItemKind.REPO
                 ):
                     anchor_item[repo] = item
-        for repo, sig in signals.items():
+        norm_signals = {k.lower(): v for k, v in signals.items()}
+        for repo, sig in norm_signals.items():
             if repo in anchor_item:
                 detections.extend(self.from_repo(sig, anchor_item[repo]))
         # CI invocations found by code search become N3 where adoption is sustained.
         detections = [
             d.model_copy(update={"level": "N3"})
-            if d.signal == "ci" and d.level == "N2" and d.repo in signals
-            and is_sustained(signals[d.repo])
+            if (
+                d.signal == "ci"
+                and d.level == "N2"
+                and d.repo
+                and d.repo.lower() in norm_signals
+                and is_sustained(norm_signals[d.repo.lower()])
+            )
             else d
             for d in detections
-        ]  # fmt: skip
+        ]
 
         structural = {(d.entry_id, d.repo) for d in detections if d.signal != "text" and d.repo}
         self.dropped_ambiguous = 0

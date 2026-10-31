@@ -108,7 +108,7 @@ def load_gazetteer(path: str | Path) -> Gazetteer:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Gazetteer file not found: {p}")
-    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    data = yaml.safe_load(p.read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict):
         raise ValueError("Gazetteer file must contain a YAML mapping")
     return Gazetteer.model_validate(data)

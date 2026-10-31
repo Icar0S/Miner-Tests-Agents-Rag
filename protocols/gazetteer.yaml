@@ -29,7 +29,7 @@ tools:
     applies_to: [rag]
     python_imports: [ragas]
     packages: [ragas]
-    repos: [explodinggradients/ragas]
+    repos: [vibrantlabsai/ragas]
   - id: deepeval
     name: DeepEval
     family: avaliacao-llm-rag
@@ -100,7 +100,7 @@ tools:
     family: avaliacao-llm-rag
     python_imports: [giskard]
     packages: [giskard]
-    repos: [Giskard-AI/giskard]
+    repos: [Giskard-AI/giskard-oss]
   - id: uptrain
     name: UpTrain
     family: avaliacao-llm-rag
@@ -154,7 +154,7 @@ tools:
     aliases: [nemoguardrails]
     python_imports: [nemoguardrails]
     packages: [nemoguardrails]
-    repos: [NVIDIA/NeMo-Guardrails]
+    repos: [NVIDIA-NeMo/Guardrails]
     search_token: nemoguardrails
   - id: garak
     name: garak

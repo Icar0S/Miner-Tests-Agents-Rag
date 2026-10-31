@@ -121,3 +121,12 @@ class TestPrecisionCommands:
         assert r.exit_code == 0, r.stdout
         report = json.loads((tmp_path / "validation/run-v/precision_report.json").read_text())
         assert report["weighted_precision"] == pytest.approx(30 / 1000)
+
+
+def test_gold_repo_normalization() -> None:
+    from msrkit.validation import _gold_repo
+
+    assert _gold_repo("https://github.com/Owner/Repo") == "owner/repo"
+    assert _gold_repo("https://www.github.com/Owner/Repo.git") == "owner/repo"
+    assert _gold_repo("https://github.com/Owner/Repo/") == "owner/repo"
+    assert _gold_repo("https://stackoverflow.com/questions/123") is None

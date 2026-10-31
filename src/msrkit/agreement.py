@@ -16,6 +16,7 @@ Free-text fields have no κ.
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter
 from itertools import combinations
 from typing import TYPE_CHECKING, Any
@@ -41,7 +42,7 @@ def cohen_kappa(a: list[str], b: list[str]) -> float | None:
     observed = sum(x == y for x, y in zip(a, b, strict=True)) / n
     ca, cb = Counter(a), Counter(b)
     expected = sum(ca[k] * cb[k] for k in ca.keys() | cb.keys()) / (n * n)
-    if expected == 1.0:  # both coders used a single, identical category
+    if expected >= 1.0 or abs(1.0 - expected) < 1e-9:  # both coders used identical single category
         return None
     return (observed - expected) / (1 - expected)
 
@@ -83,6 +84,23 @@ def _label(value: Any) -> str:
     return str(value)
 
 
+def _as_set(v: Any) -> set[str]:
+    if isinstance(v, str):
+        parts = [p.strip() for p in re.split(r"[,;|]", v) if p.strip()]
+        return set(parts)
+    if isinstance(v, (list, set, tuple)):
+        out = set()
+        for x in v:
+            if isinstance(x, str):
+                for p in re.split(r"[,;|]", x):
+                    if p.strip():
+                        out.add(p.strip())
+            elif x is not None:
+                out.add(str(x).strip())
+        return out
+    return set()
+
+
 def _pair(
     dimension: str,
     coders: tuple[str, str],
@@ -94,8 +112,8 @@ def _pair(
     if not shared:
         return None
     if multi:
-        sets_a = {i: set(values_a[i] or []) for i in shared}
-        sets_b = {i: set(values_b[i] or []) for i in shared}
+        sets_a = {i: _as_set(values_a[i]) for i in shared}
+        sets_b = {i: _as_set(values_b[i]) for i in shared}
         used = sorted(set().union(*sets_a.values(), *sets_b.values()))
         pooled_a: list[str] = []
         pooled_b: list[str] = []
@@ -133,13 +151,17 @@ def agreement(
     dimensions: list[str] | None = None,
 ) -> list[PairAgreement]:
     """κ per dimension and coder pair. `dimensions` restricts the form fields."""
+    from msrkit.screening import is_consensus_coder
+
     results: list[PairAgreement] = []
 
     if decisions:
         by_coder: dict[str, dict[str, Any]] = {}
         for (item_id, coder), d in decisions.items():
             by_coder.setdefault(coder, {})[item_id] = d.decision
-        for a, b in combinations(sorted(by_coder), 2):
+        active_coders = [c for c in sorted(by_coder) if not is_consensus_coder(c)]
+        coder_list = active_coders if len(active_coders) >= 2 else sorted(by_coder)
+        for a, b in combinations(coder_list, 2):
             pair = _pair("screening", (a, b), by_coder[a], by_coder[b], multi=False)
             if pair:
                 results.append(pair)
@@ -150,8 +172,10 @@ def agreement(
     coded: dict[str, dict[str, dict[str, Any]]] = {}  # coder -> item -> values
     for (item_id, coder), rec in codings.items():
         coded.setdefault(coder, {})[item_id] = rec.values
+    active_coded = [c for c in sorted(coded) if not is_consensus_coder(c)]
+    coded_list = active_coded if len(active_coded) >= 2 else sorted(coded)
     for f in fields:
-        for a, b in combinations(sorted(coded), 2):
+        for a, b in combinations(coded_list, 2):
             va = {i: v.get(f.name) for i, v in coded[a].items()}
             vb = {i: v.get(f.name) for i, v in coded[b].items()}
             pair = _pair(f.name, (a, b), va, vb, multi=f.type == "multi")
@@ -172,7 +196,7 @@ def double_sample(items: list[Item], rate: float = 0.2, seed: int = DEFAULT_SEED
     rng = random.Random(seed)
     chosen: list[str] = []
     for source in sorted(by_source):
-        ids = sorted(by_source[source])
+        ids = sorted(set(by_source[source]))
         k = min(len(ids), max(1, math.ceil(rate * len(ids))))
         chosen += sorted(rng.sample(ids, k))
     return chosen

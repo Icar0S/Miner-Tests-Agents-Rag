@@ -71,6 +71,8 @@ class StackExchangeAdapter(BaseAdapter):
             "Requires Accept-Encoding: gzip. Honor 'backoff' field from response. "
             "Without STACKEXCHANGE_KEY, daily quota is very low (~300 requests)."
         ),
+        has_official_api=True,
+        official_api_name="StackExchange API v2.3",
     )
 
     def _build_client(self) -> httpx.Client:
@@ -120,10 +122,16 @@ class StackExchangeAdapter(BaseAdapter):
         total = data.get("total")
         return int(total) if total is not None else None
 
+    def partition(self, q: Query) -> list[Query]:
+        """Split multi-term queries so each term runs as its own query."""
+        from msrkit.partition import split_by_term
+
+        return split_by_term(q)
+
     def search(self, q: Query) -> Iterator[RawItem]:
         """Search across configured Stack Exchange sites."""
         sites = q.extra.get("sites", ["stackoverflow"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
 
         # One request per (site, term, tag filter); see tag_filters (ADR-017, ADR-042).

@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from msrkit.adapters.base import BaseAdapter
@@ -995,6 +996,45 @@ class TestSearchLoopsAndQueryBuilding:
         assert "stars:" not in qs
         assert captured_params[0]["sort"] == "indexed"
 
+    def test_github_bot_filtering_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        adapter = GitHubAdapter()
+        monkeypatch.setattr(
+            adapter, "_env", lambda k: "mock_token" if k == "GITHUB_TOKEN" else None
+        )
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "total_count": 2,
+            "items": [
+                {
+                    "id": 101,
+                    "title": "Dependabot PR",
+                    "user": {"login": "dependabot[bot]"},
+                    "html_url": "https://github.com/o/r/issues/1",
+                },
+                {
+                    "id": 102,
+                    "title": "Human Issue",
+                    "user": {"login": "alice"},
+                    "html_url": "https://github.com/o/r/issues/2",
+                },
+            ],
+        }
+        monkeypatch.setattr(adapter, "_governed_get", lambda *args, **kwargs: resp)
+
+        # Default: filter_bots is False -> all items yielded (matches upstream Icar0S)
+        q_default = Query(source="github", terms=["t"], kind="issue", limit=10)
+        items_default = list(adapter.search(q_default))
+        assert len(items_default) == 2
+
+        # Opt-in: filter_bots is True -> bot items discarded
+        q_filtered = Query(
+            source="github", terms=["t"], kind="issue", extra={"filter_bots": True}, limit=10
+        )
+        items_filtered = list(adapter.search(q_filtered))
+        assert len(items_filtered) == 1
+        assert items_filtered[0].native_id == "102"
+
     def test_reddit_quotes_multi_word_terms(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = RedditAdapter()
         adapter._access_token = "mock_token"
@@ -1124,3 +1164,227 @@ class TestSearchLoopsAndQueryBuilding:
         raw_items = list(adapter.search(q))
         assert len(raw_items) == 1
         assert raw_items[0].native_id == "2"
+
+    def test_github_is_bot_author_detection(self) -> None:
+        from msrkit.adapters.github import is_bot_author
+
+        assert is_bot_author("dependabot[bot]") is True
+        assert is_bot_author("renovate[bot]") is True
+        assert is_bot_author("github-actions[bot]") is True
+        assert is_bot_author("snyk-bot") is True
+        assert is_bot_author("custom-bot") is True
+        assert is_bot_author("alice") is False
+        assert is_bot_author("john_doe") is False
+        assert is_bot_author(None) is False
+
+    def test_reddit_normalize_handles_absolute_permalink(self) -> None:
+        adapter = RedditAdapter()
+        raw = RawItem(
+            source="reddit",
+            native_id="p123",
+            payload={
+                "id": "p123",
+                "title": "Discussion on RAG",
+                "selftext": "Text body",
+                "subreddit": "MachineLearning",
+                "permalink": "https://www.reddit.com/r/MachineLearning/comments/p123/rag_test/",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://www.reddit.com/r/MachineLearning/comments/p123/rag_test/"
+
+    def test_rss_normalize_handles_tag_uri(self) -> None:
+        adapter = RSSAdapter()
+        raw = RawItem(
+            source="rss",
+            native_id="tag:blogger.com,1999:blog-1234",
+            payload={
+                "title": "Blog post",
+                "link": "tag:blogger.com,1999:blog-1234",
+                "feed_url": "https://blog.example/feed.xml",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://blog.example/feed.xml"
+
+    def test_devto_normalize_handles_missing_url(self) -> None:
+        adapter = DevToAdapter()
+        raw = RawItem(
+            source="devto",
+            native_id="456",
+            payload={
+                "id": 456,
+                "title": "Dev.to article without url",
+                "url": "",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://dev.to/articles/456"
+
+    def test_bluesky_normalize_trailing_slash_in_uri(self) -> None:
+        adapter = BlueskyAdapter()
+        raw = RawItem(
+            source="bluesky",
+            native_id="at://did:plc:123/app.bsky.feed.post/post456/",
+            payload={
+                "uri": "at://did:plc:123/app.bsky.feed.post/post456/",
+                "author": {"handle": "alice.bsky.social"},
+                "record": {
+                    "text": "testing trailing slash",
+                    "createdAt": "2024-01-01T00:00:00Z",
+                },
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert str(item.url) == "https://bsky.app/profile/alice.bsky.social/post/post456"
+
+    def test_adapters_search_limit_zero(self) -> None:
+        q = Query(source="github", terms=["rag"], limit=0)
+        assert list(GitHubAdapter().search(q)) == []
+
+        q_se = Query(source="stackexchange", terms=["rag"], limit=0)
+        assert list(StackExchangeAdapter().search(q_se)) == []
+
+        q_hf = Query(source="huggingface", terms=["rag"], limit=0)
+        assert list(HuggingFaceAdapter().search(q_hf)) == []
+
+        q_hn = Query(source="hackernews", terms=["rag"], limit=0)
+        assert list(HackerNewsAdapter().search(q_hn)) == []
+
+        q_red = Query(source="reddit", terms=["rag"], limit=0)
+        reddit_adapter = RedditAdapter()
+        reddit_adapter._authenticate = MagicMock(return_value=True)  # type: ignore[method-assign]
+        reddit_adapter._client = MagicMock()
+        assert list(reddit_adapter.search(q_red)) == []
+
+        q_rss = Query(
+            source="rss",
+            terms=["rag"],
+            extra={"feeds": ["https://example.com/rss"]},
+            limit=0,
+        )
+        assert list(RSSAdapter().search(q_rss)) == []
+
+        q_dev = Query(source="devto", terms=["rag"], limit=0)
+        assert list(DevToAdapter().search(q_dev)) == []
+
+        bsky_adapter = BlueskyAdapter()
+        bsky_adapter._session_token = "dummy"
+        q_bsky = Query(source="bluesky", terms=["rag"], limit=0)
+        assert list(bsky_adapter.search(q_bsky)) == []
+
+    def test_stackexchange_partition_splits_by_term(self) -> None:
+        adapter = StackExchangeAdapter()
+        q = Query(source="stackexchange", terms=["term1", "term2", "term3"])
+        parts = adapter.partition(q)
+        assert len(parts) == 3
+        assert [p.terms for p in parts] == [["term1"], ["term2"], ["term3"]]
+
+    def test_huggingface_partition_splits_by_term(self) -> None:
+        adapter = HuggingFaceAdapter()
+        q = Query(source="huggingface", terms=["term1", "term2"])
+        parts = adapter.partition(q)
+        assert len(parts) == 2
+        assert [p.terms for p in parts] == [["term1"], ["term2"]]
+
+    def test_huggingface_preserves_body(self) -> None:
+        adapter = HuggingFaceAdapter()
+        raw = RawItem(
+            source="huggingface",
+            native_id="user/repo",
+            payload={"id": "user/repo", "description": "Benchmark evaluation dataset for RAG."},
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw, terms=["RAG"])
+        assert item.body == "Benchmark evaluation dataset for RAG."
+
+    def test_rss_preserves_body_and_content(self) -> None:
+        adapter = RSSAdapter()
+        raw = RawItem(
+            source="rss",
+            native_id="http://example.com/item",
+            payload={
+                "title": "Post",
+                "summary": "Short summary",
+                "content": "Full article body with evaluation details.",
+            },
+            fetched_at=datetime.now(UTC),
+        )
+        item = adapter.normalize(raw)
+        assert item.body == "Full article body with evaluation details."
+
+    def test_github_effective_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        unauth_limit = GitHubAdapter.effective_rate_limit()
+        assert unauth_limit.requests == 10
+        assert unauth_limit.per_seconds == 60
+
+        monkeypatch.setenv("GITHUB_TOKEN", "dummy_token")
+        auth_limit = GitHubAdapter.effective_rate_limit()
+        assert auth_limit.requests == 30
+
+    def test_enrich_effective_core_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from msrkit.enrich import effective_core_rate_limit
+
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert effective_core_rate_limit().requests == 55
+
+        monkeypatch.setenv("GITHUB_TOKEN", "dummy_token")
+        assert effective_core_rate_limit().requests == 4500
+
+    def test_governed_get_retries_after_rate_limit_sleep(self) -> None:
+        from msrkit.governor import Governor
+
+        governor = Governor("github", GitHubAdapter.effective_rate_limit())
+        adapter = GitHubAdapter(governor=governor)
+        call_count = 0
+
+        def fake_request(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(
+                    403,
+                    headers={"Retry-After": "1", "x-ratelimit-remaining": "0"},
+                    request=httpx.Request("GET", "https://api.github.com/test"),
+                )
+            return httpx.Response(
+                200,
+                json={"items": []},
+                request=httpx.Request("GET", "https://api.github.com/test"),
+            )
+
+        adapter._request_with_retry = fake_request  # type: ignore[method-assign]
+        resp = adapter._governed_get("https://api.github.com/test")
+        assert resp.status_code == 200
+        assert call_count == 2
+
+    def test_devto_respects_max_pages_and_dedupes_discards(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        adapter = DevToAdapter()
+        pages_requested: list[tuple[str, int]] = []
+
+        def fake_get(url: str, params: dict[str, Any] | None = None) -> httpx.Response:
+            assert params is not None
+            pages_requested.append((params["tag"], params["page"]))
+            articles = [
+                {"id": i, "title": f"Unrelated post {i}", "description": "no match"}
+                for i in range(1, 1001)
+            ]
+            return httpx.Response(200, json=articles, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(adapter, "_governed_get", fake_get)
+        q = Query(
+            source="devto",
+            terms=["RAG evaluation"],
+            extra={"tags": ["rag", "llm"], "max_pages": 2},
+            limit=10,
+        )
+        assert list(adapter.search(q)) == []
+        assert pages_requested == [("rag", 1), ("rag", 2), ("llm", 1), ("llm", 2)]
+        assert len(adapter.pop_discards()) == 1000

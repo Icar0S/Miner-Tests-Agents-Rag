@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from msrkit.analysis import (
@@ -23,6 +24,7 @@ from msrkit.analysis import (
     saturation,
     units_from_codings,
     units_from_detections,
+    write_csv,
 )
 from msrkit.cli import app
 from msrkit.coding import CodingRecord, append_codings
@@ -56,10 +58,16 @@ def _item(iid: str, url: str, source: str = "github", concepts: list[str] | None
 
 def _det(item: str, entry: str, level: str = "N1", kind: str = "tool", repo: str | None = None):
     return Detection(
-        item_id=item, source="github", repo=repo, entry_id=entry, entry_type=kind,  # type: ignore[arg-type]
-        level=level, signal="text" if level == "N1" else "ci",  # type: ignore[arg-type]
-        location="x", evidence="e",
-    )  # fmt: skip
+        item_id=item,
+        source="github",
+        repo=repo,
+        entry_id=entry,
+        entry_type=kind,  # type: ignore[arg-type]
+        level=level,
+        signal="text" if level == "N1" else "ci",  # type: ignore[arg-type]
+        location="x",
+        evidence="e",
+    )
 
 
 def _rec(item: str, coder: str, **values: object) -> CodingRecord:
@@ -333,3 +341,110 @@ def test_frequency_reports_gazetteer_family() -> None:
     rows = {r.entry: r for r in frequency(units, {"langchain": "framework-sut"})}
     assert rows["langchain"].family == "framework-sut"
     assert rows["ragas"].family == ""
+
+
+def test_write_csv_formats_lists_tuples_and_dicts(tmp_path: Path) -> None:
+    class SampleRow(BaseModel):
+        name: str
+        tags: list[str]
+        bounds: tuple[float, float]
+        meta: dict[str, int]
+
+    rows = [
+        SampleRow(name="u1", tags=["rag", "eval"], bounds=(0.1, 0.9), meta={"a": 1, "b": 2}),
+    ]
+    csv_file = tmp_path / "sample.csv"
+    write_csv(rows, csv_file)
+
+    with open(csv_file, encoding="utf-8-sig") as fh:
+        parsed = list(csv.DictReader(fh, delimiter=";"))
+    assert len(parsed) == 1
+    assert parsed[0]["tags"] == "rag, eval"
+    assert parsed[0]["bounds"] == "0.1, 0.9"
+    assert parsed[0]["meta"] == "a=1; b=2"
+
+
+def test_consensus_cross_field_and_supervisor() -> None:
+    rec_a = _rec("r1", "ana", f1="val1")
+    rec_b = _rec("r1", "bob", f1="val1", f2="val2")
+    res = consensus([rec_a, rec_b])
+    assert res["f1"] == "val1"
+    assert res["f2"] is None
+
+    rec_sup = _rec("r1", "supervisor_joao", f1="val1", f2="override")
+    res_sup = consensus([rec_a, rec_b, rec_sup])
+    assert res_sup["f2"] == "override"
+
+
+def test_units_from_codings_scalar_strings_no_splintering() -> None:
+    item = _item("r1", "https://github.com/org/repo")
+    codings = {
+        ("r1", "ana"): _rec(
+            "r1",
+            "ana",
+            sistema="rag",
+            ferramentas="pytest",
+            metodos="fuzzing",
+            modos_falha="FP1",
+        )
+    }
+    units = units_from_codings([item], codings)
+    assert len(units) == 1
+    unit = units[0]
+    assert unit.systems == ["rag"]
+    assert "pytest" in unit.tools
+    assert unit.methods == ["fuzzing"]
+    assert unit.failure_modes == ["FP1"]
+
+
+def test_frequency_open_vs_anchored_channels() -> None:
+    item_open = _item("r1", "https://github.com/org/repo1")
+    item_open.provenance.query_string = "window:2023-01-01..2026-08-31 RAG testing"
+    det_open = _det("r1", "ragas", "N1")
+
+    item_anchored = _item("r2", "https://github.com/org/repo2")
+    item_anchored.provenance.query_string = '"from ragas import" language:Python'
+    det_anchored = _det("r2", "ragas", "N2")
+
+    units = units_from_detections([item_open, item_anchored], [det_open, det_anchored])
+    assert len(units) == 2
+
+    all_rows = {r.entry: r for r in frequency(units, channel="all")}
+    assert all_rows["ragas"].units == 2
+    assert all_rows["ragas"].open_units == 1
+    assert all_rows["ragas"].anchored_units == 1
+
+    open_rows = {r.entry: r for r in frequency(units, channel="open")}
+    assert open_rows["ragas"].units == 1
+    assert open_rows["ragas"].open_units == 1
+
+    anchored_rows = {r.entry: r for r in frequency(units, channel="anchored")}
+    assert anchored_rows["ragas"].units == 1
+    assert anchored_rows["ragas"].anchored_units == 1
+
+
+def test_cli_frequency_channel_option(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+    item1 = _item("r1", "https://github.com/org/repo1")
+    item1.provenance.query_string = "window:2023-01-01..2026-08-31 RAG testing"
+    ItemStorage(tmp_path).save_items([item1], "run-ch")
+    det1 = Detection(
+        item_id="r1",
+        source="github",
+        entry_id="ragas",
+        entry_type="tool",
+        level="N1",
+        signal="text",
+        location="x",
+        evidence="e",
+    )
+    det_dir = tmp_path / "extract" / "run-ch"
+    det_dir.mkdir(parents=True, exist_ok=True)
+    with open(det_dir / "detections.jsonl", "w", encoding="utf-8") as fh:
+        fh.write(det1.model_dump_json() + "\n")
+
+    runner = CliRunner()
+    r = runner.invoke(app, ["analyze", "frequency", "--run", "run-ch", "--channel", "open"])
+    assert r.exit_code == 0, r.stdout
+    assert "OPEN" in r.stdout
+    assert "Open" in r.stdout

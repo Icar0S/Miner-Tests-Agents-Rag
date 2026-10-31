@@ -49,9 +49,10 @@ def sources(
 def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
     """Display sources as a Rich table."""
     table = Table(title="MSR-Kit Sources", show_lines=True)
-    table.add_column("Source", style="bold")
+    table.add_column("Source", style="bold", no_wrap=True)
     table.add_column("Status")
-    table.add_column("Reason")
+    table.add_column("API Oficial")
+    table.add_column("Reason / Exclusion Rationale")
     table.add_column("Auth Vars")
     table.add_column("Rate Limit")
     table.add_column("Search")
@@ -63,24 +64,42 @@ def _sources_table(registry: dict[str, type[BaseAdapter]]) -> None:
         avail = adapter.available()
         policy = adapter_cls.policy
 
-        status_style = {
-            "OK": "green",
-            "DEGRADED": "yellow",
-            "UNSUPPORTED": "red",
-        }.get(avail.status, "white")
+        if policy.exclusion_category == "methodological":
+            status_text = "DESATIVADA"
+            status_style = "cyan"
+        elif policy.exclusion_category in ("access_gated", "commercial_paywall"):
+            status_text = "DESATIVADA"
+            status_style = "yellow"
+        elif not policy.has_official_api:
+            status_text = "DESATIVADA"
+            status_style = "dim red"
+        elif avail.status == "OK":
+            status_text = "OK"
+            status_style = "green"
+        elif avail.status == "DEGRADED":
+            status_text = "DEGRADED"
+            status_style = "yellow"
+        else:
+            status_text = "DESATIVADA"
+            status_style = "dim"
 
         missing_info = ""
-        if avail.missing_env:
+        if avail.missing_env and not policy.exclusion_category:
             missing_info = f"\n⚠ Missing: {', '.join(avail.missing_env)}"
 
         rate_str = f"{policy.rate_limit.requests}/{policy.rate_limit.per_seconds}s"
         if policy.rate_limit.daily_cap:
             rate_str += f"\nDaily: {policy.rate_limit.daily_cap}"
 
+        api_col = "[green]✓ Sim[/green]" if policy.has_official_api else "[red]✗ Não[/red]"
+
+        display_reason = policy.exclusion_rationale if policy.exclusion_rationale else avail.reason
+
         table.add_row(
             name,
-            f"[{status_style}]{avail.status}[/{status_style}]",
-            avail.reason[:80] + ("..." if len(avail.reason) > 80 else ""),
+            f"[{status_style}]{status_text}[/{status_style}]",
+            api_col,
+            display_reason[:70] + ("..." if len(display_reason) > 70 else ""),
             "\n".join(policy.auth_env_vars) + missing_info if policy.auth_env_vars else "none",
             rate_str,
             "✓" if policy.supports_full_text_search else "✗",
@@ -101,8 +120,20 @@ def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
         avail = adapter.available()
         policy = adapter_cls.policy
 
+        status_str: str = str(avail.status)
+        if policy.exclusion_category:
+            status_str = "DESATIVADA"
+
         lines.append(f"## {name}\n")
-        lines.append(f"- **Status:** {avail.status}")
+        lines.append(f"- **Status:** {status_str}")
+        api_text = (
+            f"Yes ({policy.official_api_name})" if policy.has_official_api else "No (no public API)"
+        )
+        lines.append(f"- **Official API:** {api_text}")
+        if policy.exclusion_category:
+            lines.append(f"- **Exclusion category:** {policy.exclusion_category}")
+        if policy.exclusion_rationale:
+            lines.append(f"- **Exclusion rationale:** {policy.exclusion_rationale}")
         lines.append(f"- **Reason:** {avail.reason}")
         lines.append(f"- **Version:** {adapter_cls.version}")
         lines.append(f"- **Auth required:** {'Yes' if policy.requires_auth else 'No'}")
@@ -130,10 +161,13 @@ def _sources_md(registry: dict[str, type[BaseAdapter]]) -> None:
 @app.command()
 def validate(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Validate protocol schema and check credential availability (no network)."""
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
@@ -234,6 +268,9 @@ def validate(
 @app.command()
 def plan(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Filter plan to a single source"
     ),
@@ -250,7 +287,7 @@ def plan(
     (max pages × queries). With --estimate every query is estimated and
     partitioned as `run` would, and the budget follows the estimated totals.
     """
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     source = _unwrap(source)
     estimate = _unwrap(estimate)
     verbose = _unwrap(verbose)
@@ -407,6 +444,9 @@ def _discard_incomplete(
 @app.command()
 def run(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
+    protocol_opt: str | None = typer.Option(
+        None, "--protocol", "-p", help="Protocol file (flag alias)"
+    ),
     source: str | None = typer.Option(
         None, "--source", "-s", help="Execute collection for a single source only"
     ),
@@ -422,7 +462,7 @@ def run(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Execute the collection protocol."""
-    protocol = _unwrap(protocol)
+    protocol = _unwrap(protocol_opt) or _unwrap(protocol)
     source = _unwrap(source)
     limit = _unwrap(limit)
     per_query_limit = _unwrap(per_query_limit)
@@ -569,6 +609,12 @@ def run(
             queries = [Query.model_validate(d) for d in source_entry.planned]
         else:
             queries = config.build_queries(source_name)
+            if per_query_limit is not None:
+                for q in queries:
+                    q.limit = min(q.limit or per_query_limit, per_query_limit)
+            if limit is not None:
+                for q in queries:
+                    q.limit = limit
             if not adapter_cls.policy.supports_raw_queries and any(q.raw for q in queries):
                 console.print(
                     f"  [yellow]`queries:` ignored: {source_name} "
@@ -586,9 +632,9 @@ def run(
                     )
                     partitioned_queries.append(q)
             queries = partitioned_queries
-            if per_query_limit is not None and adapter_cls.policy.searches_each_term:
-                # A per-query cap must hold per term, or the first term takes the
-                # whole sample (sources fetched by tag or feed are left as they are).
+            if adapter_cls.policy.searches_each_term:
+                # Sources that search each term separately must hold one query per term,
+                # so caps, checkpoints, and limits apply evenly across the whole lexicon.
                 from msrkit.partition import split_by_term
 
                 queries = [s for q in queries for s in ([q] if q.raw else split_by_term(q))]
@@ -599,6 +645,21 @@ def run(
         if per_query_limit is not None:
             for q in queries:
                 q.limit = min(q.limit or per_query_limit, per_query_limit)
+        elif config.limits.max_items_per_source and len(queries) > 1:
+            # Fair-share scheduling: if user did not set --per-query-limit,
+            # calculate a sensible ceiling for non-literal queries so broad
+            # text queries cannot exhaust the source budget and starve the rest.
+            budget = limit if limit is not None else config.limits.max_items_per_source
+            open_queries = [q for q in queries if not q.raw]
+            raw_queries = [q for q in queries if q.raw]
+            if raw_queries:
+                raw_share = max(50, int(budget / len(queries) * 3))
+                for q in raw_queries:
+                    q.limit = min(q.limit or raw_share, raw_share)
+            if open_queries:
+                fair_share = max(25, int(budget / len(open_queries) * 2))
+                for q in open_queries:
+                    q.limit = min(q.limit or fair_share, fair_share)
 
         done = {e.key: e for e in source_entry.queries if e.completed and e.key}
         if resume:
@@ -617,6 +678,12 @@ def run(
             key = query_key(query)
             if key in done:
                 continue
+            if limit is not None and total_source_items >= limit:
+                console.print(
+                    f"  [dim]Source '{source_name}' limit reached "
+                    f"({total_source_items} items). Skipping remaining queries.[/dim]"
+                )
+                break
             if total_source_items >= config.limits.max_items_per_source:
                 console.print(
                     f"  [dim]Source '{source_name}' item limit reached "
@@ -631,6 +698,8 @@ def run(
                 break
 
             remaining_for_source = config.limits.max_items_per_source - total_source_items
+            if limit is not None:
+                remaining_for_source = min(remaining_for_source, max(0, limit - total_source_items))
             query.limit = min(query.limit or 5000, remaining_for_source)
 
             query_label = f"[{query.kind}] " if query.kind else ""
@@ -696,6 +765,8 @@ def run(
                         )
 
                     if total_source_items >= config.limits.max_items_per_source:
+                        break
+                    if limit is not None and total_source_items >= limit:
                         break
                     if query.limit is not None and raw_items_count >= query.limit:
                         break  # per-query cap, whether or not the adapter enforces it
@@ -768,7 +839,7 @@ def run(
     console.print(f"\n[green]✓ Run complete. Manifest: {manifest_path}[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def normalize(
     run_id: str | None = typer.Option(
         None, "--run", help="Run ID to reprocess (defaults to latest)"
@@ -874,7 +945,7 @@ def normalize(
     console.print(f"[green]✓ Normalized {total_items} items from raw data[/green]")
 
 
-@app.command()
+@app.command(hidden=True)
 def fetch(
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     source: list[str] = typer.Option(  # noqa: B008
@@ -915,9 +986,10 @@ def fetch(
 
     done: set[str] = set()
     if out_path.exists():
-        for line in out_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                done.add(json.loads(line)["item_id"])
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                if line_s := line.strip():
+                    done.add(json.loads(line_s)["item_id"])
 
     targets = [
         it

@@ -70,9 +70,42 @@ def partition(
     # Estimate result count
     estimated = estimate_fn(q)
 
-    # Unknown or within limit → single partition
+    # Unknown or within limit → single partition, UNLESS date window is long and split is possible
     if estimated is None or estimated <= max_results:
-        return [(q, False)]
+        # If estimation failed (estimated is None) on a multi-month window, split defensively
+        # so an API glitch doesn't collapse a multi-year query into a single bucket.
+        if (
+            estimated is None
+            and q.since is not None
+            and q.until is not None
+            and (q.until - q.since) > timedelta(days=180)
+            and depth < 3
+        ):
+            logger.warning(
+                "Estimation returned None for %s (window %s..%s, %d days); splitting defensively by date (depth %d)",
+                q.terms,
+                q.since,
+                q.until,
+                (q.until - q.since).days,
+                depth,
+            )
+            sub_queries = partition_by_date(q)
+            result: list[tuple[Query, bool]] = []
+            for sq in sub_queries:
+                result.extend(
+                    partition(
+                        sq,
+                        max_results,
+                        estimate_fn,
+                        secondary_axes,
+                        depth + 1,
+                        max_depth,
+                    )
+                )
+            return result
+
+        q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+        return [(q_out, False)]
 
     # Guard against infinite recursion
     if depth >= max_depth:
@@ -83,7 +116,8 @@ def partition(
             estimated,
             max_results,
         )
-        return [(q, True)]
+        q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+        return [(q_out, True)]
 
     # Try splitting by date window first
     if q.since is not None and q.until is not None:
@@ -131,7 +165,8 @@ def partition(
         estimated,
         max_results,
     )
-    return [(q, True)]
+    q_out = q if estimated is None else q.model_copy(update={"estimated_total": estimated})
+    return [(q_out, True)]
 
 
 def merge_date_ranges(queries: list[Query]) -> tuple[date | None, date | None]:

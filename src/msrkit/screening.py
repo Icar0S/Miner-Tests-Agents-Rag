@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from msrkit.extract import Detection
@@ -36,8 +37,89 @@ if TYPE_CHECKING:
 
 Decision = Literal["include", "exclude", "uncertain"]
 DECISIONS = ("include", "exclude", "uncertain")
+
+# Multilingual decision aliases (PT/EN)
+DECISION_ALIASES: dict[str, Decision] = {
+    "include": "include",
+    "inc": "include",
+    "incluir": "include",
+    "inclusao": "include",
+    "inclusão": "include",
+    "aceito": "include",
+    "aceita": "include",
+    "aceitar": "include",
+    "sim": "include",
+    "s": "include",
+    "exclude": "exclude",
+    "exc": "exclude",
+    "excluir": "exclude",
+    "exclusao": "exclude",
+    "exclusão": "exclude",
+    "rejeitado": "exclude",
+    "rejeitada": "exclude",
+    "rejeitar": "exclude",
+    "nao": "exclude",
+    "não": "exclude",
+    "n": "exclude",
+    "uncertain": "uncertain",
+    "incerteza": "uncertain",
+    "duvida": "uncertain",
+    "dúvida": "uncertain",
+    "indeciso": "uncertain",
+}
+
+# Coders whose decisions represent consensus / tie-breakers
+CONSENSUS_CODERS = {
+    "consensus",
+    "consenso",
+    "tiebreaker",
+    "tie-breaker",
+    "terceiro",
+    "terceiro_revisor",
+    "terceiro_avaliador",
+    "third_coder",
+    "third_reviewer",
+    "supervisor",
+    "resolver",
+    "final",
+    "desempate",
+}
+
+
+def is_consensus_coder(coder: str) -> bool:
+    """Check if coder name indicates a consensus / tie-breaker / supervisor role."""
+    c_clean = coder.strip().lower()
+    return c_clean in CONSENSUS_CODERS or any(
+        kw in c_clean
+        for kw in (
+            "consenso",
+            "consensus",
+            "tiebreaker",
+            "tie-breaker",
+            "terceiro",
+            "supervisor",
+            "resolver",
+            "desempate",
+        )
+    )
+
+
 TRUE_MARKS = {"x", "s", "sim", "y", "yes", "1", "true", "✓"}
 DELIMITER = ";"
+
+
+class DecisionList(list["ScreeningDecision"]):
+    """List of screening decisions with audit metadata on skipped rows."""
+
+    skipped: list[str] = []
+
+    def __init__(
+        self,
+        iterable: Sequence[ScreeningDecision] = (),
+        skipped: list[str] | None = None,
+    ) -> None:
+        super().__init__(iterable)
+        self.skipped = skipped or []
 
 
 class ScreeningCriteria(BaseModel):
@@ -64,9 +146,9 @@ class ScreeningDecision(BaseModel):
 class SheetError(ValueError):
     """The sheet has rows that cannot be imported; `problems` lists them."""
 
-    def __init__(self, problems: list[str]) -> None:
+    def __init__(self, problems: list[str], sheet_name: str = "screening sheet") -> None:
         self.problems = problems
-        super().__init__(f"{len(problems)} problem(s) in the screening sheet")
+        super().__init__(f"{len(problems)} problem(s) in the {sheet_name}")
 
 
 BASE_COLUMNS = [
@@ -146,12 +228,14 @@ def export_sheet(
     coder: str = "",
     extra_columns: dict[str, dict[str, str]] | None = None,
     ranking: dict[str, Ranked] | None = None,
+    blind: bool = False,
 ) -> int:
     """Write the screening sheet; returns the number of rows.
 
     With `ranking` (see rank_items), rows follow the ranking and carry its fixed
     batch numbers; without it, items keep the given order in batches of
-    `criteria.batch_size`.
+    `criteria.batch_size`. If `blind` is True, automated score, evidence,
+    matched_terms, concepts, and rank are masked to prevent confirmation bias.
     """
     extra_columns = extra_columns or {}
     if ranking is not None:
@@ -168,15 +252,17 @@ def export_sheet(
             row = {
                 "item_id": item.id,
                 "batch": ranked.batch if ranked else idx // max(criteria.batch_size, 1) + 1,
-                "rank": ranked.rank if ranked else idx + 1,
-                "score": ranked.score if ranked else "",
-                "evidence": ranked.evidence if ranked else "",
+                "rank": "" if blind else (ranked.rank if ranked else idx + 1),
+                "score": "" if blind else (ranked.score if ranked else ""),
+                "evidence": "" if blind else (ranked.evidence if ranked else ""),
                 "source": item.source,
                 "kind": item.kind.value,
                 "url": str(item.url),
                 "title": item.title or "",
-                "concepts": ", ".join(item.concepts),
-                "matched_terms": ", ".join(sorted({h.term for h in item.matched_terms})),
+                "concepts": "" if blind else ", ".join(item.concepts),
+                "matched_terms": (
+                    "" if blind else ", ".join(sorted({h.term for h in item.matched_terms}))
+                ),
                 "has_ci": "" if item.tech.has_ci is None else str(item.tech.has_ci).lower(),
                 "contributors": "" if item.tech.contributors is None else item.tech.contributors,
                 "coder": coder,
@@ -195,7 +281,7 @@ def import_sheet(
     criteria: ScreeningCriteria,
     known_ids: set[str],
     default_coder: str = "",
-) -> list[ScreeningDecision]:
+) -> DecisionList:
     """Parse and validate a filled sheet. Rows without a decision are skipped.
 
     Raises SheetError listing every invalid row, so nothing is half-imported.
@@ -203,17 +289,23 @@ def import_sheet(
     raw = path.read_bytes()
     sheet_hash = hashlib.sha256(raw).hexdigest()
     text = raw.decode("utf-8-sig")
+    import io
+
     dialect_delim = DELIMITER if text.split("\n", 1)[0].count(DELIMITER) else ","
-    reader = csv.DictReader(text.splitlines(), delimiter=dialect_delim)
+    reader = csv.DictReader(io.StringIO(text), delimiter=dialect_delim)
 
     now = datetime.now(UTC).isoformat()
     decisions: list[ScreeningDecision] = []
     problems: list[str] = []
+    skipped: list[str] = []
     for line_no, row in enumerate(reader, start=2):
-        decision = (row.get("decision") or "").strip().lower()
-        if not decision:
-            continue
         item_id = (row.get("item_id") or "").strip()
+        raw_dec = (row.get("decision") or "").strip().lower()
+        if not raw_dec:
+            if item_id:
+                skipped.append(f"line {line_no} ({item_id})")
+            continue
+        decision = DECISION_ALIASES.get(raw_dec, raw_dec)
         coder = (row.get("coder") or default_coder).strip()
         where = f"line {line_no} ({item_id or 'no item_id'})"
         if item_id not in known_ids:
@@ -248,7 +340,7 @@ def import_sheet(
         )
     if problems:
         raise SheetError(problems)
-    return decisions
+    return DecisionList(decisions, skipped=skipped)
 
 
 def decisions_path(data_dir: Path, run_id: str) -> Path:
@@ -266,21 +358,54 @@ def append_decisions(data_dir: Path, run_id: str, decisions: list[ScreeningDecis
 
 def load_decisions(data_dir: Path, run_id: str) -> dict[tuple[str, str], ScreeningDecision]:
     """Latest decision per (item_id, coder)."""
-    path = decisions_path(data_dir, run_id)
     latest: dict[tuple[str, str], ScreeningDecision] = {}
+    if run_id == "consolidated":
+        screen_dir = data_dir / "screening"
+        if screen_dir.exists():
+            for p in screen_dir.glob("*/decisions.jsonl"):
+                if p.parent.name != "consolidated":
+                    with open(p, encoding="utf-8-sig") as f:
+                        for line in f:
+                            if line_s := line.strip():
+                                d = ScreeningDecision.model_validate(json.loads(line_s))
+                                latest[(d.item_id, d.coder)] = d
+        path = decisions_path(data_dir, "consolidated")
+        if path.exists():
+            with open(path, encoding="utf-8-sig") as f:
+                for line in f:
+                    if line_s := line.strip():
+                        d = ScreeningDecision.model_validate(json.loads(line_s))
+                        latest[(d.item_id, d.coder)] = d
+        return latest
+
+    path = decisions_path(data_dir, run_id)
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                d = ScreeningDecision.model_validate(json.loads(line))
-                latest[(d.item_id, d.coder)] = d
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                if line_s := line.strip():
+                    d = ScreeningDecision.model_validate(json.loads(line_s))
+                    latest[(d.item_id, d.coder)] = d
     return latest
 
 
 def final_decisions(latest: dict[tuple[str, str], ScreeningDecision]) -> dict[str, Decision]:
-    """One decision per item: agreed decision, or `uncertain` when coders disagree."""
-    by_item: dict[str, set[Decision]] = {}
-    for (item_id, _coder), d in latest.items():
-        by_item.setdefault(item_id, set()).add(d.decision)
-    return {
-        item_id: next(iter(ds)) if len(ds) == 1 else "uncertain" for item_id, ds in by_item.items()
-    }
+    """One decision per item: consensus coder decision, or agreed decision, or `uncertain`."""
+    by_item: dict[str, dict[str, Decision]] = {}
+    for (item_id, coder), d in latest.items():
+        by_item.setdefault(item_id, {})[coder] = d.decision
+
+    out: dict[str, Decision] = {}
+    for item_id, coder_decisions in by_item.items():
+        # Check if there is an explicit consensus/tie-breaker decision
+        consensus_dec = None
+        for coder, dec in coder_decisions.items():
+            if is_consensus_coder(coder):
+                consensus_dec = dec
+                break
+        if consensus_dec is not None:
+            out[item_id] = consensus_dec
+            continue
+
+        distinct = set(coder_decisions.values())
+        out[item_id] = next(iter(distinct)) if len(distinct) == 1 else "uncertain"
+    return out

@@ -217,5 +217,5 @@ def catalog_origin(gazetteer: Gazetteer) -> dict[str, int]:
     out = {"seed": 0, "discovery": 0}
     entries: list[ToolEntry | MethodEntry] = [*gazetteer.tools, *gazetteer.methods]
     for entry in entries:
-        out[entry.origin] += 1
+        out[entry.origin] = out.get(entry.origin, 0) + 1
     return out

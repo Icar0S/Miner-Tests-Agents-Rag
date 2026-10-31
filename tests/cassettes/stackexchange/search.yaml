@@ -1,0 +1,301 @@
+interactions:
+- request:
+    body: ''
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip
+      connection:
+      - keep-alive
+      host:
+      - api.stackexchange.com
+    method: GET
+    uri: https://api.stackexchange.com/2.3/search/advanced?filter=withbody&fromdate=1735689600&order=desc&page=1&pagesize=5&q=rag+evaluation&site=stackoverflow&sort=creation&todate=1751327999
+  response:
+    body:
+      string: "{\"items\":[{\"tags\":[\"json\",\"nlp\",\"artificial-intelligence\",\"multi-agent\",\"n8n\"],\"owner\":{\"account_id\":5245413,\"reputation\":2226,\"user_id\":4191289,\"user_type\":\"registered\",\"accept_rate\":71,\"profile_image\":\"https://i.sstatic.net/YEuqJ.jpg?s=256\",\"display_name\":\"Lukesivi\",\"link\":\"https://stackoverflow.com/users/4191289/lukesivi\"},\"is_answered\":false,\"view_count\":301,\"answer_count\":0,\"score\":2,\"last_activity_date\":1746617859,\"creation_date\":1746617859,\"question_id\":79610433,\"content_license\":\"CC
+        BY-SA 4.0\",\"link\":\"https://stackoverflow.com/questions/79610433/natural-language-to-json-for-n8n-workflows\",\"title\":\"Natural
+        language to JSON for N8N workflows\",\"body\":\"<p>We\u2019re in the early
+        stages of designing a system that converts natural language descriptions of
+        automation workflows into structured JSON outputs, specifically for n8n workflows.
+        The final JSON will be used directly in the n8n UI or sent to an endpoint
+        for activation.</p>\\n<p>We are currently evaluating the different technical
+        approaches for building this \u201Cnatural language to JSON\u201D conversion
+        system. The number of options is a bit overwhelming, and we\u2019d like to
+        understand the trade-offs between them before investing in building a full
+        MVP or prototype.</p>\\n<p>So far, the approaches we've identified include:</p>\\n<ul>\\n<li><p>Simple
+        prompting \u2013 Using a carefully engineered prompt to guide a language model
+        to generate the correct JSON output.</p>\\n</li>\\n<li><p>Multi-agent prompting
+        \u2013 Breaking down the task into sub-tasks handled by separate prompts or
+        agents (e.g., planner \u2192 generator \u2192 validator).</p>\\n</li>\\n<li><p>RAG
+        (Retrieval-Augmented Generation) \u2013 Providing contextual examples or definitions
+        at runtime to improve output relevance.</p>\\n</li>\\n<li><p>Pre-training
+        on prompt-output pairs \u2013 Fine-tuning a model on custom pairs of natural
+        language descriptions and desired JSON outputs.</p>\\n</li>\\n<li><p>OpenAI
+        JSON mode \u2013 Leveraging OpenAI\u2019s response_format=&quot;json&quot;
+        to ensure well-structured outputs.</p>\\n</li>\\n<li><p>Function calling (OpenAI)
+        \u2013 Defining function schemas and having the model return arguments that
+        match them.</p>\\n</li>\\n<li><p>Instructor / Pydantic approach \u2013 Using
+        Instructor (a library that converts LLM output into Pydantic-validated Python
+        objects).</p>\\n</li>\\n<li><p>PydanticAI \u2013 Similar to Instructor, but
+        with more advanced validation and model chaining capabilities.</p>\\n</li>\\n</ul>\\n<p>Our
+        goal is high accuracy, strong schema compliance (the output JSON must match
+        a complex and evolving schema), and flexibility for future improvements.</p>\\n<p>What
+        we\u2019re trying to decide:</p>\\n<ul>\\n<li><p>Which approach (or combination
+        of approaches) is best suited for building a reliable, maintainable system
+        for natural language to JSON conversion?</p>\\n</li>\\n<li><p>How do we validate
+        that without an MVP?</p>\\n</li>\\n<li><p>Are there specific scenarios where
+        one method shines over the others?</p>\\n</li>\\n<li><p>What are the trade-offs
+        in terms of scalability, latency, ease of development, and reliability?</p>\\n</li>\\n</ul>\\n<p>If
+        anyone has experience building similar systems or has insights on best practices
+        for natural language-to-structured-output tasks, I\u2019d appreciate your
+        input.</p>\\n\"},{\"tags\":[\"python\",\"large-language-model\",\"rag\",\"ragas\"],\"owner\":{\"account_id\":25140571,\"reputation\":119,\"user_id\":18986948,\"user_type\":\"registered\",\"profile_image\":\"https://www.gravatar.com/avatar/217fc716cc5396a6b0381e23068a1267?s=256&d=identicon&r=PG\",\"display_name\":\"Howie\",\"link\":\"https://stackoverflow.com/users/18986948/howie\"},\"is_answered\":false,\"view_count\":419,\"answer_count\":1,\"score\":0,\"last_activity_date\":1741250351,\"creation_date\":1741245705,\"question_id\":79488543,\"content_license\":\"CC
+        BY-SA 4.0\",\"link\":\"https://stackoverflow.com/questions/79488543/what-to-include-in-context-precision-recall-for-rag-llm-evaluation\",\"title\":\"What
+        to include in context precision/recall for RAG LLM evaluation\",\"body\":\"<p>I
+        am doing evaluation for my RAG LLM application using <code>ragas</code>. I
+        have the <code>prompt instruction</code> to describe some rules, the <code>retrieved
+        content</code> from my retriever, and <code>chat history</code> together for
+        the LLM to do question answering. When I do the evaluation for <code>context
+        precision</code> or <code>context recall</code> in the <a href=\\\"https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/\\\"
+        rel=\\\"nofollow noreferrer\\\">documentation</a>, should I use the <code>instruction+retrieved
+        content+chat history</code> or just <code>retrieved content</code>? Thanks!</p>\\n<p>For
+        example, for the parameter <code>retrieved_contexts</code> in the example
+        codes below, should I use <code>instruction+retrieved content+chat history</code>
+        or just <code>retrieved content</code>?</p>\\n<pre><code>from ragas import
+        SingleTurnSample\\nfrom ragas.metrics import LLMContextPrecisionWithoutReference\\n\\ncontext_precision
+        = LLMContextPrecisionWithoutReference(llm=evaluator_llm)\\n\\nsample = SingleTurnSample(\\n
+        \   user_input=&quot;Where is the Eiffel Tower located?&quot;,\\n    response=&quot;The
+        Eiffel Tower is located in Paris.&quot;,\\n    retrieved_contexts=[&quot;The
+        Eiffel Tower is located in Paris.&quot;], \\n)\\n\\nawait context_precision.single_turn_ascore(sample)\\n</code></pre>\\n\"},{\"tags\":[\"openai-api\",\"azure-openai\",\"rag\",\"openaiembeddings\"],\"owner\":{\"account_id\":6490650,\"reputation\":1542,\"user_id\":5024829,\"user_type\":\"registered\",\"accept_rate\":75,\"profile_image\":\"https://www.gravatar.com/avatar/6ae9251dc908d5ccfd3474fe56276988?s=256&d=identicon&r=PG&f=y&so-version=2\",\"display_name\":\"WaterRocket8236\",\"link\":\"https://stackoverflow.com/users/5024829/waterrocket8236\"},\"is_answered\":false,\"view_count\":160,\"answer_count\":1,\"score\":0,\"last_activity_date\":1737115621,\"creation_date\":1736866008,\"question_id\":79355398,\"content_license\":\"CC
+        BY-SA 4.0\",\"link\":\"https://stackoverflow.com/questions/79355398/not-support-connection-type-none-for-embedding-api-connection-type-should-be-in\",\"title\":\"Not
+        Support connection type None for embedding api. Connection type should be
+        in [AzureOpenAI, OpenAI]\",\"body\":\"<p>I am working on this project, <a
+        href=\\\"https://github.com/Azure-Samples/ai-rag-chat-evaluator\\\" rel=\\\"nofollow
+        noreferrer\\\">https://github.com/Azure-Samples/ai-rag-chat-evaluator</a>.</p>\\n<p>I
+        am getting the following error while running evaluation with the below line,</p>\\n<pre><code>python
+        -m evaltools evaluate --config=example_config.json\\n</code></pre>\\n<p>I
+        am using Open AI instance rather than Azure open ai. Below are my .env and
+        example_config.json configurations,</p>\\n<p>example_config.json:</p>\\n<pre><code>{
+        &quot;testdata_path&quot;: &quot;example_input/qa.jsonl&quot;, &quot;results_dir&quot;:
+        &quot;example_results/experiment&lt;TIMESTAMP&gt;&quot;, &quot;requested_metrics&quot;:
+        [&quot;gpt_groundedness&quot;, &quot;gpt_relevance&quot;, &quot;gpt_coherence&quot;,
+        &quot;answer_length&quot;, &quot;latency&quot;], &quot;target_url&quot;: &quot;my
+        app service url here&quot;, &quot;target_parameters&quot;: { &quot;overrides&quot;:
+        { &quot;top&quot;: 3, &quot;temperature&quot;: 0.3, &quot;minimum_reranker_score&quot;:
+        0, &quot;minimum_search_score&quot;: 0, &quot;retrieval_mode&quot;: &quot;hybrid&quot;,
+        &quot;semantic_ranker&quot;: true, &quot;semantic_captions&quot;: false, &quot;suggest_followup_questions&quot;:
+        false, &quot;use_oid_security_filter&quot;: false, &quot;use_groups_security_filter&quot;:
+        false, &quot;vector_fields&quot;: [ &quot;embedding&quot; ], &quot;use_gpt4v&quot;:
+        false, &quot;gpt4v_input&quot;: &quot;textAndImages&quot;, &quot;seed&quot;:
+        1 } }, &quot;target_response_answer_jmespath&quot;: &quot;message.content&quot;,
+        &quot;target_response_context_jmespath&quot;: &quot;context.data_points.text&quot;
+        }\\n</code></pre>\\n<p>env file contents:</p>\\n<pre><code>OPENAI_HOST=&quot;openai&quot;\\nOPENAI_GPT_MODEL=&quot;gpt-4o&quot;
+        # I changed this to 4o instead 4 (given in repo)\\n\\n# For Azure OpenAI only:\\nAZURE_OPENAI_EVAL_DEPLOYMENT=&quot;&quot;\\nAZURE_OPENAI_ENDPOINT=&quot;&quot;\\nAZURE_OPENAI_KEY=&quot;&quot;\\nAZURE_OPENAI_TENANT_ID=&quot;&quot;\\n\\n#
+        For openai.com only:\\nOPENAICOM_KEY=&quot;my key goes here&quot;\\nOPENAICOM_ORGANIZATION=&quot;&quot;\\n\\n#
+        For generating QA based on search index:\\nAZURE_SEARCH_ENDPOINT=&quot;my
+        search url here&quot;\\nAZURE_SEARCH_INDEX=&quot;gptkbindex&quot;\\nAZURE_SEARCH_KEY=&quot;&quot;\\nAZURE_SEARCH_TENANT_ID=&quot;&quot;\\n</code></pre>\\n<p>While
+        I depolyed my azure openai search I configured with open ai key rather than
+        azure openai. I think I need to set embedding somewhere. How should I get
+        around this error ? Please find the complete stack trace below,</p>\\n<blockquote>\\n<p>Not
+        Support connection type None for embedding api. Connection type\\nshould be
+        in [AzureOpenAI, OpenAI]</p>\\n</blockquote>\\n<pre><code>(evalrag) PS C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator&gt;
+        python -m evaltools evaluate --config=example_config.json\\n[19:52:20] INFO
+        \    Running evaluation from config C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\example_config.json
+        \                     evaluate.py:237\\n           INFO     Replaced results_dir
+        in config with timestamp                                                                             evaluate.py:218\\n
+        \          INFO     Using OpenAI Service with API Key from OPENAICOM_KEY                                                                  service_setup.py:42\\n
+        \          INFO     Running evaluation using data from C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\example_input\\\\qa.jsonl
+        \              evaluate.py:101\\n           INFO     Sending a test question
+        to the target to ensure it is running...                                                          evaluate.py:107\\n[19:52:27]
+        INFO     Successfully received response from target for question: &quot;What
+        information is in your knowledge base?&quot;                    evaluate.py:118\\n
+        \                   &quot;answer&quot;: &quot;The knowledge base includes
+        information about the ...&quot;                                                                        \\n
+        \                   &quot;context&quot;: &quot;Northwind_Standard_Benefits_Details.pdf#page=99:
+        \ ...&quot;                                                                       \\n
+        \          INFO     Sending a test chat completion to the GPT deployment to
+        ensure it is running...                                           evaluate.py:128\\n[19:52:28]
+        INFO     Successfully received response from GPT: &quot;Hello! How can I assist
+        you today?&quot;                                             evaluate.py:134\\n
+        \          INFO     Starting evaluation...                                                                                                    evaluate.py:136\\nProcessing...
+        \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+        \  0% -:--:--\\nTraceback (most recent call last):\\n  File &quot;C:\\\\Users\\\\Bhabani
+        Mohapatra\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python310\\\\lib\\\\runpy.py&quot;,
+        line 196, in _run_module_as_main\\n    return _run_code(code, main_globals,
+        None,\\n  File &quot;C:\\\\Users\\\\Bhabani Mohapatra\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python310\\\\lib\\\\runpy.py&quot;,
+        line 86, in _run_code\\n    exec(code, run_globals)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\src\\\\evaltools\\\\__main__.py&quot;,
+        line 6, in &lt;module&gt;\\n    app()\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\typer\\\\main.py&quot;,
+        line 340, in __call__\\n    raise e\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\typer\\\\main.py&quot;,
+        line 323, in __call__\\n    return get_command(self)(*args, **kwargs)\\n  File
+        &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\click\\\\core.py&quot;,
+        line 1161, in __call__\\n    return self.main(*args, **kwargs)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\typer\\\\core.py&quot;,
+        line 743, in main\\n    return _main(\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\typer\\\\core.py&quot;,
+        line 198, in _main\\n    rv = self.invoke(ctx)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\click\\\\core.py&quot;,
+        line 1697, in invoke\\n    return _process_result(sub_ctx.command.invoke(sub_ctx))\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\click\\\\core.py&quot;,
+        line 1443, in invoke\\n    return ctx.invoke(self.callback, **ctx.params)\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\click\\\\core.py&quot;,
+        line 788, in invoke\\n    return __callback(*args, **kwargs)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\typer\\\\main.py&quot;,
+        line 698, in wrapper\\n    return callback(**use_params)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\src\\\\evaltools\\\\cli.py&quot;,
+        line 86, in evaluate\\n    run_evaluate_from_config(Path.cwd(), config, numquestions,
+        targeturl, resultsdir)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\src\\\\evaltools\\\\eval\\\\evaluate.py&quot;,
+        line 245, in run_evaluate_from_config\\n    evaluation_run_complete = run_evaluation(\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\src\\\\evaltools\\\\eval\\\\evaluate.py&quot;,
+        line 172, in run_evaluation\\n    questions_with_ratings.append(evaluate_row(row))\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\ai-rag-chat-evaluator\\\\src\\\\evaltools\\\\eval\\\\evaluate.py&quot;,
+        line 159, in evaluate_row\\n    result = metric.evaluator_fn(openai_config=openai_config)(\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\azure\\\\ai\\\\evaluation\\\\_evaluators\\\\_groundedness\\\\_groundedness.py&quot;,
+        line 144, in __call__\\n    return super().__call__(*args, **kwargs)\\n  File
+        &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\azure\\\\ai\\\\evaluation\\\\_evaluators\\\\_common\\\\_base_eval.py&quot;,
+        line 107, in __call__\\n    return async_run_allowing_running_loop(self._async_evaluator,
+        **kwargs)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\_utils\\\\async_utils.py&quot;,
+        line 96, in async_run_allowing_running_loop\\n    return asyncio.run(_invoke_async_with_sigint_handler(async_func,
+        *args, **kwargs))\\n  File &quot;C:\\\\Users\\\\Bhabani Mohapatra\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python310\\\\lib\\\\asyncio\\\\runners.py&quot;,
+        line 44, in run\\n    return loop.run_until_complete(main)\\n  File &quot;C:\\\\Users\\\\Bhabani
+        Mohapatra\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python310\\\\lib\\\\asyncio\\\\base_events.py&quot;,
+        line 646, in run_until_complete\\n    return future.result()\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\_utils\\\\async_utils.py&quot;,
+        line 70, in _invoke_async_with_sigint_handler\\n    return await task\\n  File
+        &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\azure\\\\ai\\\\evaluation\\\\_evaluators\\\\_common\\\\_base_eval.py&quot;,
+        line 414, in __call__\\n    return await self._real_call(**kwargs)\\n  File
+        &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\azure\\\\ai\\\\evaluation\\\\_evaluators\\\\_common\\\\_base_eval.py&quot;,
+        line 376, in _real_call\\n    per_turn_results.append(await self._do_eval(eval_input))\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\azure\\\\ai\\\\evaluation\\\\_evaluators\\\\_common\\\\_base_prompty_eval.py&quot;,
+        line 83, in _do_eval\\n    llm_output = await self._flow(timeout=self._LLM_CALL_TIMEOUT,
+        **eval_input)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\tracing\\\\_trace.py&quot;,
+        line 476, in wrapped\\n    return await func(*args, **kwargs)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\core\\\\_prompty_utils.py&quot;,
+        line 1194, in wrapper\\n    raise e\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\core\\\\_prompty_utils.py&quot;,
+        line 1191, in wrapper\\n    return await func(*args, **kwargs)\\n  File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\core\\\\_flow.py&quot;,
+        line 549, in __call__\\n    connection = convert_model_configuration_to_connection(self._model.configuration)\\n
+        \ File &quot;C:\\\\az_ai_rag_chat_evaluator\\\\evalrag\\\\lib\\\\site-packages\\\\promptflow\\\\core\\\\_prompty_utils.py&quot;,
+        line 131, in convert_model_configuration_to_connection     \\n    raise UnknownConnectionType(message=error_message)\\npromptflow.core._errors.UnknownConnectionType:
+        Not Support connection type None for embedding api. Connection type should
+        be in [AzureOpenAI, OpenAI].\\n</code></pre>\\n\"}],\"has_more\":false,\"quota_max\":300,\"quota_remaining\":285}"
+    headers:
+      Access-Control-Allow-Origin:
+      - '*'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - a4b0d838be59a187-GRU
+      Cache-Control:
+      - private
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 15 Oct 2026 18:21:38 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      Vary:
+      - accept-encoding
+      access-control-allow-credentials:
+      - 'false'
+      access-control-allow-methods:
+      - GET, POST
+      content-length:
+      - '16765'
+      content-security-policy:
+      - upgrade-insecure-requests; frame-ancestors 'self' https://stackexchange.com
+      x-clacks-overhead:
+      - GNU Terry Pratchett
+      x-content-type-options:
+      - nosniff
+      x-providence-cookie:
+      - 608f0b75-29cd-424f-b48a-2e6ff3c2026c
+      x-request-guid:
+      - 394b00e0-ac84-4f47-9b25-db33b6af19ef
+      x-worker-origin-response-time:
+      - '287000000'
+    status:
+      code: 200
+      message: OK
+- request:
+    body: ''
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip
+      connection:
+      - keep-alive
+      host:
+      - api.stackexchange.com
+    method: GET
+    uri: https://api.stackexchange.com/2.3/questions/79488543;79355398/answers?filter=withbody&order=desc&page=1&pagesize=100&site=stackoverflow&sort=votes
+  response:
+    body:
+      string: '{"items":[{"owner":{"account_id":35638887,"reputation":1829,"user_id":27321223,"user_type":"registered","profile_image":"https://i.sstatic.net/kZEHipBb.png?s=256","display_name":"qkfang","link":"https://stackoverflow.com/users/27321223/qkfang"},"is_accepted":false,"score":0,"last_activity_date":1737115621,"creation_date":1737115621,"answer_id":79364700,"question_id":79355398,"content_license":"CC
+        BY-SA 4.0","body":"<p>i looked at the promptflow source code repo, seems like
+        the connection type ''OpenAI'' is not passed down from the callers for some
+        reason. sorry that i dont have openai setup to debug.</p>\n<p>if you have
+        the local code, might step in or setup a debug point at below file, line 129.
+        then try to work out which part of the code failed to set connection_type.</p>\n<p><a
+        href=\"https://i.sstatic.net/bLtHWFUr.png\" rel=\"nofollow noreferrer\"><img
+        src=\"https://i.sstatic.net/bLtHWFUr.png\" alt=\"enter image description here\"
+        /></a></p>\n<p><a href=\"https://i.sstatic.net/0k4yLinC.png\" rel=\"nofollow
+        noreferrer\"><img src=\"https://i.sstatic.net/0k4yLinC.png\" alt=\"enter image
+        description here\" /></a></p>\n<p><a href=\"https://github.com/Azure-Samples/ai-rag-chat-evaluator/blob/main/src/evaltools/eval/evaluate.py#L172\"
+        rel=\"nofollow noreferrer\">https://github.com/Azure-Samples/ai-rag-chat-evaluator/blob/main/src/evaltools/eval/evaluate.py#L172</a></p>\n<p><a
+        href=\"https://github.com/microsoft/promptflow/blob/main/src/promptflow-core/promptflow/core/_prompty_utils.py\"
+        rel=\"nofollow noreferrer\">https://github.com/microsoft/promptflow/blob/main/src/promptflow-core/promptflow/core/_prompty_utils.py</a></p>\n<p><a
+        href=\"https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/evaluation/azure-ai-evaluation/azure/ai/evaluation/_evaluators/_common/_base_prompty_eval.py#L83\"
+        rel=\"nofollow noreferrer\">https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/evaluation/azure-ai-evaluation/azure/ai/evaluation/_evaluators/_common/_base_prompty_eval.py#L83</a></p>\n"},{"owner":{"account_id":32600107,"reputation":1036,"user_id":25332792,"user_type":"registered","profile_image":"https://www.gravatar.com/avatar/333face9c22bb9bb9ec8208bdfdeca29?s=256&d=identicon&r=PG&f=y&so-version=2","display_name":"Qian
+        Zhang","link":"https://stackoverflow.com/users/25332792/qian-zhang"},"is_accepted":false,"score":0,"last_activity_date":1741250351,"last_edit_date":1741250351,"creation_date":1741249889,"answer_id":79488691,"question_id":79488543,"content_license":"CC
+        BY-SA 4.0","body":"<p>Instruction and chat history are part of your LLM''s
+        prompt engineering strategy, and they aren''t actually &quot;retrieved contexts&quot;.
+        They should be handled separately in your actual QA pipeline, but not included
+        in the Ragas evaluation of retrieval quality.</p>\n<p>You should only use
+        the retrieved content in the <code>retrieved_contexts</code> parameter, not
+        the instruction+retrieved content+chat history.</p>\n<p>Please check the Ragas
+        documentation and examples at <a href=\"https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_recall/#llm-based-context-recall\"
+        rel=\"nofollow noreferrer\">https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_recall/#llm-based-context-recall</a></p>\n<p><a
+        href=\"https://i.sstatic.net/Tyw2SwJj.png\" rel=\"nofollow noreferrer\"><img
+        src=\"https://i.sstatic.net/Tyw2SwJj.png\" alt=\"enter image description here\"
+        /></a></p>\n"}],"has_more":false,"quota_max":300,"quota_remaining":285}'
+    headers:
+      Access-Control-Allow-Origin:
+      - '*'
+      CF-Cache-Status:
+      - DYNAMIC
+      CF-Ray:
+      - a4b0d83b3889a187-GRU
+      Cache-Control:
+      - private
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 15 Oct 2026 18:21:38 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains
+      Vary:
+      - accept-encoding
+      access-control-allow-credentials:
+      - 'false'
+      access-control-allow-methods:
+      - GET, POST
+      content-length:
+      - '3504'
+      content-security-policy:
+      - upgrade-insecure-requests; frame-ancestors 'self' https://stackexchange.com
+      x-clacks-overhead:
+      - GNU Terry Pratchett
+      x-content-type-options:
+      - nosniff
+      x-providence-cookie:
+      - 608f0b75-29cd-424f-b48a-2e6ff3c2026c
+      x-request-guid:
+      - 66f7583f-ecdb-4207-bb53-ae1e3f0db4ae
+      x-worker-origin-response-time:
+      - '182000000'
+    status:
+      code: 200
+      message: OK
+version: 1

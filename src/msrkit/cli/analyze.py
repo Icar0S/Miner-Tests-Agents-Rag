@@ -25,7 +25,7 @@ app.add_typer(analyze_app, name="analyze")
 BASIS_HELP = "detections (automatic, msrkit extract) or coding (manual form, consensus)"
 
 
-def _load_units(run_id: str, basis: str) -> list[Any]:
+def _load_units(run_id: str, basis: str, gazetteer: Any = None) -> list[Any]:
     from msrkit.analysis import units_from_codings, units_from_detections
     from msrkit.coding import load_codings
     from msrkit.storage import ItemStorage
@@ -36,19 +36,21 @@ def _load_units(run_id: str, basis: str) -> list[Any]:
         if not detections:
             console.print("[red]✗ No detections; run `msrkit extract` first.[/red]")
             raise typer.Exit(1)
-        return units_from_detections(items, detections)
+        return units_from_detections(items, detections, gazetteer=gazetteer)
     if basis == "coding":
         codings = load_codings(_cli.DATA_DIR, run_id)
         if not codings:
             console.print("[red]✗ No codings; import them with `msrkit coding import`.[/red]")
             raise typer.Exit(1)
-        return units_from_codings(items, codings)
+        return units_from_codings(items, codings, gazetteer=gazetteer)
     console.print("[red]✗ --basis must be detections or coding.[/red]")
     raise typer.Exit(1)
 
 
 def _out_dir(run_id: str) -> Any:
-    return _cli.DATA_DIR / "reports" / run_id / "analysis"
+    out = _cli.DATA_DIR / "reports" / run_id / "analysis"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
 
 @analyze_app.command("frequency")
@@ -60,8 +62,13 @@ def analyze_frequency(
     ),
     top: int = typer.Option(20, "--top", help="Rows shown"),
     protocol: str | None = typer.Option(None, "--protocol", "-p", help="Protocol file"),
+    channel: str = typer.Option(
+        "all",
+        "--channel",
+        help="Channel filter: all, open (neutral discovery) or anchored (targeted searches)",
+    ),
 ) -> None:
-    """A1/A2: units per tool and method (by evidence level and system) and co-occurrence.
+    """A1/A2: units per tool and method (by evidence level, channel and system) and co-occurrence.
 
     Tools of the `framework-sut` family (LangChain, LlamaIndex...) are frameworks of the
     system under test, mined through their own tests; the Family column tells them apart.
@@ -71,28 +78,45 @@ def analyze_frequency(
     run_id = _resolve_run(_unwrap(run_id))
     basis = _unwrap(basis)
     top = _unwrap(top)
-    units = _load_units(run_id, basis)
+    channel = _unwrap(channel).lower()
+    if channel not in ("all", "open", "anchored"):
+        console.print("[red]✗ --channel must be 'all', 'open' or 'anchored'.[/red]")
+        raise typer.Exit(1)
+
+    proto = _load_run_protocol(run_id, _unwrap(protocol))
+    gaz = proto.gazetteer_data if proto is not None else None
+    units = _load_units(run_id, basis, gazetteer=gaz)
     try:
         pair_rows = cooccurrence(units, _unwrap(pairs))
     except ValueError as e:
         console.print(f"[red]✗ {e}[/red]")
         raise typer.Exit(1) from None
-    proto = _load_run_protocol(run_id, _unwrap(protocol))
-    gaz = proto.gazetteer_data if proto is not None else None
+
     families = {t.id: t.family for t in gaz.tools} if gaz else {}
     families.update({m.id: "method" for m in gaz.methods} if gaz else {})
-    rows = frequency(units, families)
+    rows = frequency(units, families, channel=channel)  # type: ignore[arg-type]
     out = _out_dir(run_id)
-    write_csv(rows, out / f"frequency_{basis}.csv")
+    csv_suffix = f"_{channel}" if channel != "all" else ""
+    write_csv(rows, out / f"frequency_{basis}{csv_suffix}.csv")
     write_csv(pair_rows, out / f"cooccurrence_{_unwrap(pairs)}_{basis}.csv")
 
-    table = Table(title=f"Frequency ({basis}) — {len(units)} units")
-    for col in ("Entry", "Family", "Units", "N1", "N2", "N3", "rag", "agente"):
+    ch_title = f" [{channel.upper()}]" if channel != "all" else ""
+    table = Table(title=f"Frequency ({basis}){ch_title} — {len(units)} units")
+    for col in ("Entry", "Family", "Units", "N1", "N2", "N3", "Open", "Anchored", "rag", "agente"):
         table.add_column(col)
     for r in rows[:top]:
         levels = (str(r.n1), str(r.n2), str(r.n3)) if r.kind == "tool" else ("—", "—", "—")
         family = r.family or r.kind
-        table.add_row(r.entry, family, str(r.units), *levels, str(r.rag), str(r.agente))
+        table.add_row(
+            r.entry,
+            family,
+            str(r.units),
+            *levels,
+            str(r.open_units),
+            str(r.anchored_units),
+            str(r.rag),
+            str(r.agente),
+        )
     console.print(table)
     pt = Table(title=f"Co-occurrence {_unwrap(pairs)}")
     for col in ("A", "B", "Together", "Jaccard", "Lift"):
@@ -252,7 +276,14 @@ def analyze_topics(
             seed=_unwrap(seed),
         )
     except (RuntimeError, ValueError) as e:
-        console.print(f"[red]✗ {e}[/red]")
+        from rich.markup import escape
+
+        console.print(f"[red]✗ {escape(str(e))}[/red]")
+        if status == "include" and "need at least as many as topics" in str(e):
+            console.print(
+                "[yellow]Dica: Poucos itens incluídos na triagem. Use --status all para "
+                "analisar todo o corpus minerado, ou reduza --topics e --clusters.[/yellow]"
+            )
         raise typer.Exit(1) from None
 
     out = _out_dir(run_id)
@@ -288,10 +319,9 @@ def analyze_topics(
     if gaz:
         origin = catalog_origin(gaz)
         total = sum(origin.values())
-        console.print(
-            f"Catalog from the discovery pass: {origin['discovery']}/{total} entries "
-            f"({origin['discovery'] / total:.0%})"
-        )
+        disc = origin.get("discovery", 0)
+        pct = f"({disc / total:.0%})" if total else "(0%)"
+        console.print(f"Catalog from the discovery pass: {disc}/{total} entries {pct}")
     console.print(f"[green]✓ Written to {out}[/green]")
 
 

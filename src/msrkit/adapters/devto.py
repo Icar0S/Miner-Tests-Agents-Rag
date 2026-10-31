@@ -58,7 +58,7 @@ class DevToAdapter(BaseAdapter):
         ),
         max_results_per_query=None,
         max_page_size=1000,
-        max_pages=None,
+        max_pages=50,
         supports_full_text_search=False,
         supports_date_filter=False,
         searches_each_term=False,  # fetched by tag/feed, filtered locally
@@ -69,6 +69,8 @@ class DevToAdapter(BaseAdapter):
             "No full-text search API. Collection by tag, then local term filtering. "
             "The manifest must record that selection was performed locally."
         ),
+        has_official_api=True,
+        official_api_name="Forem API v1",
     )
 
     def available(self) -> Availability:
@@ -89,7 +91,7 @@ class DevToAdapter(BaseAdapter):
         in the protocol config and yield all articles.
         """
         tags = q.extra.get("tags", ["rag", "llm", "ai", "agents", "testing"])
-        limit = q.limit or 5000
+        limit = 5000 if q.limit is None else q.limit
         total_yielded = 0
         seen_ids: set[str] = set()
 
@@ -99,7 +101,8 @@ class DevToAdapter(BaseAdapter):
             page = 1
             per_page = min(self.policy.max_page_size, 1000)
 
-            while total_yielded < limit:
+            max_pages = q.extra.get("max_pages", self.policy.max_pages)
+            while total_yielded < limit and (max_pages is None or page <= max_pages):
                 params: dict[str, Any] = {
                     "tag": tag,
                     "page": page,
@@ -130,6 +133,7 @@ class DevToAdapter(BaseAdapter):
                     if not art_id or art_id in seen_ids:
                         continue
 
+                    seen_ids.add(art_id)
                     pub_str = article.get("published_at") or article.get("created_at")
                     if pub_str and (q.since or q.until):
                         try:
@@ -202,11 +206,17 @@ class DevToAdapter(BaseAdapter):
         body = p.get("_body_markdown") or p.get("description")
         matched = match_terms(terms or [], title=p.get("title"), body=body, tags=tags)
 
+        raw_url = p.get("url")
+        if raw_url and str(raw_url).startswith(("http://", "https://")):
+            url = str(raw_url)
+        else:
+            url = f"https://dev.to/articles/{p.get('id', '')}"
+
         return Item(
             id=Item.make_id(self.name, str(p.get("id", ""))),
             source=self.name,
             kind=ItemKind.ARTICLE,
-            url=p.get("url", ""),
+            url=url,  # type: ignore[arg-type]
             title=p.get("title"),
             body=body,
             author_handle=(p.get("user") or {}).get("username"),

@@ -20,7 +20,7 @@ from msrkit.cli._common import (
 precision_app = typer.Typer(help="Extraction precision on a stratified sample (§12.3).")
 
 
-app.add_typer(precision_app, name="precision")
+app.add_typer(precision_app, name="precision", hidden=True)
 
 
 @precision_app.command("sample")
@@ -106,29 +106,26 @@ def precision_score_cmd(
     out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
 
 
-@app.command()
+@app.command(hidden=True)
 def recall(
     gold: str = typer.Argument(..., help="Gold set YAML (see msrkit.validation)"),
     run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
     all_runs: bool = typer.Option(False, "--all", "-a", help="Use items from every run"),
 ) -> None:
     """Recall of the miner on a gold set curated before collection (§10.3, §12.3)."""
-    from msrkit.extract import Detection
     from msrkit.storage import ItemStorage
     from msrkit.validation import load_gold, measure_recall
 
     storage = ItemStorage(_cli.DATA_DIR)
-    runs = storage.list_runs() if _unwrap(all_runs) else [_resolve_run(_unwrap(run_id))]
+    runs = (
+        [r for r in storage.list_runs() if r != "consolidated"]
+        if _unwrap(all_runs)
+        else [_resolve_run(_unwrap(run_id))]
+    )
     items = [it for r in runs for it in storage.read_items(r)]
-    detections: list[Detection] = []
+    detections = []
     for r in runs:
-        path = _cli.DATA_DIR / "extract" / r / "detections.jsonl"
-        if path.exists():
-            detections.extend(
-                Detection.model_validate_json(line)
-                for line in path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            )
+        detections.extend(_load_detections(r))
     try:
         report = measure_recall(load_gold(gold), items, detections)
     except (FileNotFoundError, ValueError) as e:

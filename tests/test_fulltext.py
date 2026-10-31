@@ -188,3 +188,31 @@ class TestFetchCommand:
         result = CliRunner().invoke(app, ["export", "--run", "run-ft", "-o", str(out)])
         assert result.exit_code == 0
         assert "SECRET FULL TEXT" not in out.read_text()
+
+    def test_fetch_handles_html_parse_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fetcher, _ = _fetcher(
+            {
+                "https://blog.example/robots.txt": httpx.Response(
+                    200, text="User-agent: *\nAllow: /"
+                ),
+                "https://blog.example/post": _html("<html><body>test</body></html>"),
+            }
+        )
+
+        def raise_parse_err(text: str) -> tuple[str, str]:
+            raise UnicodeDecodeError("utf-8", b"", 0, 1, "invalid")
+
+        monkeypatch.setattr("msrkit.fulltext.html_to_text", raise_parse_err)
+        res = fetcher.fetch("https://blog.example/post")
+        assert res.status == "error"
+        assert "html_parse_error" in res.reason
+
+    def test_fetch_handles_socket_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        fetcher, _ = _fetcher({})
+
+        def raise_socket_err(*args: object, **kwargs: object) -> None:
+            raise OSError("Connection reset by peer")
+
+        monkeypatch.setattr(fetcher._client, "get", raise_socket_err)
+        res = fetcher.fetch("https://blog.example/post")
+        assert res.status == "robots_disallowed"

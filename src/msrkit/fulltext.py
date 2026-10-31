@@ -140,7 +140,7 @@ class FullTextFetcher:
                 robots.parse([])  # no robots.txt: everything allowed
             else:
                 robots.parse(resp.text.splitlines())
-        except httpx.HTTPError:
+        except Exception:
             parser = None
         self._robots[host] = parser
         return parser
@@ -160,7 +160,7 @@ class FullTextFetcher:
         try:
             self._wait_for_host(host)
             resp = self._client.get(url)
-        except httpx.HTTPError as e:
+        except Exception as e:
             return FetchResult(url, "error", type(e).__name__)
 
         if resp.status_code != 200:
@@ -170,7 +170,11 @@ class FullTextFetcher:
         if len(resp.content) > MAX_BYTES:
             return FetchResult(url, "too_large", str(len(resp.content)))
 
-        title, text = html_to_text(resp.text)
+        try:
+            title, text = html_to_text(resp.text)
+        except Exception as e:
+            return FetchResult(url, "error", f"html_parse_error: {type(e).__name__}")
+
         return FetchResult(
             url,
             "ok",

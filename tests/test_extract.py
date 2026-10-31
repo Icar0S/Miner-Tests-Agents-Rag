@@ -148,6 +148,10 @@ class TestSignals:
             dependency_names("package.json", '{"devDependencies": {"promptfoo": "^0.9"}}')
         ) == {"promptfoo"}
         assert set(dependency_names("requirements-dev.txt", "# c\nRagas==1\n-e .\n")) == {"ragas"}
+        cargo = '[dependencies]\nragas = "0.1"\ndeepeval = { version = "1.0" }\n'
+        assert set(dependency_names("Cargo.toml", cargo)) >= {"ragas", "deepeval"}
+        gomod = "module test\n\nrequire (\n\tgithub.com/promptfoo/promptfoo v0.1.0\n)\n"
+        assert set(dependency_names("go.mod", gomod)) >= {"promptfoo"}
 
 
 class TestSummaryAndCommand:
@@ -262,6 +266,11 @@ class TestCiCodeHits:
         thin = {"acme/app": _sig(months=1, contributors=1)}
         dets = Extractor(GAZ).run([self._hit()], thin)
         assert {d.level for d in dets if d.signal == "ci"} == {"N2"}
+
+    def test_promoted_to_n3_with_mixed_case_signals_repo(self) -> None:
+        signals = {"Acme/App": _sig(months=3, contributors=4)}
+        dets = Extractor(GAZ).run([self._hit()], signals)
+        assert ("deepeval", "N3") in {(d.entry_id, d.level) for d in dets if d.signal == "ci"}
 
     def test_non_workflow_code_hit_is_not_ci(self) -> None:
         hit = _item(
