@@ -1,4 +1,4 @@
-"""Corpus commands: PRISMA flow, deduplication, statistics, export."""
+"""Corpus commands: PRISMA flow, mining report, deduplication, statistics, export."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from msrkit.cli._common import (
     DEFAULT_PROTOCOL,
     _get_latest_run_id,
     _get_registry,
+    _load_detections,
+    _load_repo_signals,
     _load_run_protocol,
     _resolve_run,
     _setup_logging,
@@ -139,6 +141,46 @@ def prisma(
     if manifest is None:
         console.print("[yellow]⚠ No manifest: identification counts come from items only.[/yellow]")
     console.print(f"[green]✓ PRISMA flow written to {out_dir}[/green]")
+
+
+@app.command()
+def report(
+    run_id: str | None = typer.Option(None, "--run", help="Run ID (defaults to latest)"),
+) -> None:
+    """Mining report of a run: time window, sources, search terms and counts.
+
+    Writes data/reports/<run_id>/relatorio_mineracao.md and .json. Run it after the
+    collection; counts from dedupe, enrich and extract are included when present.
+    """
+    from msrkit.provenance import load_manifest
+    from msrkit.report import build_report
+    from msrkit.report import render_markdown as render_report
+
+    run_id = _resolve_run(_unwrap(run_id))
+    storage = ItemStorage(_cli.DATA_DIR)
+    manifest = None
+    with contextlib.suppress(FileNotFoundError):
+        manifest = load_manifest(_cli.DATA_DIR, run_id)
+    dedupe_path = _cli.DATA_DIR / "items" / run_id / "dedupe_report.json"
+    rep = build_report(
+        run_id,
+        manifest,
+        storage.read_items(run_id),
+        storage.read_items(run_id, prefer_deduped=True),
+        json.loads(dedupe_path.read_text(encoding="utf-8")) if dedupe_path.exists() else None,
+        _cli.DATA_DIR / "runs" / run_id / "discarded.jsonl",
+        signals=_load_repo_signals(run_id),
+        detections=_load_detections(run_id),
+    )
+    out_dir = _cli.DATA_DIR / "reports" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "relatorio_mineracao.json").write_text(rep.model_dump_json(indent=2), "utf-8")
+    (out_dir / "relatorio_mineracao.md").write_text(render_report(rep), encoding="utf-8")
+    console.print(
+        f"Identified {rep.identified} → unique {rep.unique} from "
+        f"{sum(1 for s in rep.sources if s.executed)} source(s); {len(rep.warnings)} warning(s)"
+    )
+    console.print(f"[green]✓ Mining report written to {out_dir / 'relatorio_mineracao.md'}[/green]")
 
 
 @app.command(name="dedupe")

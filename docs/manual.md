@@ -381,8 +381,24 @@ msrkit precision sample --n 200
 msrkit precision score data/validation/<run>/precision_sample.csv
 ```
 
-### 13. `msrkit prisma`
-Gera `prisma.json` e `prisma.md` (com diagrama Mermaid) a partir do manifesto, dos descartes, do relatório de deduplicação, das decisões e das codificações.
+### 13. `msrkit prisma` e `msrkit report`
+`msrkit prisma` gera `prisma.json` e `prisma.md` (com diagrama Mermaid) a partir do manifesto, dos descartes, do relatório de deduplicação, das decisões e das codificações.
+
+`msrkit report` gera o **relatório da mineração** (`relatorio_mineracao.md` e `.json`) em `reports/<run>/`, legível sem abrir o manifesto:
+
+- **Resumo** da execução em um parágrafo;
+- **Espaço temporal:** janela buscada, início, fim e duração da execução, datas dos itens por ano;
+- **Locais:** consultas executadas/planejadas, requisições, itens retornados, descartados, únicos e truncamentos por fonte; fontes não consultadas e o motivo; itens por fonte e tipo;
+- **Termos buscados:** léxico por idioma, consultas literais por fonte, opções da execução, termos que mais casaram e os que não casaram nenhuma vez;
+- **Quantidades:** funil (identificados → filtro local → duplicatas → únicos), conceitos do protocolo e, se houver, enriquecimento e detecções N1/N2/N3;
+- **Avisos:** consultas planejadas que não rodaram, falhas, tetos de API, amostra cortada pelo limite de itens, itens fora da janela, deduplicação pendente.
+
+```bash
+msrkit report                 # execução mais recente
+msrkit report --run <run_id>
+```
+
+Rode depois da coleta; as contagens de `dedupe`, `enrich` e `extract` entram quando já existirem. O workflow **Coleta** gera o relatório em toda execução e o mostra no resumo do job.
 
 ### 14. `msrkit analyze`
 ```bash
@@ -415,7 +431,7 @@ A ordem abaixo segue o Protocolo E2 v2. Cada etapa grava em `data/` e pode ser r
 | 9 | Extração manual (Anexo A + §9) | `msrkit coding export --coder ana` → preencher → `msrkit coding import` | `coding/<run>/codings.jsonl` |
 | 10 | Concordância | `msrkit agreement` | `agreement.json`, `disagreements.csv` |
 | 11 | Validar o minerador | `msrkit recall gold.yaml`, `msrkit precision sample` → julgar → `msrkit precision score` | `validation/<run>/` |
-| 12 | Fluxo PRISMA | `msrkit prisma` | `reports/<run>/prisma.md` |
+| 12 | Fluxo PRISMA e relatório da mineração | `msrkit prisma`, `msrkit report` | `reports/<run>/prisma.md`, `reports/<run>/relatorio_mineracao.md` |
 | 13 | Análises A1–A6 | `msrkit analyze` (`frequency`, `coverage`, `oracles`, `topics`, `compare`) | `reports/<run>/analysis/` |
 | 14 | Pacote Zenodo | `msrkit package --creator "Sobrenome, Nome"` | `packages/msrkit_<run>.zip` |
 
