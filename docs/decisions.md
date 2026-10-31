@@ -454,3 +454,31 @@ This document records architectural, design, and technical decisions made during
   - 1,890 detections. N3 rose from 1 to at least 97 (sum over the 25 entries listed). The tools with the most N3 detections are webarena, guardrails-ai and agentdojo (8 each), then tau-bench and garak (7 each).
   - Frameworks of the system under test (LangChain, LangGraph, LlamaIndex) and tracing tools (LangSmith, Langfuse) have no N3 detections: they are imported (N2), but no CI invocation of them was found. N3 therefore marks test tools that run in CI, as intended.
   - The catalog saturated at batch 116 of 117, with 50 codes.
+
+---
+
+## ADR-046: Article 2 Analysis Parameters and Conventions (Provisional)
+
+- **Context:** The Article 2 protocol guide (results paper: how the community tests RAG and agent systems) asks that analysis decisions be recorded before they run on coded data (its rule 5). The authors have already seen preliminary detections, so every test on that corpus is exploratory. The values below are provisional: each one marked [DECIDIR] is an author decision and must be confirmed (or changed) here before the confirmatory run.
+- **Decision (implemented in `analysis/artigo2.py`, which reads a `msrkit package` zip):**
+  - **Corpus.** One official corpus, declared in the paper: the frozen run of Article 1 (step 4) or, while it does not exist, the d28a mining of the original repository, with its deviations listed. The test runs of this fork (a2a8 and earlier) are calibration only and never mixed in.
+  - **Units and counting.** Units come from `msrkit.analysis.units_from_detections` (a GitHub repository with all its items, or one item elsewhere). A unit counts once per tool, at its best level (N3 > N2 > N1). A unit that is the tool's own repository (gazetteer `repos`) is set apart as *self* at every level and reported separately.
+  - **Testing tools only.** The 8 `framework-sut` entries never enter the testing-tool rankings; they are reported as context (the stacks tests run on) and in tool × framework co-occurrence.
+  - **System label (detections basis).** RAG × agents uses the unit's matched concepts (`rag`, `agente`), not the gazetteer `applies_to`; the paper says so.
+  - **QP1.3 / P1.** Kendall τ-b between per-tool unit counts at N1 and at external N3 (also N2 × N3 and N1 × N2), over the testing tools with at least one unit. 95% CI by bootstrap over units (multinomial weights, 10,000 resamples, seed 20261031). P1 is read as supported when τ < 0.5 [DECIDIR].
+  - **Co-occurrence.** Jaccard and lift over units, for pairs with at least 5 units together [DECIDIR].
+  - **QP2.** Methods per system; oracle ladder from each method's typical rung (gazetteer `oracle`). This is an approximation until `tipo_oraculo` and `agregacao` are coded; H2 needs the coding basis.
+  - **QP3 engagement.**
+    - Items: discursive items (GitHub issues, Hacker News, Stack Exchange, dev.to, Hugging Face, Bluesky). GitHub repositories (stars) only with `--with-repos`; code hits and RSS have no engagement.
+    - Primary metric per source as in the guide §4.4 (issues: reactions; HN and Stack Exchange: votes; dev.to and Bluesky: reactions; Hugging Face: likes).
+    - Bug issues returned by the anchor queries (`repo:{repo} is:issue label:bug`) are set apart for the "pain" analysis, not compared with discourse.
+    - Automated issues (dependency bumps, lock-file maintenance, vulnerability reports) are removed by title, since packages pseudonymize authors.
+    - Minimum age 3 months between creation and collection [DECIDIR].
+    - Normalization: percentile of the primary metric within each source × kind, average ranks for ties, E ∈ [0, 1]. Raw counts are never compared across sources.
+    - Per tool and per method: reported when n ≥ 10 items [DECIDIR]; median E with a 95% bootstrap CI (10,000 resamples).
+    - Kruskal–Wallis across tools, Dunn post hoc with tie correction and Holm adjustment, ε² and Cliff's δ. Items that mention several tools belong to several groups, so these tests are descriptive.
+    - P2: Spearman ρ between median E and external N3 per tool; read as supported when |ρ| < 0.4 [DECIDIR]. Sensitivity: without listicles (items with ≥ 4 testing tools [DECIDIR]) and with items from non-truncated queries only.
+    - Robustness: negative binomial on raw counts with tool and source × kind fixed effects and offset log(age); the ranking of tool effects is compared with the ranking of median E.
+    - P3 (exploratory): items created in 2025–2026 labelled only `agente` or only `rag`; Cliff's δ on E and OLS `E ~ agente + log(age) + stratum` with HC3 errors, restricted to strata where both systems occur.
+- **Consequences:** The script writes CSV files, `summary.json` and LaTeX (`macros.tex`, table bodies, the mention × adoption scatter). The paper takes every number from `macros.tex`, which records the package, run id, basis and parameters, so a changed decision is a re-run plus an update of this ADR. `--pending` writes placeholders so the paper compiles before the run.
+
