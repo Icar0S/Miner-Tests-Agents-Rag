@@ -255,6 +255,14 @@ class TestRender:
         assert "| **Itens únicos** | **4** |" in md
         assert "| ragas | tool | 1 | 0 | 1 | 2 |" in md
 
+    def test_summary_mentions_enrichment_only_when_it_ran(self, tmp_path: Path) -> None:
+        signals, dets = _evidence()
+        with_repos = render_markdown(_report(tmp_path, signals=signals, detections=dets))
+        assert "O enriquecimento analisou 2 repositórios do GitHub." in with_repos
+        only_text = render_markdown(_report(tmp_path, signals={}, detections=dets))
+        assert "enriquecimento analisou" not in only_text
+        assert "A extração encontrou 4 detecções de ferramentas e métodos." in only_text
+
     def test_no_warnings_message(self, tmp_path: Path) -> None:
         r = _report(tmp_path)
         r.warnings = []

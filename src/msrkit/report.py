@@ -334,10 +334,11 @@ def _summary(r: MiningReport) -> list[str]:
         + (f" e {_n(dup)} eram duplicatas" if dup is not None else "")
         + f", restando **{_n(r.unique)} itens únicos**."
     )
-    if r.evidence:
+    if ev := r.evidence:
+        if ev.repos_enriched:
+            text += f" O enriquecimento analisou {_n(ev.repos_enriched)} repositórios do GitHub."
         text += (
-            f" O enriquecimento analisou {_n(r.evidence.repos_enriched)} repositórios do GitHub"
-            f" e a extração encontrou {_n(sum(r.evidence.detections.values()))} detecções"
+            f" A extração encontrou {_n(sum(ev.detections.values()))} detecções"
             " de ferramentas e métodos."
         )
     return ["## Resumo", "", text, ""]
