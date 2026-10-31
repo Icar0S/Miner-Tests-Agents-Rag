@@ -1,0 +1,189 @@
+name: Coleta
+
+# Coleta sob demanda num runner com internet aberta: roda o fluxo inicial do
+# estudo (coleta, deduplicação, extração, planilha de triagem, PRISMA) e publica
+# um dataset de teste como artefato. Termos e janela vêm do protocolo versionado;
+# credenciais opcionais vêm dos secrets do repositório (nunca de um .env).
+
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Fontes públicas a coletar (vírgula). Não precisam de credencial."
+        default: "hackernews,devto,stackexchange,huggingface,rss"
+      manual_sources:
+        description: "Fontes com credencial (vírgula), coletadas se o secret existir: github, bluesky."
+        default: ""
+      per_query_limit:
+        description: "Máximo de itens por consulta (amostra espalhada pelo léxico). Vazio = sem teto."
+        default: "10"
+      limit:
+        description: "Máximo de itens por fonte. Vazio = limite do protocolo (o teto por consulta já limita a amostra)."
+        default: ""
+      enrich_limit:
+        description: "Máximo de repositórios GitHub enriquecidos (N2/N3), com prioridade aos achados em CI e código."
+        default: "300"
+  # Acúmulo diário dos feeds RSS (Medium e blogs): cada feed traz só os ~10
+  # posts mais recentes, então coletar todo dia é o único jeito oficial de
+  # formar histórico. Agendamentos só rodam a partir do branch padrão (main).
+  schedule:
+    - cron: "23 7 * * *"
+  # Também chamável pelo CI (entrada `collect`), útil enquanto este arquivo não
+  # está no branch padrão, onde o GitHub exige que um workflow exista para ser
+  # disparado manualmente.
+  workflow_call:
+    inputs:
+      sources:
+        type: string
+        default: "hackernews,devto,stackexchange,huggingface,rss"
+      manual_sources:
+        type: string
+        default: ""
+      per_query_limit:
+        type: string
+        default: "10"
+      limit:
+        type: string
+        default: ""
+      enrich_limit:
+        type: string
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Coletar e gerar dataset
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PROTOCOL: protocols/v0_rag_agents_testing.yaml
+      MSRKIT_SOURCES_PUBLIC: ${{ github.event_name == 'schedule' && 'rss' || inputs.sources }}
+      MSRKIT_SOURCES_MANUAL: ${{ inputs.manual_sources }}
+      MSRKIT_SOURCES_PAID: x_twitter
+      MSRKIT_SOURCES_UNAVAILABLE: linkedin,discord
+      # Opcionais: sem o secret, a variável fica vazia e a fonte segue sem ela
+      # (ou é pulada, se a credencial for obrigatória).
+      GITHUB_TOKEN: ${{ secrets.MSRKIT_GITHUB_TOKEN }}
+      STACKEXCHANGE_KEY: ${{ secrets.STACKEXCHANGE_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install MSR-Kit
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[analysis]"
+
+      # Execução agendada: posts novos são de depois do data-cutoff do protocolo,
+      # então a janela vai até a data da execução (registrado no manifesto em
+      # env_overrides). Os dados de execuções anteriores voltam do cache.
+      - name: Scheduled RSS accumulation setup
+        if: github.event_name == 'schedule'
+        run: echo "MSRKIT_WINDOW_UNTIL=$(date -u +%F)" >> "$GITHUB_ENV"
+
+      - name: Restore accumulated data
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: msrkit-rss-${{ github.run_id }}
+          restore-keys: msrkit-rss-
+
+      - name: Validate protocol and credentials
+        run: msrkit validate "$PROTOCOL"
+
+      - name: Collect
+        env:
+          PER_QUERY: ${{ inputs.per_query_limit }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          args=()
+          [ -n "$PER_QUERY" ] && args+=(--per-query-limit "$PER_QUERY")
+          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          msrkit run "$PROTOCOL" "${args[@]}"
+
+      - name: Deduplicate, enrich, extract, screening sheet, PRISMA
+        env:
+          ENRICH_LIMIT: ${{ inputs.enrich_limit || '300' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          msrkit dedupe
+          # Evidência N2/N3: árvore, CI, manifestos e commits dos repositórios GitHub.
+          if [ -n "$GITHUB_TOKEN" ] && [ "$EVENT" != "schedule" ]; then
+            msrkit enrich -p "$PROTOCOL" --limit "$ENRICH_LIMIT"
+          fi
+          msrkit extract -p "$PROTOCOL"
+          msrkit screen export -p "$PROTOCOL"
+          msrkit prisma
+          msrkit export -f csv -o data/exports/itens.csv
+          msrkit package -p "$PROTOCOL"
+
+      # Análises preliminares sobre as detecções automáticas (a base `coding`
+      # depende da codificação manual) e a amostra de precisão para julgamento.
+      - name: Preliminary analyses (detections basis)
+        if: github.event_name != 'schedule'
+        run: |
+          msrkit analyze frequency --basis detections --top 30 -p "$PROTOCOL"
+          msrkit analyze frequency --basis detections --pairs tool-tool --top 15 -p "$PROTOCOL"
+          msrkit analyze oracles --basis detections -p "$PROTOCOL"
+          msrkit analyze compare --basis detections -p "$PROTOCOL"
+          msrkit analyze topics --status all -p "$PROTOCOL" --topics 12 --clusters 12 \
+            || echo "topics skipped (too few documents)"
+          msrkit precision sample --n 200 || echo "precision sample skipped (no detections)"
+
+      - name: Consolidated RSS export
+        if: github.event_name == 'schedule'
+        run: |
+          msrkit dedupe --all
+          msrkit export --all -f csv -o data/exports/rss_acumulado.csv
+
+      - name: Save accumulated data
+        if: always() && github.event_name == 'schedule'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: msrkit-rss-${{ github.run_id }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Coleta"
+            echo '```'
+            msrkit stats 2>&1 | tail -n 60 || true
+            echo '```'
+            cat data/reports/*/prisma.md 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          msrkit stats || true
+
+      # Só arquivos redistribuíveis (protocolo §17): metadados, URLs, campos
+      # extraídos e o pacote redigido. Respostas brutas e itens com corpo ficam fora.
+      - name: Upload dataset
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msrkit-dataset-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            data/exports/
+            data/runs/*/manifest.json
+            data/runs/*/discarded.jsonl
+            data/items/*/dedupe_report.json
+            data/extract/*/detections.csv
+            data/screening/*/sheet_*.csv
+            data/reports/
+            data/validation/*/precision_sample.*
+            data/packages/

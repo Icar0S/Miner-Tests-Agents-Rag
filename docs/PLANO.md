@@ -113,6 +113,31 @@ de pesquisa:
   Exchange, decidir a inclusão do Hacker News e revisar os pesos da ordenação (ADR-027).
 - **Zenodo (V4):** informar os criadores (`--creator`) e confirmar a licença do pacote.
 
+## Fase 3 — Primeira coleta de teste
+
+Datasets de teste para o piloto (semana 5), antes da coleta oficial.
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| R1 | **`.env` com parâmetros da busca e grupos de fontes:** janela e léxico (§7.1, §7.5) sobrepondo o protocolo, fontes separadas em prontas, com configuração manual, pagas e inviáveis; valores efetivos no manifesto (ADR-041) | ✅ |
+| R2 | **Workflow de coleta no GitHub Actions:** o ambiente de desenvolvimento não alcança as APIs das fontes; o runner do Actions tem rede aberta e publica o dataset como artefato | ✅ |
+| R3 | **Primeiros datasets de teste** das fontes públicas (até 10 itens por consulta). 1ª coleta (run 36498904192): 224 itens para triagem; Stack Exchange 0 com filtro de tags e HF cortado no 1º termo (ADR-042). 2ª coleta, corrigida (run 36501012949): 999 identificados, 453 para triagem — HN 204, Stack Exchange 117, Hugging Face 122, dev.to 10, RSS 0; detecções só N1 (sem GitHub). Próxima: incluir GitHub quando o secret `MSRKIT_GITHUB_TOKEN` existir | ✅ |
+| R4 | **Medium por RSS com acúmulo diário:** a API oficial do Medium só publica (sem leitura/busca, sem integrações novas); 15 feeds (9 tags do Medium, 3 publicações, 3 blogs) coletados todo dia no Actions, com dados acumulados em cache e CSV consolidado (ADR-043). Ativa após o merge no `main` | ✅ |
+| R5 | **Coleta com credenciais e análises preliminares.** Execução 1 (run 36515820085): 745 itens para triagem, GitHub cortado pelo teto por fonte (ADR-044). Execução 2 (run 36521583989), sem teto por fonte: **2.255 identificados, 1.641 para triagem** (GitHub 1.185 de 181 consultas, HN 220, HF 123, Stack Exchange 146, dev.to 10, RSS 6); 118 duplicatas (15 quase-duplicatas); 889 detecções; saturação do catálogo no lote 65 de 66. N3 ainda 1: a extração ignorava as buscas em CI e o enrich não priorizava esses repositórios — corrigido (ADR-045). Execução 3 (run 36528947297): **3.668 identificados, 2.916 para triagem** (GitHub 2.459 de 324 consultas, HN 202, HF 122, Stack Exchange 117, dev.to 10, RSS 6); 224 duplicatas; 300 repositórios enriquecidos sem erro; **1.890 detecções, N3 de 1 para ≥97** (webarena, guardrails-ai, agentdojo 8 cada; tau-bench, garak 7); saturação no lote 116 de 117 (50 códigos); amostra de precisão de 200 detecções gerada. Enrich levou ~1h40 por usar o ritmo da API de busca — corrigido (governor `github-core`, ADR-045) | ✅ |
+
+## Fase 4 — Artigo 2: resultados sobre a prática de teste
+
+Segue o guia de protocolo do Artigo 2 (QP1–QP5). O Artigo 1 descreve e valida o MSR-Kit; este
+publica os achados.
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| A2-1 | **Script das análises QP1–QP3** (`analysis/artigo2.py`): pirâmide N3 externo/N2/N1 sem `framework-sut` e sem *self*, Kendall τ com bootstrap, coocorrência, métodos e oráculos, engajamento normalizado por fonte × tipo (medianas com IC, Kruskal–Wallis/Dunn/Holm, Spearman, sensibilidades, binomial negativa, P3, dor), macros e tabelas LaTeX; testes com pacote sintético. Parâmetros provisórios no ADR-046 | ✅ |
+| A2-2 | **Rodar no corpus oficial** (execução congelada do Artigo 1 ou d28a com desvios declarados) e preencher o artigo | ⏳ depende do pacote |
+| A2-3 | **Triagem** em duas trilhas (ordenada até saturar + amostra aleatória estratificada) com κ em ≥ 20% | ⏳ equipe |
+| A2-4 | **Codificação** pelo Anexo A com dupla codificação, κ por dimensão e síntese temática; habilita H2, QP4 e QP5 | ⏳ equipe |
+| A2-5 | **Artigo** reestruturado em torno dos resultados (método, uma subseção por QP, discussão, ameaças) | 🔄 |
+
 ## Registro
 
 Cada etapa é entregue num commit próprio, cujo título começa com o identificador da etapa

@@ -1019,11 +1019,15 @@ class TestPartitionCheckpoint:
 
         calls: list[str] = []
         state = {"crash": True}
+        proto = "protocols/v0_rag_agents_testing.yaml"
+        from msrkit.config import load_protocol
+
+        broken = load_protocol(proto).all_terms()[1]  # the second partition fails
 
         def search(self: Any, q: Query) -> Any:
             calls.append(q.terms[0])
             for i in range(3):
-                if state["crash"] and q.terms[0] == "RAG evaluation" and i == 1:
+                if state["crash"] and q.terms[0] == broken and i == 1:
                     raise RuntimeError("connection reset")
                 yield RawItem(
                     source="hackernews",
@@ -1038,7 +1042,6 @@ class TestPartitionCheckpoint:
 
         monkeypatch.setattr(HackerNewsAdapter, "partition", two_partitions)
         monkeypatch.setattr(HackerNewsAdapter, "search", search)
-        proto = "protocols/v0_rag_agents_testing.yaml"
 
         result = runner.invoke(app, ["run", proto, "--source", "hackernews"])
         assert result.exit_code == 0, result.stdout
@@ -1052,7 +1055,7 @@ class TestPartitionCheckpoint:
         calls.clear()
         result = runner.invoke(app, ["run", proto, "--source", "hackernews", "--resume", run_id])
         assert result.exit_code == 0, result.stdout
-        assert calls == ["RAG evaluation"]  # the completed partition is not searched again
+        assert calls == [broken]  # the completed partition is not searched again
         entry = load_manifest(tmp_path, run_id).sources[0]
         assert [q.completed for q in entry.queries] == [True, True]
         items = ItemStorage(tmp_path).read_items(run_id)

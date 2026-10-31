@@ -371,3 +371,114 @@ This document records architectural, design, and technical decisions made during
   - `reports/`.
 
   It also adds a generated README, `.zenodo.json` (dataset, CC BY 4.0 for the package's own data, creators from `--creator`), `package_manifest.json` (version, git commit, Python, protocol SHA-256, per-file hashes) and `SHA256SUMS`. Redaction follows each adapter's `redistribution` policy. `metadata_only` items lose `body` and the match contexts but keep `body_hash`. Author handles are replaced by salted pseudonyms, whose salt is not published, unless `--keep-authors` is given. Raw API responses are never packaged. Zip entries carry a fixed timestamp.
+
+---
+
+## ADR-041: Search Parameters and Source Access Groups in `.env`
+
+- **Context:** The researchers want to set the lexicon, the temporal window and the sources in one place, with the sources separated by how they can be accessed: ready to use, needing a manual credential, paid. `.env` was read only by Docker (`env_file`), never by native runs.
+- **Decision:**
+  - The CLI loads `./.env` before every command. Variables already in the environment win, so CI secrets and shell exports are never overwritten.
+  - `MSRKIT_WINDOW_SINCE`/`UNTIL`, `MSRKIT_TERMS` and `MSRKIT_TERMS_<LANG>` (`;`-separated) override the protocol. Empty variables leave the protocol's values.
+  - Four variables classify the sources: `MSRKIT_SOURCES_PUBLIC`, `MSRKIT_SOURCES_MANUAL`, `MSRKIT_SOURCES_PAID` and `MSRKIT_SOURCES_UNAVAILABLE`. When any of them is set, exactly the public and manual sources are enabled. A source must be declared in the protocol and belong to a single group, and paid and unavailable sources never run.
+  - Each run manifest records `effective_protocol` (window, terms, enabled sources, groups), `env_overrides` (variables applied) and `run_options`. `msrkit validate` warns when `.env` diverges from the protocol file.
+  - `.env.example` carries the E2 values, equal to the protocol, and a test keeps them equal.
+- **Conservative Principle:** the versioned protocol stays the reference for the registered study. `.env` is a convenience for running and exploring, and nothing it changes goes unrecorded.
+- **Related:** `msrkit run --per-query-limit N` caps every query (term or partition), so a test sample spreads over the whole lexicon instead of exhausting the source limit on the first query. The cap is recorded as the truncation reason `item_limit`.
+
+---
+
+## ADR-042: Findings of the First Test Collection (Stack Exchange Tags, Per-Term Cap)
+
+- **Context:** The first test collection ran on GitHub Actions (run 36498904192, 29/Sept/2026), sampling the public sources with at most 10 items per query. 740 records were identified and 224 were left for screening (Hacker News 204, dev.to 10, Hugging Face 10). Two sources misbehaved:
+  - **Stack Exchange:** 180 requests (30 terms × 6 sites) all returned HTTP 200 and 0 items. Every request carried the full tag list `langchain;llamaindex;large-language-model;rag;openai-api` in `tagged`. The documentation describes the list as "at least one will be present", but no results for "LLM evaluation" on Stack Overflow since 2023 is what an AND of five tags gives. This is the check ADR-017 left for the pilot.
+  - **Hugging Face (and dev.to):** each got a single query containing all 30 terms, so the per-query cap of 10 was used up by the first term.
+- **Decision:**
+  - The Stack Exchange adapter takes `tagged_mode`:
+    - `all` sends the list in one request (the previous behavior, kept as the adapter default);
+    - `any` makes an explicit OR with one request per tag;
+    - `off` sends no tag filter.
+
+    The E2 protocol uses `off`, because its terms are already specific and screening filters the rest. `any` becomes affordable with `STACKEXCHANGE_KEY` (10,000 req/day).
+  - With `--per-query-limit`, queries of sources that search each term separately (`SourcePolicy.searches_each_term`) are split into one query per term. dev.to and RSS are fetched by tag or feed and filtered locally, so they keep one query: splitting them would page through every tag since 2023 once per term.
+- **Evidence:** the second test collection used the same parameters with `tagged_mode: off` (run 36501012949). Stack Exchange went from 0 to 146 items in 146 requests (117 after deduplication), within the 300-request daily quota without a key. Hugging Face went from 10 items in one query to 123 items spread over 30 per-term queries. In total, 999 records were identified and 453 left for screening.
+
+---
+
+## ADR-043: Medium via RSS Only, Accumulated Daily
+
+- **Context:** The researchers asked whether Medium's official API could replace RSS. It cannot. Per Medium's own API documentation, the API exposes only the authenticated user, their publications and contributors, and endpoints to create posts and upload images. It has no endpoint to read, list or search other people's posts, and Medium accepts no new integrations. Self-issued tokens are granted on request, by e-mail, for desktop integrations and plugins. Third-party "Medium APIs" scrape the site and are excluded by §17. The public feeds (`/feed/tag/<tag>`, `/feed/<publication>`) are the only official read access, and each returns only the ~10 latest posts.
+- **Decision:** The protocol lists 15 feeds: nine Medium tags (RAG, retrieval-augmented generation, LLM evaluation and testing, LLM-as-a-judge, AI agents, agentic AI, LLMOps, AI evaluation), three Medium publications and three tool/ML blogs. `collect.yml` gains a daily schedule that collects RSS only. It restores `data/` from the previous run through the Actions cache and saves it again, then publishes `rss_acumulado.csv`, which is consolidated across runs and deduplicated. Each scheduled run extends `window.until` to its own date, because new posts are necessarily later than the data-cutoff; `env_overrides` in each manifest records this.
+- **Consequence:** accumulated RSS items published after the E2 data-cutoff only count for E2 if the cutoff is moved to the end of the collection period. That is a protocol decision for the research team. Until then, the RSS stratum stays exploratory.
+
+---
+
+## ADR-044: Findings of the First Collection with GitHub
+
+- **Context:** The first collection with the researchers' credentials ran as run 36515820085 (29/Sept/2026), capped at 10 items per query and 300 per source. Results: 1,304 records identified and 745 left for screening, 150 GitHub repositories enriched with no errors, and 316 detections. Stack Exchange ran with its key. Bluesky was skipped because its secret is not set.
+- **Findings and decisions:**
+  1. *GitHub cut short.* The 300-item source cap was reached after 51 of about 165 planned GitHub queries. The remaining queries include the code queries (N2) and all CI queries (`{anchor} path:.github/workflows`, N3), which never ran. Only one N3 detection appeared (garak). The collection workflow now leaves the source cap empty by default, so the per-query cap alone shapes the sample. The job timeout was raised to 240 minutes to fit the full plan.
+  2. *Markup in the discovery pass.* LDA topics were dominated by HTML and entities (`quot`, `x2f`, `li`, `pre`, `code`), because Stack Exchange and Hacker News bodies are HTML. The discovery documents now drop code blocks (Markdown and HTML), tags, entities and URLs.
+  3. *Empty documents in k-means.* Repositories known only by their name formed singleton clusters with arbitrary top terms. Documents under 15 words after cleaning are now left out of the discovery pass, and their number is reported (`skipped_short`).
+  4. *Frameworks vs. test tools.* LangChain (40 units), LangGraph and LlamaIndex topped the tool frequency, but they are frameworks of the system under test (`framework-sut` in the gazetteer). They are mined through their own tests, and RQ1/RQ3 must not count them as test tools. The frequency output now shows each entry's gazetteer family.
+- **Preliminary signal (automatic basis, before screening):**
+  - The most frequent methods are LLM-as-a-judge (43 units), golden datasets (30), red teaming (30) and eval regression (26).
+  - The most frequent test tools are Ragas (22), DeepEval (10) and LangSmith (6).
+  - On the oracle ladder, the reference (55%) and pseudo-automatic (45%) rungs dominate.
+  - 69% of the tools and 89% of the methods seen in agent units also appear in RAG units. Trajectory evaluation, SWE-bench, OpenAI Evals, Inspect, LLM Guard and Opik appear only in agent units.
+
+  These are automatic detections, not coded data. They serve the pilot and do not answer the RQs.
+
+---
+
+## ADR-045: CI Workflow Code Hits as N3 Evidence, and Enrichment by Priority
+
+- **Context:** The second collection with GitHub (run 36521583989) ran all 181 GitHub queries. That includes the CI queries `{anchor} path:.github/workflows language:YAML` from §7.3. Still, only one N3 detection appeared, for two reasons:
+  - Extraction read code hits only for imports and config files, so a workflow file returned by a CI query produced no `ci` signal.
+  - `msrkit enrich --limit 150` took the first 150 of 785 repositories in collection order. The repositories with CI hits, which need commit months and contributors to reach N3, were mostly left out.
+- **Decision:**
+  - A code hit whose path is under `.github/workflows/`, from a query naming a gazetteer tool, yields a `ci` detection at N2. That detection is promoted to N3 when the repository's enrichment shows sustained adoption (commits in ≥2 months and ≥2 contributors, ADR-023); `is_sustained` holds the rule.
+  - `enrich` orders repositories by the evidence they can yield: CI hits first, then other code hits, then repositories found as such, then the rest.
+  - The collection workflow enriches up to 300 repositories.
+- **Second collection (automatic basis, before screening):**
+  - 2,255 records identified and 1,641 left for screening.
+  - 118 duplicates removed, 15 of them near-duplicates.
+  - 889 detections.
+  - The catalog of codes saturated at batch 65 of 66.
+  - The most frequent test tools are Ragas (50 units), DeepEval (32), LangSmith (20), Langfuse (13) and promptfoo (12).
+  - The most frequent methods are LLM-as-a-judge (72), golden datasets (58), eval regression (44) and red teaming (43).
+- **Enrichment rate:** Enrichment used the GitHub adapter's governor, which is tuned for the search API (30 requests/minute). The core REST API allows 5,000 requests/hour with a token. At the search rate, 300 repositories × ~12 requests took about two hours of the job. `enrich` now has its own governor (`github-core`, `CORE_RATE_LIMIT` = 4,500/hour, burst 10); 403/429 responses still back off.
+- **Third collection (run 36528947297, automatic basis):**
+  - 3,668 records identified, 496 filtered, 224 duplicates removed and 2,916 left for screening. GitHub ran 324 queries and returned 2,459 items on disk.
+  - All 300 prioritized repositories were enriched without errors.
+  - 1,890 detections. N3 rose from 1 to at least 97 (sum over the 25 entries listed). The tools with the most N3 detections are webarena, guardrails-ai and agentdojo (8 each), then tau-bench and garak (7 each).
+  - Frameworks of the system under test (LangChain, LangGraph, LlamaIndex) and tracing tools (LangSmith, Langfuse) have no N3 detections: they are imported (N2), but no CI invocation of them was found. N3 therefore marks test tools that run in CI, as intended.
+  - The catalog saturated at batch 116 of 117, with 50 codes.
+
+---
+
+## ADR-046: Article 2 Analysis Parameters and Conventions (Provisional)
+
+- **Context:** The Article 2 protocol guide (results paper: how the community tests RAG and agent systems) asks that analysis decisions be recorded before they run on coded data (its rule 5). The authors have already seen preliminary detections, so every test on that corpus is exploratory. The values below are provisional: each one marked [DECIDIR] is an author decision and must be confirmed (or changed) here before the confirmatory run.
+- **Decision (implemented in `analysis/artigo2.py`, which reads a `msrkit package` zip):**
+  - **Corpus.** One official corpus, declared in the paper: the frozen run of Article 1 (step 4) or, while it does not exist, the d28a mining of the original repository, with its deviations listed. The test runs of this fork (a2a8 and earlier) are calibration only and never mixed in.
+  - **Units and counting.** Units come from `msrkit.analysis.units_from_detections` (a GitHub repository with all its items, or one item elsewhere). A unit counts once per tool, at its best level (N3 > N2 > N1). A unit that is the tool's own repository (gazetteer `repos`) is set apart as *self* at every level and reported separately.
+  - **Testing tools only.** The 8 `framework-sut` entries never enter the testing-tool rankings; they are reported as context (the stacks tests run on) and in tool × framework co-occurrence.
+  - **System label (detections basis).** RAG × agents uses the unit's matched concepts (`rag`, `agente`), not the gazetteer `applies_to`; the paper says so.
+  - **QP1.3 / P1.** Kendall τ-b between per-tool unit counts at N1 and at external N3 (also N2 × N3 and N1 × N2), over the testing tools with at least one unit. 95% CI by bootstrap over units (multinomial weights, 10,000 resamples, seed 20261031). P1 is read as supported when τ < 0.5 [DECIDIR].
+  - **Co-occurrence.** Jaccard and lift over units, for pairs with at least 5 units together [DECIDIR].
+  - **QP2.** Methods per system; oracle ladder from each method's typical rung (gazetteer `oracle`). This is an approximation until `tipo_oraculo` and `agregacao` are coded; H2 needs the coding basis.
+  - **QP3 engagement.**
+    - Items: discursive items (GitHub issues, Hacker News, Stack Exchange, dev.to, Hugging Face, Bluesky). GitHub repositories (stars) only with `--with-repos`; code hits and RSS have no engagement.
+    - Primary metric per source as in the guide §4.4 (issues: reactions; HN and Stack Exchange: votes; dev.to and Bluesky: reactions; Hugging Face: likes).
+    - Bug issues returned by the anchor queries (`repo:{repo} is:issue label:bug`) are set apart for the "pain" analysis, not compared with discourse.
+    - Automated issues (dependency bumps, lock-file maintenance, vulnerability reports) are removed by title, since packages pseudonymize authors.
+    - Minimum age 3 months between creation and collection [DECIDIR].
+    - Normalization: percentile of the primary metric within each source × kind, average ranks for ties, E ∈ [0, 1]. Raw counts are never compared across sources.
+    - Per tool and per method: reported when n ≥ 10 items [DECIDIR]; median E with a 95% bootstrap CI (10,000 resamples).
+    - Kruskal–Wallis across tools, Dunn post hoc with tie correction and Holm adjustment, ε² and Cliff's δ. Items that mention several tools belong to several groups, so these tests are descriptive.
+    - P2: Spearman ρ between median E and external N3 per tool; read as supported when |ρ| < 0.4 [DECIDIR]. Sensitivity: without listicles (items with ≥ 4 testing tools [DECIDIR]) and with items from non-truncated queries only.
+    - Robustness: negative binomial on raw counts with tool and source × kind fixed effects and offset log(age); the ranking of tool effects is compared with the ranking of median E.
+    - P3 (exploratory): items created in 2025–2026 labelled only `agente` or only `rag`; Cliff's δ on E and OLS `E ~ agente + log(age) + stratum` with HC3 errors, restricted to strata where both systems occur.
+- **Consequences:** The script writes CSV files, `summary.json` and LaTeX (`macros.tex`, table bodies, the mention × adoption scatter). The paper takes every number from `macros.tex`, which records the package, run id, basis and parameters, so a changed decision is a re-run plus an update of this ADR. `--pending` writes placeholders so the paper compiles before the run.
+

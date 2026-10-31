@@ -11,7 +11,7 @@ Run `msrkit sources` for current availability status on your environment, and
 | Fonte | Acesso e custo | Limites que afetam a coleta | Adaptador |
 |---|---|---|---|
 | github | Gratuita com token pessoal (PAT) | 5.000 req/h; busca 30 req/min; busca de código 10 req/min, só autenticada; **teto de 1.000 resultados por consulta** | repositórios, código, issues |
-| stackexchange | Gratuita; chave opcional | 300 req/dia sem chave, 10.000 com chave; `backoff` obrigatório | perguntas com corpo |
+| stackexchange | Gratuita; chave opcional | 300 req/dia sem chave, 10.000 com chave; `backoff` obrigatório; lista em `tagged` se comporta como E na prática (ADR-042) | perguntas com corpo |
 | huggingface | Gratuita; token opcional | ~1.000 req por janela de 5 min (usuário gratuito); anônimo, menos | models, datasets, spaces |
 | devto | Gratuita, sem autenticação | Sem busca textual: coleta por tag e filtro local | artigos |
 | rss | Gratuita (Medium não tem API de leitura) | Só os ~10 itens mais recentes por feed; sem histórico | feeds genéricos |

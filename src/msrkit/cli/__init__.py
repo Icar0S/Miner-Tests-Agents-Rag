@@ -67,6 +67,10 @@ def main(
     ),
 ) -> None:
     """MSR-Kit: Mining grey literature through official APIs."""
+    from msrkit.envfile import load_dotenv
+
+    # Search parameters and credentials from ./.env (existing variables win).
+    load_dotenv(Path(".env"))
 
 
 # Register the commands (order = order in --help). Imported last: the command

@@ -60,6 +60,15 @@ class Detection(BaseModel):
     confirmed_by: Literal["", "context", "structural"] = ""
 
 
+def is_sustained(sig: RepoSignals) -> bool:
+    """N3 thresholds: commits in >= 2 months of the window and >= 2 contributors."""
+    return (
+        not sig.error
+        and len(sig.commit_months) >= N3_MIN_MONTHS
+        and (sig.contributors or 0) >= N3_MIN_CONTRIBUTORS
+    )
+
+
 def _norm_pkg(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name.strip().lower())
 
@@ -198,12 +207,21 @@ class Extractor:
         return out
 
     def _from_code_hit(self, item: Item, repo: str | None) -> list[Detection]:
-        """A code search hit contains the literal query string (GitHub guarantees the match)."""
+        """A code search hit contains the literal query string (GitHub guarantees the match).
+
+        A hit in a CI workflow for a query naming a tool is a CI invocation: N2 here,
+        promoted to N3 in run() when the repository shows sustained adoption.
+        """
         query = item.provenance.query_string
         path = item.tech.path or item.title or ""
         name = PurePosixPath(path).name.lower()
+        in_workflow = path.startswith(".github/workflows/")
         out: list[Detection] = []
         for tool in self.gazetteer.tools:
+            if in_workflow and re.search(
+                rf"(?<![\w-]){re.escape(tool.token())}(?![\w-])", query, re.IGNORECASE
+            ):
+                out.append(self._det(item, repo, tool.id, "tool", "N2", "ci", path, query))
             if any(p.search(query) for p in _import_patterns(tool)):
                 out.append(self._det(item, repo, tool.id, "tool", "N2", "import", path, query))
             if name in {c.lower() for c in tool.config_files}:
@@ -216,10 +234,7 @@ class Extractor:
         out: list[Detection] = []
         if sig.error:
             return out
-        sustained = (
-            len(sig.commit_months) >= N3_MIN_MONTHS
-            and (sig.contributors or 0) >= N3_MIN_CONTRIBUTORS
-        )
+        sustained = is_sustained(sig)
         deps: dict[str, tuple[str, str]] = {}
         for path, content in sig.manifests.items():
             for dep, line in dependency_names(path, content).items():
@@ -272,6 +287,14 @@ class Extractor:
         for repo, sig in signals.items():
             if repo in anchor_item:
                 detections.extend(self.from_repo(sig, anchor_item[repo]))
+        # CI invocations found by code search become N3 where adoption is sustained.
+        detections = [
+            d.model_copy(update={"level": "N3"})
+            if d.signal == "ci" and d.level == "N2" and d.repo in signals
+            and is_sustained(signals[d.repo])
+            else d
+            for d in detections
+        ]  # fmt: skip
 
         structural = {(d.entry_id, d.repo) for d in detections if d.signal != "text" and d.repo}
         self.dropped_ambiguous = 0

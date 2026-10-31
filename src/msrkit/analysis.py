@@ -148,6 +148,7 @@ class FrequencyRow(BaseModel):
     entry: str
     kind: Literal["tool", "method"]
     units: int
+    family: str = ""  # gazetteer family; `framework-sut` = system under test, not a test tool
     n1: int = 0  # tools: units at each best level (disjoint)
     n2: int = 0
     n3: int = 0
@@ -156,7 +157,8 @@ class FrequencyRow(BaseModel):
     sources: dict[str, int] = {}
 
 
-def frequency(units: list[Unit]) -> list[FrequencyRow]:
+def frequency(units: list[Unit], families: dict[str, str] | None = None) -> list[FrequencyRow]:
+    families = families or {}
     rows: dict[tuple[str, str], FrequencyRow] = {}
     for u in units:
         entries: list[tuple[str, Literal["tool", "method"], str | None]] = [
@@ -166,7 +168,7 @@ def frequency(units: list[Unit]) -> list[FrequencyRow]:
         for entry, kind, level in entries:
             row = rows.setdefault(
                 (kind, entry),
-                FrequencyRow(entry=entry, kind=kind, units=0),
+                FrequencyRow(entry=entry, kind=kind, units=0, family=families.get(entry, "")),
             )
             row.units += 1
             if level:

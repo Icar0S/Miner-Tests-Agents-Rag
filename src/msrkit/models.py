@@ -231,6 +231,9 @@ class SourcePolicy(BaseModel):
     historical_coverage: bool = True
     # Accepts literal queries in its own syntax (protocol `queries:`).
     supports_raw_queries: bool = False
+    # True when each term is its own API query; False when the source is fetched
+    # by tag or feed and filtered locally by the terms (dev.to, RSS).
+    searches_each_term: bool = True
     redistribution: RedistributionPolicy
     tos_url: str
     docs_url: str
@@ -284,6 +287,12 @@ class Manifest(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     sources: list[SourceManifestEntry] = []
+    # Search parameters in force (protocol file + .env overrides: window, terms,
+    # enabled sources, source groups) and the MSRKIT_* variables that changed them.
+    effective_protocol: dict[str, Any] = {}
+    env_overrides: list[str] = []
+    # Command-line options that shape the sample (e.g. limit, per_query_limit).
+    run_options: dict[str, Any] = {}
 
 
 # ---------------------------------------------------------------------------
