@@ -139,6 +139,24 @@ O workflow **Coleta** (`.github/workflows/collect.yml`, disparo manual) roda o f
 
 O mesmo workflow roda **todo dia (07:23 UTC) só com os feeds RSS** — Medium e blogs —, porque cada feed traz apenas os ~10 posts mais recentes e a API do Medium não tem leitura nem busca. Os dados acumulam entre execuções (cache do Actions) e o artefato traz `rss_acumulado.csv` consolidado e deduplicado. O agendamento só vale a partir do `main`; como os posts são novos, a execução agendada estende o fim da janela até a data do dia, o que fica registrado no manifesto.
 
+### Coleta completa local
+
+O job do Actions tem 240 minutos, e uma coleta no tamanho da oficial (100 itens por consulta e todos os repositórios do GitHub enriquecidos) passa disso. O script `scripts/coleta_local.py` roda as mesmas etapas do workflow **Coleta** na sua máquina ou no container, sem teto de tempo: validação, coleta, deduplicação, enriquecimento (GraphQL), extração, planilha de triagem, PRISMA, relatório da mineração, CSV, pacote, análises preliminares A1–A6 e amostra de precisão.
+
+1. Crie o `.env` a partir do `.env.example` e preencha `GITHUB_TOKEN` (obrigatório para o GitHub), `STACKEXCHANGE_KEY` e `HF_TOKEN` (aumentam as cotas). Janela e termos vêm só do protocolo: o script ignora `MSRKIT_WINDOW_*` e `MSRKIT_TERMS*` do `.env`, como no Actions.
+2. Rode, na raiz do repositório:
+
+```bash
+python scripts/coleta_local.py                                   # nativo (Python com o msrkit instalado)
+docker compose run --rm msrkit python scripts/coleta_local.py    # ou no container
+```
+
+Padrões: 100 itens por consulta, todos os repositórios enriquecidos, as fontes públicas mais o GitHub. Veja `--help` para mudar (`--por-consulta`, `--enriquecer`, `--fontes-manuais ""` para deixar o GitHub de fora, `--sem-analises`). A saída vai para `data/` e o log completo para `data/logs/`. No Windows, o script impede a suspensão por inatividade enquanto roda. Se a coleta cair, ele mostra o comando para continuar de onde parou:
+
+```bash
+python scripts/coleta_local.py --retomar <run_id>
+```
+
 ## Dados
 
 ```text

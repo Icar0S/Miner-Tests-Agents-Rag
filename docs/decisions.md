@@ -499,3 +499,18 @@ This document records architectural, design, and technical decisions made during
   - With earlier runs in data/ (the scheduled job restores them from the cache), the report counts the unique items no earlier run had and the accumulated total. The run alone only shows within-run duplicates, which hides the day-to-day overlap of RSS feeds.
   - The PRISMA flow now also reports planned queries that were not executed, per source.
   - `protocol_sha256` normalizes CRLF to LF before hashing. The same protocol gave `e48faa103868` on a Windows checkout and `d755f05d757b` on the CI runner. Manifests hashed on Windows before this change carry the CRLF hash.
+
+---
+
+## ADR-048: The Official Collection Runs Locally
+
+- **Context:** The Coleta workflow job has a 240-minute timeout. A collection at the official scale does not fit. Run d28a (100 items per query, every repository enriched) took about two hours of collection in Docker, plus the enrichment of 5,500 repositories.
+- **Decision:**
+  - `scripts/coleta_local.py` runs the workflow's steps locally or in the container, with no time limit and in the same order: validate, run, dedupe, enrich, extract, screening sheet, PRISMA, mining report, CSV, package, preliminary A1–A6 analyses and the precision sample. Every step after the collection is pinned to the run id it created.
+  - The script sets the workflow's source groups. It blanks `MSRKIT_WINDOW_*` and `MSRKIT_TERMS*` in the child environment, so the window and lexicon come from the protocol file alone, as on the Actions runner, whatever the local `.env` holds. An empty variable is ignored by the overrides and blocks the `.env` value, since existing variables win.
+  - GitHub requires `GITHUB_TOKEN` before anything starts. Without it the source runs at 60 requests/hour and without code search, which would take many hours.
+  - Defaults: 100 items per query and every repository enriched through GraphQL (which falls back to REST when it fails).
+  - Output goes to `data/` and a full log to `data/logs/`. A fatal step stops the run and prints `--retomar <run_id>`, which resumes the collection (`msrkit run --resume`) and reruns the later steps. Those steps are idempotent, and enrichment resumes from what is saved. Optional steps (analyses, precision sample, stats) do not stop the run.
+  - On Windows the script keeps the system awake while it runs (`SetThreadExecutionState`).
+- **Consequences:** The workflow stays for test samples and the daily RSS accumulation. Official runs are local, and the manifest records where and how they ran (`env_overrides`, `run_options`). `scripts/` is mounted in docker-compose so the container sees the script.
+
