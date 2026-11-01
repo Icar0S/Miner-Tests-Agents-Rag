@@ -387,10 +387,10 @@ msrkit precision score data/validation/<run>/precision_sample.csv
 `msrkit report` gera o **relatório da mineração** (`relatorio_mineracao.md` e `.json`) em `reports/<run>/`, legível sem abrir o manifesto:
 
 - **Resumo** da execução em um parágrafo;
-- **Espaço temporal:** janela buscada, início, fim e duração da execução, datas dos itens por ano;
-- **Locais:** consultas executadas/planejadas, requisições, itens retornados, descartados, únicos e truncamentos por fonte; fontes não consultadas e o motivo; itens por fonte e tipo;
+- **Espaço temporal:** janela buscada, início, fim e duração da execução, datas dos itens por ano; se `MSRKIT_WINDOW_*` estendeu a janela (como na coleta diária de RSS), também a janela do protocolo e quantos itens ficam fora dela;
+- **Locais:** consultas executadas/planejadas, requisições, itens retornados, descartados, únicos e truncamentos por fonte; fontes não consultadas e o motivo (fora desta execução, fonte paga, indisponível, desativada no protocolo); itens por fonte e tipo;
 - **Termos buscados:** léxico por idioma, consultas literais por fonte, opções da execução, termos que mais casaram e os que não casaram nenhuma vez;
-- **Quantidades:** funil (identificados → filtro local → duplicatas → únicos), conceitos do protocolo e, se houver, enriquecimento e detecções N1/N2/N3;
+- **Quantidades:** funil (identificados → filtro local → duplicatas → únicos), conceitos do protocolo e, se houver, enriquecimento e detecções N1/N2/N3; com execuções anteriores em `data/` (a coleta diária de RSS as restaura do cache), quantos itens são novos e o total acumulado;
 - **Avisos:** consultas planejadas que não rodaram, falhas, tetos de API, amostra cortada pelo limite de itens, itens fora da janela, deduplicação pendente.
 
 ```bash

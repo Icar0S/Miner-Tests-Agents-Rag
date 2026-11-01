@@ -141,6 +141,8 @@ def _report(tmp_path: Path, **kwargs: object):  # type: ignore[no-untyped-def]
     return build_report(
         "run-r", args["manifest"], items, items[:4], args["dedupe_report"], discards,  # type: ignore[arg-type]
         signals=args.get("signals"), detections=args.get("detections"),  # type: ignore[arg-type]
+        protocol_window=args.get("protocol_window"),  # type: ignore[arg-type]
+        earlier_urls=args.get("earlier_urls"), earlier_runs=args.get("earlier_runs", 0),  # type: ignore[arg-type]
     )  # fmt: skip
 
 
@@ -228,6 +230,72 @@ class TestBuildReport:
         assert "duração desconhecida" in md
 
 
+class TestSourcesWindowAndAccumulation:
+    def test_skip_reasons_follow_source_groups(self, tmp_path: Path) -> None:
+        m = _manifest()
+        m.effective_protocol["enabled_sources"] = ["github", "hackernews", "stackexchange"]
+        m.effective_protocol["source_groups"] = {
+            "github": "manual", "hackernews": "public", "stackexchange": "public",
+            "linkedin": "unavailable", "x_twitter": "paid",
+        }  # fmt: skip
+        ok = Availability(status=AvailabilityStatus.OK, reason="token configured")
+        no = Availability(status=AvailabilityStatus.UNSUPPORTED, reason="paid plan")
+        m.sources += [
+            SourceManifestEntry(name="devto", adapter_version="1", availability=ok),
+            SourceManifestEntry(name="x_twitter", adapter_version="1", availability=no),
+            SourceManifestEntry(name="stackexchange", adapter_version="1", availability=ok),
+        ]
+        r = _report(tmp_path, manifest=m)
+        reasons = {s.name: s.skip_reason for s in r.sources if not s.executed}
+        assert reasons == {
+            "linkedin": "indisponível (grupo `unavailable`): no API",
+            "devto": "fora desta execução (não está em `MSRKIT_SOURCES_PUBLIC` nem `_MANUAL`)",
+            "x_twitter": "fonte paga, fora da coleta (grupo `paid`)",
+            "stackexchange": "habilitada e disponível, mas nenhuma consulta foi executada",
+        }
+        w = "\n".join(r.warnings)
+        assert "stackexchange: habilitada e disponível, mas nenhuma consulta" in w
+        assert "devto:" not in w
+
+    def test_disabled_in_protocol_without_groups(self, tmp_path: Path) -> None:
+        m = _manifest()
+        m.effective_protocol["enabled_sources"] = ["github", "hackernews"]
+        r = _report(tmp_path, manifest=m)
+        assert r.sources[2].skip_reason == "desativada no protocolo"
+
+    def test_window_extended_beyond_protocol(self, tmp_path: Path) -> None:
+        m = _manifest()
+        m.effective_protocol["window"]["until"] = "2026-10-31"
+        m.env_overrides = ["MSRKIT_WINDOW_UNTIL"]
+        r = _report(tmp_path, manifest=m, protocol_window=("2023-01-01", "2024-12-31"))
+        assert (r.protocol_since, r.protocol_until) == ("2023-01-01", "2024-12-31")
+        assert r.outside_protocol_window == 3  # two items of 2025 and one of 2022
+        assert r.window_overridden
+        w = "\n".join(r.warnings)
+        assert "difere da do protocolo (2023-01-01 a 2024-12-31): 3 itens únicos" in w
+        md = render_markdown(r)
+        assert "- Janela do protocolo: **2023-01-01 a 2024-12-31** (3 itens únicos fora dela)" in md
+
+    def test_same_window_has_no_contrast(self, tmp_path: Path) -> None:
+        r = _report(tmp_path, protocol_window=("2023-01-01", "2026-08-31"))
+        assert r.protocol_since is None and r.outside_protocol_window == 0
+        assert "Janela do protocolo" not in render_markdown(r)
+
+    def test_accumulation_against_earlier_runs(self, tmp_path: Path) -> None:
+        earlier = {"https://x.example/github/1", "http://www.x.example/other/9/"}
+        r = _report(tmp_path, earlier_urls=earlier, earlier_runs=2)
+        assert (r.earlier_runs, r.new_items, r.accumulated) == (2, 3, 5)
+        md = render_markdown(r)
+        assert "Destes, 3 não apareciam nas 2 execuções anteriores; o acumulado soma 5" in md
+        assert "### Acúmulo entre execuções" in md
+        assert "nenhuma anterior trouxe: **3** de 4" in md
+
+    def test_no_accumulation_without_earlier_runs(self, tmp_path: Path) -> None:
+        r = _report(tmp_path)
+        assert r.new_items is None and r.accumulated is None
+        assert "Acúmulo" not in render_markdown(r)
+
+
 class TestRender:
     def test_sections_and_content(self, tmp_path: Path) -> None:
         signals, dets = _evidence()
@@ -247,7 +315,7 @@ class TestRender:
         assert "**2023-01-01 a 2026-08-31**" in md
         assert "(1 h 30 min)" in md
         assert "| github | 2/3 | 4 | 3 | 0 | 3 | item_limit 1 |" in md
-        assert "- **linkedin** (UNSUPPORTED): no API" in md
+        assert "- **linkedin**: UNSUPPORTED: no API" in md  # manifest without source groups
         assert "- **Português (1):** `teste de RAG`" in md
         assert "- **Consultas literais em github** (protocolo `queries:`): ci (2)" in md
         assert "Termos sem nenhum casamento: `LLM as a judge`" in md
@@ -261,6 +329,7 @@ class TestRender:
         assert "O enriquecimento analisou 2 repositórios do GitHub." in with_repos
         only_text = render_markdown(_report(tmp_path, signals={}, detections=dets))
         assert "enriquecimento analisou" not in only_text
+        assert "Repositórios do GitHub enriquecidos" not in only_text
         assert "A extração encontrou 4 detecções de ferramentas e métodos." in only_text
 
     def test_no_warnings_message(self, tmp_path: Path) -> None:
@@ -283,11 +352,24 @@ class TestReportCommand:
         storage = ItemStorage(tmp_path)
         storage.save_items(items, "run-r")
         storage.rewrite_items(items[:4], "run-r", deduped=True)
-        save_manifest(_manifest(), tmp_path)
+        storage.save_items(items[1:2], "run-a")  # an earlier run that already had gi1
+        # The repository's own protocol, with the window extended as the daily RSS run does.
+        from pathlib import Path
+
+        from msrkit.config import load_protocol
+
+        protocol = Path(__file__).resolve().parent.parent / "protocols/v0_rag_agents_testing.yaml"
+        m = _manifest()
+        m.protocol_path = str(protocol)
+        m.effective_protocol["window"]["until"] = "2099-12-31"
+        save_manifest(m, tmp_path)
         r = CliRunner().invoke(app, ["report", "--run", "run-r"])
         assert r.exit_code == 0, r.stdout
         assert "Identified" in r.stdout and "unique 4" in r.stdout
         md = (tmp_path / "reports/run-r/relatorio_mineracao.md").read_text(encoding="utf-8")
         assert "## Termos buscados" in md
+        assert "nenhuma anterior trouxe: **3** de 4" in md
+        w = load_protocol(protocol, environ={}).window
+        assert f"- Janela do protocolo: **{w.since} a {w.until}**" in md
         data = json.loads((tmp_path / "reports/run-r/relatorio_mineracao.json").read_text())
         assert data["unique"] == 4 and data["sources"][0]["name"] == "github"

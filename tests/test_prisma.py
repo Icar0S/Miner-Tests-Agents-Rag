@@ -123,6 +123,20 @@ class TestFlow:
         assert (flow.included, flow.coded) == (1, 1)
         assert flow.included_by_source == {"github": 1}
 
+    def test_planned_queries_not_executed(self, tmp_path: Path) -> None:
+        items = _setup(tmp_path)
+        m = _manifest()
+        m.sources[0].planned = [{}, {}, {}]  # 3 planned, 1 executed
+        flow = build_flow("r", m, items, items, None, tmp_path / "x.jsonl", {}, set())
+        assert flow.not_executed == {"github": 2}
+        md = render_markdown(flow)
+        assert "Planned queries not executed (source cap or interruption): 2 (github 2)" in md
+        none = build_flow("r", _manifest(), items, items, None, tmp_path / "x.jsonl", {}, set())
+        assert none.not_executed == {}
+        assert "Planned queries not executed (source cap or interruption): 0\n" in (
+            render_markdown(none)
+        )
+
     def test_missing_dedupe_is_na_not_zero(self, tmp_path: Path) -> None:
         from msrkit.prisma import render_tikz
 
