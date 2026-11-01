@@ -383,6 +383,10 @@ def load_protocol(path: str | Path, environ: Mapping[str, str] | None = None) ->
 
 
 def protocol_sha256(path: str | Path) -> str:
-    """Compute SHA-256 hash of a protocol file for provenance."""
-    content = Path(path).read_bytes()
+    """Compute SHA-256 hash of a protocol file for provenance.
+
+    Line endings are normalized to LF first: a Windows checkout (CRLF) and the CI
+    runner (LF) must give the same hash for the same protocol.
+    """
+    content = Path(path).read_bytes().replace(b"\r\n", b"\n")
     return hashlib.sha256(content).hexdigest()
