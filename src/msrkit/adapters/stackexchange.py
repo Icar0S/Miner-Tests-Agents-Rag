@@ -156,10 +156,11 @@ class StackExchangeAdapter(BaseAdapter):
 
                     if resp.status_code != 200:
                         logger.warning(
-                            "SE search returned %d for site=%s page=%d",
+                            "SE search returned %d for site=%s page=%d: %s",
                             resp.status_code,
                             site,
                             page,
+                            resp.text[:200],
                         )
                         break
 
@@ -234,7 +235,12 @@ class StackExchangeAdapter(BaseAdapter):
                     params["key"] = key
                 resp = self._governed_get(f"{_BASE_URL}/questions/{batch}/answers", params=params)
                 if resp.status_code != 200:
-                    logger.warning("SE answers returned %d for site=%s", resp.status_code, site)
+                    logger.warning(
+                        "SE answers returned %d for site=%s: %s",
+                        resp.status_code,
+                        site,
+                        resp.text[:200],
+                    )
                     break
                 data = resp.json()
                 self._handle_backoff(data)

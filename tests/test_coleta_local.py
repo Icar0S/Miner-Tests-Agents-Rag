@@ -100,10 +100,24 @@ class FakeRunner:
         return 0
 
 
+class FakeKeyCheck:
+    """Stands in for the /info call; records the keys it was asked about."""
+
+    def __init__(self, ok: bool = True, message: str = "STACKEXCHANGE_KEY válida") -> None:
+        self.keys: list[str] = []
+        self.result = (ok, message)
+
+    def __call__(self, key: str) -> tuple[bool, str]:
+        self.keys.append(key)
+        return self.result
+
+
 @pytest.fixture
 def work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(coleta, "keep_awake", lambda on: None)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(coleta, "check_stackexchange_key", FakeKeyCheck())
+    for name in ("GITHUB_TOKEN", "STACKEXCHANGE_KEY"):
+        monkeypatch.delenv(name, raising=False)
     return tmp_path
 
 
@@ -147,6 +161,36 @@ class TestMain:
         runner = FakeRunner(fail_on="analyze")
         assert coleta.main(["--pasta", str(work)], runner=runner) == 0
         assert runner.calls[-1][0] == "stats"
+
+    def test_rejected_stackexchange_key_stops_before_collecting(
+        self, work: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        (work / ".env").write_text("GITHUB_TOKEN=t\nSTACKEXCHANGE_KEY=bad\n")
+        check = FakeKeyCheck(ok=False, message="bad_parameter: `key` doesn't match")
+        monkeypatch.setattr(coleta, "check_stackexchange_key", check)
+        runner = FakeRunner()
+        assert coleta.main(["--pasta", str(work)], runner=runner) == 2
+        assert check.keys == ["bad"] and runner.calls == []
+        assert "doesn't match" in capsys.readouterr().out
+
+    def test_valid_stackexchange_key_is_reported(
+        self, work: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        (work / ".env").write_text("GITHUB_TOKEN=t\nSTACKEXCHANGE_KEY=k\n")
+        check = FakeKeyCheck(message="STACKEXCHANGE_KEY válida: cota de 10000 req/dia")
+        monkeypatch.setattr(coleta, "check_stackexchange_key", check)
+        assert coleta.main(["--pasta", str(work)], runner=FakeRunner()) == 0
+        out = capsys.readouterr().out
+        assert "cota de 10000 req/dia" in out and "STACKEXCHANGE_KEY vazio" not in out
+
+    def test_key_not_checked_without_stackexchange(
+        self, work: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (work / ".env").write_text("GITHUB_TOKEN=t\nSTACKEXCHANGE_KEY=k\n")
+        check = FakeKeyCheck(ok=False)
+        monkeypatch.setattr(coleta, "check_stackexchange_key", check)
+        assert coleta.main(["--pasta", str(work), "--fontes", "hackernews"], FakeRunner()) == 0
+        assert check.keys == []
 
     def test_resume_and_without_github(self, work: Path) -> None:
         (work / ".env").write_text("")

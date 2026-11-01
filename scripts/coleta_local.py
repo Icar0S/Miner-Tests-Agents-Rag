@@ -205,6 +205,32 @@ def utf8_output() -> None:
             reconfigure(encoding="utf-8", errors="replace")
 
 
+def check_stackexchange_key(key: str) -> tuple[bool, str]:
+    """Confere a chave com uma chamada a /info (gasta 1 requisição da cota).
+
+    Chave inválida faz toda busca voltar 400 e o Stack Exchange sair vazio sem que a
+    coleta falhe; por isso o script para antes. Falha de rede não impede a coleta.
+    """
+    import httpx
+
+    try:
+        resp = httpx.get(
+            "https://api.stackexchange.com/2.3/info",
+            params={"site": "stackoverflow", "key": key},
+            headers={"Accept-Encoding": "gzip"},
+            timeout=30,
+        )
+        data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return True, f"aviso: não deu para conferir a STACKEXCHANGE_KEY ({exc})."
+    if "error_id" in data:
+        return False, f"{data.get('error_name')}: {data.get('error_message')}"
+    return True, (
+        f"STACKEXCHANGE_KEY válida: cota de {data.get('quota_max')} req/dia, "
+        f"restam {data.get('quota_remaining')}."
+    )
+
+
 def _duration(seconds: float) -> str:
     minutes, secs = divmod(round(seconds), 60)
     hours, minutes = divmod(minutes, 60)
@@ -288,6 +314,19 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
         )
         return 2
 
+    se_key = os.environ.get("STACKEXCHANGE_KEY") or dotenv.get("STACKEXCHANGE_KEY")
+    se_status = ""
+    if se_key and "stackexchange" in args.fontes.split(","):
+        ok, se_status = check_stackexchange_key(se_key)
+        if not ok:
+            print(
+                f"A API do Stack Exchange recusou a STACKEXCHANGE_KEY ({se_status}).\n"
+                "Copie o campo Key (não o Client Secret) da página do seu app em\n"
+                "https://stackapps.com/apps/oauth, ou deixe a variável vazia para coletar\n"
+                "sem chave (300 req/dia)."
+            )
+            return 2
+
     env = child_env(os.environ, dotenv, args.fontes, ",".join(manual))
     data = work / "data"
     (data / "logs").mkdir(parents=True, exist_ok=True)
@@ -320,6 +359,8 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
         for name in ("STACKEXCHANGE_KEY", "HF_TOKEN"):
             if not credential(name):
                 _say(log, f"  aviso: {name} vazio; a fonte roda com cota menor.")
+        if se_status:
+            _say(log, f"  {se_status}")
         ignored = sorted(k for k in env if k.startswith(SEARCH_OVERRIDES) and dotenv.get(k))
         if ignored:
             _say(log, f"  ignorando do .env (vale o protocolo): {', '.join(ignored)}")

@@ -35,6 +35,12 @@ No divergences found during initial implementation. All endpoints, parameters, a
 - **Correction (2026-09-28):** The official docs for `/search/advanced` define `tagged` as "a semicolon delimited list of tags, of which **at least one** will be present on all returned questions" (OR semantics), not AND. The adapter now sends the tag list with OR semantics (ADR-017).
 - **Link:** https://api.stackexchange.com/docs
 
+### Stack Exchange — 2026-11-01 (revisão da documentação)
+- **Docs say:** The Authentication page now states that "all API requests must pass authentication details using request headers" (`Authorization: Bearer {API key or access token}`) and points to a Stack Apps help page dated June 2025 (behind a Cloudflare challenge, not readable by script). A new beta MCP server (`mcp.stackoverflow.com`, 100 calls/day per user, login required) was added. The throttle page is unchanged: 300 requests/day per IP without a key, 10,000 with an app key, `backoff` mandatory, at most 30 req/s per IP.
+- **Observed (live calls on 2026-11-01):** anonymous requests still work (`quota_max` 300); `page > 25` without a key returns 403 `access_denied`; the `key` query parameter is still parsed (an unknown key returns 400 "`key` doesn't match a known application"); `Authorization: Bearer <value>` is parsed as an access token (an unknown value returns 402 `invalid_access_token`). The runs a2a8 (2026-09-29) and d28a (2026-10-20) collected 146 and 672 items with the key in the query parameter, with no failed partitions.
+- **Decision:** Keep the `key` query parameter, which is the behaviour verified with a real key; switch to the header only after testing it with a real key. `scripts/coleta_local.py` checks the key with one call to `/info` before collecting, because a rejected key makes every search return 400 and the source comes out empty without failing the run. The adapter logs now include the API error message.
+- **Link:** https://api.stackexchange.com/docs/authentication, https://api.stackexchange.com/docs/throttle
+
 ### Medium via RSS — 2026-09-15
 - **Spec says:** Temporal window query for Medium engineering articles (`since` .. `until`).
 - **Docs say:** Public Medium feeds (`https://medium.com/feed/tag/...`) provide only the ~10 most recent posts, without pagination or historical date filtering parameters.
