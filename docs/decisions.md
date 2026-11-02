@@ -514,3 +514,13 @@ This document records architectural, design, and technical decisions made during
   - On Windows the script keeps the system awake while it runs (`SetThreadExecutionState`).
 - **Consequences:** The workflow stays for test samples and the daily RSS accumulation. Official runs are local, and the manifest records where and how they ran (`env_overrides`, `run_options`). `scripts/` is mounted in docker-compose so the container sees the script.
 
+---
+
+## ADR-049: GitHub Issue Searches Collect Issues Only
+
+- **Context:** GitHub's `/search/issues` now rejects, with 422, a query that does not say `is:issue` or `is:pull-request`. In run 2026-11-01T23-59-22Z-7837, all 72 term × language issue requests got that 422, and the adapter logged a warning and recorded each query as completed with 0 items, so neither the report nor the PRISMA flow showed the loss: 1,440 issues, against 3,795 `kind: issue` items in run d28a. Run d28a, on 2026-10-20, sent the same queries without the qualifier and received issues and pull requests mixed (2,405 issues, 1,390 PRs).
+- **Decision:**
+  - Issue searches collect issues only, following the protocol's `kind: issue` literally. The adapter appends `is:issue` to every issue query, term or literal, that does not already set `is:`/`type:` issue or PR. The anchor queries (`repo:{repo} is:issue label:bug`) already did.
+  - A 422 no longer looks like an empty result. The adapter keeps going through the query's other languages and then raises `QueryRejectedError` with GitHub's message, so the query is recorded as not completed, the mining report lists it under failed queries, and `--resume` redoes it.
+  - The GitHub adapter version goes to 0.2.0, so manifests show which runs used the new queries.
+- **Consequences:** Pull requests leave the corpus. Runs with adapter 0.2.0 are not directly comparable with d28a on `kind: issue`: d28a's PRs (37% of its issue items) have no counterpart. A comparison should drop URLs containing `/pull/` from d28a first. Run 2026-11-01T23-59-22Z-7837 is superseded for GitHub issues and should be rerun.

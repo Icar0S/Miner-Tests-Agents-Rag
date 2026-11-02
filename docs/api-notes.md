@@ -64,3 +64,9 @@ No divergences found during initial implementation. All endpoints, parameters, a
 - **Docs say:** (1) GitHub REST `/search/issues` does not follow repository HTTP 301 redirects on `repo:owner/name` qualifiers and instead returns `422 Unprocessable Entity` when a repository has been renamed or transferred. (2) GitHub REST `/search/repositories` legacy parser returns `total_count: 0` when quoted strings appear immediately inside an opening parenthesis (`("RAG" OR ...)`).
 - **Decision:** Update `protocols/gazetteer.yaml` and `protocols/gold_set.yaml` to canonical post-redirect repository names (`vibrantlabsai/ragas`, `Giskard-AI/giskard-oss`, `NVIDIA-NeMo/Guardrails`) and simplify literal `kind: repo` queries in `protocols/v0_rag_agents_testing.yaml` to unquoted parenthesized syntax (`RAG (eval OR test OR testing)` and `agentic (eval OR test OR testing)`), which returns 27,338 and 170,656 repositories respectively.
 - **Link:** https://docs.github.com/en/rest/search/search
+
+### GitHub Search API — 2026-11-01
+- **Spec says:** Protocol §7.3 collects GitHub items of `kind: issue` through `/search/issues`.
+- **Observed:** `/search/issues` now answers `422 Unprocessable Entity` with "Query must include 'is:issue' or 'is:pull-request'" to a query that does not set the type. In run 2026-11-01T23-59-22Z-7837, 72 of 107 issue requests (every term × language query) got that 422, and the adapter recorded them as completed with 0 items. Run d28a (2026-10-20) sent the same queries without the qualifier and received issues and pull requests mixed: 2,405 issues and 1,390 PRs among its 3,795 `kind: issue` items.
+- **Decision:** Issue searches add `is:issue` when the query does not already set `is:`/`type:` issue or PR, following the protocol's `kind: issue` literally (ADR-049). A 422 now marks the query as not completed after the other languages run.
+- **Link:** https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests

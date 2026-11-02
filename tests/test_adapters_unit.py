@@ -456,6 +456,61 @@ class TestSearchLoopsAndQueryBuilding:
         assert "language:Python" in qs
         assert "stars:>=5" in qs
 
+    def test_github_issue_queries_are_restricted_to_issues(self) -> None:
+        from datetime import date
+
+        adapter = GitHubAdapter()
+        window = {"since": date(2023, 1, 1), "until": date(2026, 8, 31)}
+        q = Query(source="github", terms=["agent testing"], kind="issue", **window)
+        assert adapter._build_single_query_string(q, term="agent testing", language="Python") == (
+            '"agent testing" created:2023-01-01..2026-08-31 language:Python is:issue'
+        )
+        assert adapter._build_query_string(q).endswith(" is:issue")
+        for kind in ("repo", "code"):
+            other = Query(source="github", terms=["agent testing"], kind=kind, **window)
+            assert "is:issue" not in adapter._build_single_query_string(other, term="x")
+        # A literal query that already sets the type is kept as written.
+        for literal in ("repo:o/r is:issue label:bug", "rag is:pr", "rag type:issue"):
+            raw = Query(source="github", terms=[literal], kind="issue", raw=True)
+            assert adapter._build_single_query_string(raw, term=literal) == literal
+
+    def test_github_422_keeps_other_languages_and_fails_the_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from msrkit.adapters.github import QueryRejectedError
+
+        adapter = GitHubAdapter()
+
+        def fake_get(url: str, params: dict[str, Any] | None = None, **kw: Any) -> MagicMock:
+            resp = MagicMock()
+            assert params is not None
+            if "language:Python" in params["q"]:
+                resp.status_code = 422
+                resp.json.return_value = {
+                    "message": "Validation Failed",
+                    "errors": [{"message": "Query must include 'is:issue' or 'is:pull-request'"}],
+                }
+            else:
+                resp.status_code = 200
+                resp.json.return_value = {
+                    "items": [{"id": 7, "html_url": "https://github.com/o/r/issues/7"}]
+                }
+            return resp
+
+        monkeypatch.setattr(adapter, "_governed_get", fake_get)
+        q = Query(
+            source="github",
+            terms=["t"],
+            kind="issue",
+            extra={"languages": ["Python", "TypeScript"]},
+            limit=10,
+        )
+        got = []
+        with pytest.raises(QueryRejectedError, match="is:pull-request"):
+            for raw in adapter.search(q):
+                got.append(raw.native_id)
+        assert got == ["7"]  # the TypeScript items came through before the error
+
     def test_github_search_multiple_terms(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = GitHubAdapter()
         mock_resp = MagicMock()
