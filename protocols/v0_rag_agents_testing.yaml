@@ -192,18 +192,26 @@ sources:
     # Rodam além dos termos. `evidence` indica o nível de evidência que a consulta
     # busca (N2: uso declarado; N3: invocação em CI).
     queries:
-      - kind: repo
-        label: repos-rag
-        q: 'RAG (eval OR test OR testing) in:name,description,readme stars:>5'
-      - kind: repo
-        label: repos-agentes
-        q: 'agentic (eval OR test OR testing) in:name,description,readme stars:>5'
+      # Repositórios: uma consulta por palavra, em nome e descrição. A busca de
+      # repositórios ignora grupos com OR: `RAG (eval OR test OR testing)` dava o
+      # mesmo que `RAG` sozinho, 27.662 repositórios (ADR-051).
+      - {kind: repo, label: repos-rag-eval, q: 'RAG eval in:name,description stars:>5'}
+      - {kind: repo, label: repos-rag-evaluation, q: 'RAG evaluation in:name,description stars:>5'}
+      - {kind: repo, label: repos-rag-test, q: 'RAG test in:name,description stars:>5'}
+      - {kind: repo, label: repos-rag-testing, q: 'RAG testing in:name,description stars:>5'}
+      - {kind: repo, label: repos-agentes-eval, q: 'agentic eval in:name,description stars:>5'}
+      - {kind: repo, label: repos-agentes-evaluation, q: 'agentic evaluation in:name,description stars:>5'}
+      - {kind: repo, label: repos-agentes-test, q: 'agentic test in:name,description stars:>5'}
+      - {kind: repo, label: repos-agentes-testing, q: 'agentic testing in:name,description stars:>5'}
       - {kind: code, label: ragas-import, evidence: N2, q: '"from ragas import" language:Python'}
       - {kind: code, label: deepeval-import, evidence: N2, q: '"import deepeval" language:Python'}
       - {kind: code, label: promptfoo-config, evidence: N2, q: 'filename:promptfooconfig.yaml'}
       - {kind: code, label: rag-metricas-teste, evidence: N2, q: '"faithfulness" "context_recall" language:Python path:tests'}
       - {kind: code, label: golden-dataset, evidence: N2, q: '"golden" "dataset" path:evals'}
-      - {kind: code, label: tool-call-assert, evidence: N2, q: '"tool_call" "assert" language:Python path:tests'}
+      # Asserções sobre chamadas de ferramenta. `"tool_call" "assert"` casava
+      # 291.840 arquivos de teste (ADR-051); estes nomes são do próprio teste.
+      - {kind: code, label: tool-calls-esperadas, evidence: N2, q: '"expected_tool_calls" language:Python path:tests'}
+      - {kind: code, label: assert-tool-call, evidence: N2, q: '"assert_tool_call" language:Python path:tests'}
       # Templates: {anchor} e {repo} expandem sobre as âncoras do gazetteer.
       - {kind: code, label: ci, evidence: N3, q: '{anchor} path:.github/workflows language:YAML'}
       - {kind: issue, label: issues-ancora, q: 'repo:{repo} is:issue label:bug'}

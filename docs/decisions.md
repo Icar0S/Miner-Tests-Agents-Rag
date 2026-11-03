@@ -533,3 +533,14 @@ This document records architectural, design, and technical decisions made during
 - **Context:** ADR-018 added a Portuguese lexicon (16 terms) as an exploratory stratum for criterion I4. It stayed small: 90 items in run d28a and 63 of 11,316 unique items in run 2026-11-02T19-14-30Z-d855, and 4 of its terms never matched. English is the working language of the field, and the team decided to search in English only.
 - **Decision:** The protocol drops `terms_by_language.pt`, `pt` from `languages`, the `pt.stackoverflow` site, and the Portuguese concept terms ("geração aumentada por recuperação", "agente", "teste", "avaliação"). Criterion I4 becomes "English". The `terms_by_language` mechanism and the Portuguese inflection rules in `keywords.py` stay in the code for other studies.
 - **Consequences:** The E2 corpus describes the community that publishes in English. Runs before this change are not comparable on the language stratum. The Paper 2 macro `ResItensPt` now counts 0.
+
+---
+
+## ADR-051: Literal Repository Queries Without OR Groups
+
+- **Context:** The protocol's two literal repository queries were meant to find repositories about testing RAG and agentic systems: `RAG (eval OR test OR testing) in:name,description,readme stars:>5` and the same with `agentic`. On 2026-11-03, live counts showed that GitHub's repository search ignores the parenthesized OR group: each query returned exactly what `RAG` or `agentic` alone returns (27,662 and 175,235 repositories). The 100 repositories each one collected in run d855 were a sample of every RAG or agentic repository, not of the ones about testing. The code query `"tool_call" "assert" language:Python path:tests` had a similar problem: code search splits `tool_call` into two words, and the query matched 291,840 test files.
+- **Decision:**
+  - Each repository query becomes four, one word each, searched in name and description only: `eval`, `evaluation`, `test`, `testing`. The README match is dropped because it pulls in any repository that mentions both words anywhere (`RAG testing` in READMEs returns 14,863 repositories, `ollama/ollama` among the first).
+  - The eight queries return 99 to 266 repositories for RAG and 394 to 1,489 for agentic (`stars:>5`, window 2023-01-01..2026-08-31). The RAG ones fit almost entirely in 100 items per query per year, once the queries run by year (PLANO, step O8); the agentic ones remain samples.
+  - The tool-call query becomes two queries for names that only appear in tests of tool calls: `"expected_tool_calls"` (1,076 files) and `"assert_tool_call"` (463).
+- **Consequences:** This is a recorded deviation from the queries of protocol §7.3. Repository items from runs before this change are not comparable on these labels. The repository term queries (`"RAG evaluation"`, `"agent testing"` and the rest, with `language:` and `stars:>=3`) are unchanged.
