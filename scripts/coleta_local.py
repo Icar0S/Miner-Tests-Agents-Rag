@@ -85,6 +85,7 @@ def pipeline(
     enrich: bool,
     enrich_limit: int = 0,
     graphql: bool = True,
+    reuse_days: int = 0,
     analyses: bool = True,
 ) -> list[Step]:
     """Etapas depois da coleta, na ordem do workflow, todas presas a `run_id`."""
@@ -96,6 +97,8 @@ def pipeline(
             cmd += ["--limit", str(enrich_limit)]
         if graphql:
             cmd.append("--graphql")
+        if reuse_days:
+            cmd += ["--reuse-days", str(reuse_days)]
         steps.append(Step("Enriquecimento do GitHub (N2/N3)", cmd))
     steps += [
         Step("Extração de ferramentas e métodos", ["extract", *p, *r]),
@@ -265,6 +268,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                     help="máximo de repositórios do GitHub enriquecidos (0 = todos)")  # fmt: skip
     ap.add_argument("--sem-graphql", action="store_true",
                     help="enriquecer só pela API REST (mais lento)")  # fmt: skip
+    ap.add_argument("--reaproveitar-dias", type=int, default=14,
+                    help="reaproveita o enriquecimento de repositórios feito por outra execução "
+                         "nos últimos N dias, com a mesma janela (0 = enriquece tudo de novo)")  # fmt: skip
     ap.add_argument("--fontes", default=PUBLIC, help="fontes públicas, separadas por vírgula")
     ap.add_argument("--fontes-manuais", default=MANUAL,
                     help="fontes com credencial; vazio (\"\") deixa o GitHub de fora")  # fmt: skip
@@ -356,7 +362,9 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
         per_query = args.por_consulta or "sem teto"
         enrich_scope = args.enriquecer or "todos"
         _say(log, f"  por consulta:   {per_query} · enriquecer: {enrich_scope}"
-                  + ("" if args.sem_graphql else " (GraphQL)"))  # fmt: skip
+                  + ("" if args.sem_graphql else " (GraphQL)")
+                  + (f" · reaproveita até {args.reaproveitar_dias} dias"
+                     if args.reaproveitar_dias else ""))  # fmt: skip
         for name in ("STACKEXCHANGE_KEY", "HF_TOKEN"):
             if not credential(name):
                 _say(log, f"  aviso: {name} vazio; a fonte roda com cota menor.")
@@ -396,6 +404,7 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
                 enrich=github,
                 enrich_limit=args.enriquecer,
                 graphql=not args.sem_graphql,
+                reuse_days=args.reaproveitar_dias,
                 analyses=not args.sem_analises,
             ):
                 if step(s) and s.fatal:

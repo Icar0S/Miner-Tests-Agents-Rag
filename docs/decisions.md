@@ -569,3 +569,15 @@ This document records architectural, design, and technical decisions made during
   - With earlier runs in `data/`, the mining report adds a per-source table of the unique items an earlier run also had, so each collection measures how much each source repeats.
   - The study corpus is the frozen package of the official run (PLANO, O9), not a re-query. Paper 1 reports the drift as a reliability threat, with these numbers.
 - **Consequences:** Two runs a few days apart give nearly the same code hits; runs weeks apart do not, and the per-source table shows by how much.
+
+---
+
+## ADR-054: Enrichment Reused Across Runs
+
+- **Context:** Enrichment reads each repository's tree, workflows, manifests, contributors and commit months, and is bound by GitHub's 5,000 core requests per hour. In run d855 it took 6 h 38 min of the 7 h 23 min run, although 3,977 of its 5,260 repositories (76%) had been enriched by run 7837 the day before. Signals were reused only within a run, to resume it.
+- **Decision:**
+  - `msrkit enrich --reuse-days N` copies a repository's signals from another run in `data/enrich/` when that run was enriched with the same window and the same gazetteer config files, the signals have no error, and they were fetched at most N days ago. The newest copy wins. Off by default (`N = 0`).
+  - A copied signal keeps its `fetched_at` and request hashes and gains `reused_from`, the run whose requests produced it. The mining report counts the reused repositories.
+  - Each enrichment writes `data/enrich/<run>/meta.json` with its window and config files. For runs enriched before that file existed, the window comes from the manifest and the config files from the gazetteer of the protocol path the manifest names, which is the file as it is now.
+  - `scripts/coleta_local.py` passes `--reuse-days 14`; `--reaproveitar-dias 0` turns it off.
+- **Consequences:** A new run within two weeks of the last one enriches only the repositories it did not have; checked on d855, 5,257 of its 5,260 repositories are eligible for the next run. N3 signals depend on the window (commit months, which is closed and fixed) and on the repository's current state (workflows, contributors); 14 days bounds how stale that state can be, and `reused_from` keeps it traceable. Signals produced by an older version of the enrichment code are copied as they are; a change to that code should be released with `--reuse-days 0` for one run.

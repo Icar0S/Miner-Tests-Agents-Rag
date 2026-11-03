@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
 import typer
 from rich.table import Table
 
@@ -16,6 +20,79 @@ from msrkit.cli._common import (
     console,
 )
 
+if TYPE_CHECKING:
+    from msrkit.enrich import RepoSignals
+
+# Window and gazetteer config files a run was enriched with (ADR-054).
+ENRICH_META = "meta.json"
+
+
+def _enrich_key(since: Any, until: Any, config_files: set[str]) -> dict[str, Any]:
+    return {
+        "since": str(since) if since else None,
+        "until": str(until) if until else None,
+        "config_files": sorted(config_files),
+    }
+
+
+def _run_enrich_key(run_id: str) -> dict[str, Any] | None:
+    """What another run was enriched with, or None when it cannot be told."""
+    meta = _cli.DATA_DIR / "enrich" / run_id / ENRICH_META
+    if meta.exists():
+        data: dict[str, Any] = json.loads(meta.read_text(encoding="utf-8"))
+        return data
+    # Enriched before meta.json existed: the window from the manifest, and the config
+    # files from the gazetteer of the protocol the manifest names.
+    from msrkit.provenance import load_manifest
+
+    try:
+        window = load_manifest(_cli.DATA_DIR, run_id).effective_protocol.get("window") or {}
+    except FileNotFoundError:
+        return None
+    proto = _load_run_protocol(run_id, None)
+    if proto is None or not window:
+        return None
+    gazetteer = proto.gazetteer_data
+    files = {c for t in gazetteer.tools for c in t.config_files} if gazetteer else set()
+    return _enrich_key(window.get("since"), window.get("until"), files)
+
+
+def _reusable_signals(
+    run_id: str, key: dict[str, Any], wanted: set[str], max_age_days: int
+) -> tuple[dict[str, RepoSignals], list[str]]:
+    """Error-free signals of `wanted` repos, at most N days old, from runs with the same key.
+
+    The newest copy of each repository wins; `reused_from` names the run that fetched it.
+    """
+    from msrkit.enrich import RepoSignals
+
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+    enrich_dir = _cli.DATA_DIR / "enrich"
+    pool: dict[str, RepoSignals] = {}
+    newest: dict[str, datetime] = {}
+    runs: list[str] = []
+    for run_dir in sorted(enrich_dir.iterdir()) if enrich_dir.is_dir() else []:
+        path = run_dir / "github_repos.jsonl"
+        if run_dir.name in (run_id, "consolidated") or not path.exists():
+            continue
+        if _run_enrich_key(run_dir.name) != key:
+            continue
+        runs.append(run_dir.name)
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                data = json.loads(line) if line.strip() else {}
+                repo = data.get("repo")
+                if repo not in wanted or data.get("error") or not data.get("fetched_at"):
+                    continue
+                fetched = datetime.fromisoformat(data["fetched_at"])
+                fetched = fetched if fetched.tzinfo else fetched.replace(tzinfo=UTC)
+                if fetched <= newest.get(repo, cutoff):
+                    continue
+                sig = RepoSignals.model_validate(data)
+                sig.reused_from = sig.reused_from or run_dir.name
+                pool[repo], newest[repo] = sig, fetched
+    return pool, runs
+
 
 @app.command()
 def enrich(
@@ -29,6 +106,12 @@ def enrich(
         "--graphql",
         help="Use GitHub GraphQL API v4 for batched retrieval (faster, fewer requests)",
     ),
+    reuse_days: int = typer.Option(
+        0,
+        "--reuse-days",
+        help="Copy the signals of repositories another run enriched in the last N days, "
+        "with the same window and gazetteer config files (0 = off)",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Read tree, CI workflows, manifests, contributors and commit months of GitHub repos.
@@ -40,6 +123,7 @@ def enrich(
     limit = _unwrap(limit)
     protocol = _unwrap(protocol)
     graphql = _unwrap(graphql)
+    reuse_days = _unwrap(reuse_days)
     verbose = _unwrap(verbose)
     _setup_logging(verbose)
 
@@ -48,7 +132,6 @@ def enrich(
     from msrkit.adapters.github import GitHubAdapter
     from msrkit.enrich import (
         GitHubEnricher,
-        RepoSignals,
         apply_signals,
         effective_core_rate_limit,
         enrich_priority,
@@ -79,14 +162,27 @@ def enrich(
     out_path = _cli.DATA_DIR / "enrich" / run_id / "github_repos.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     signals: dict[str, RepoSignals] = _load_repo_signals(run_id)
+    key = _enrich_key(since, until, config_files)
+    (out_path.parent / ENRICH_META).write_text(json.dumps(key), encoding="utf-8")
 
     todo = [r for r in branches if r not in signals]
+    reused: dict[str, RepoSignals] = {}
+    if reuse_days:
+        reused, reuse_runs = _reusable_signals(run_id, key, set(todo), reuse_days)
+        todo = [r for r in todo if r not in reused]
     if limit is not None:
         todo = todo[:limit]
+    reused_note = f"{len(reused)} reused, " if reuse_days else ""
     console.print(
         f"[bold]Run:[/bold] {run_id} · {len(branches)} repositories, "
-        f"{len(signals)} already enriched, {len(todo)} to go"
+        f"{len(signals)} already enriched, {reused_note}{len(todo)} to go"
     )
+    if reuse_days:
+        origins = ", ".join(sorted({s.reused_from or "" for s in reused.values()})) or "none"
+        console.print(
+            f"  Reused from: {origins} (fetched in the last {reuse_days} days, same window "
+            f"and config files; {len(reuse_runs)} earlier run(s) eligible)"
+        )
 
     adapter = GitHubAdapter(
         governor=Governor(
@@ -103,6 +199,9 @@ def enrich(
     errors = 0
     try:
         with open(out_path, "a", encoding="utf-8") as fh:
+            for repo, sig in reused.items():
+                signals[repo] = sig
+                fh.write(sig.model_dump_json() + "\n")
             for repo in todo:
                 sig = enricher.enrich(repo)
                 signals[repo] = sig

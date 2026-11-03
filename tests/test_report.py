@@ -111,7 +111,7 @@ def _manifest() -> Manifest:
 def _evidence() -> tuple[dict[str, RepoSignals], list[Detection]]:
     signals = {
         "o/a": RepoSignals(repo="o/a", has_ci=True, has_tests=True),
-        "o/b": RepoSignals(repo="o/b", has_tests=True),
+        "o/b": RepoSignals(repo="o/b", has_tests=True, reused_from="run-0"),
     }
 
     def det(item: str, repo: str | None, level: str, entry: str = "ragas") -> Detection:
@@ -189,6 +189,7 @@ class TestBuildReport:
         r = _report(tmp_path, signals=signals, detections=dets)
         assert r.evidence is not None
         assert (r.evidence.repos_enriched, r.evidence.repos_with_ci) == (2, 1)
+        assert r.evidence.repos_reused == 1
         assert r.evidence.repos_with_tests == 2
         assert r.evidence.detections == {"N1": 2, "N2": 1, "N3": 1}
         assert r.evidence.items_with_detection == 3
@@ -327,6 +328,7 @@ class TestRender:
         assert "| `RAG testing` | en | 2 |" in md
         assert "| **Itens únicos** | **4** |" in md
         assert "| ragas | tool | 1 | 0 | 1 | 2 |" in md
+        assert "com testes: 2; 1 reaproveitados de execuções anteriores)" in md
 
     def test_summary_mentions_enrichment_only_when_it_ran(self, tmp_path: Path) -> None:
         signals, dets = _evidence()

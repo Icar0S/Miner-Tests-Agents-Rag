@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import base64
-from datetime import UTC, date, datetime
+import json
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
@@ -11,7 +12,14 @@ from typer.testing import CliRunner
 
 from msrkit.adapters.github import GitHubAdapter
 from msrkit.cli import app
-from msrkit.enrich import CORE_RATE_LIMIT, GitHubEnricher, _is_test_path, apply_signals, repo_of
+from msrkit.enrich import (
+    CORE_RATE_LIMIT,
+    GitHubEnricher,
+    RepoSignals,
+    _is_test_path,
+    apply_signals,
+    repo_of,
+)
 from msrkit.models import Item, ItemKind, Provenance
 from msrkit.storage import ItemStorage
 
@@ -19,6 +27,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
+
+PROTOCOL = "protocols/v0_rag_agents_testing.yaml"
 
 TREE = {
     "truncated": False,
@@ -248,6 +258,100 @@ class TestEnrichCommand:
         enriched = ItemStorage(tmp_path).read_items("run-gql")[0]
         assert enriched.tech.has_ci is True
         assert enriched.tech.contributors == 7
+
+
+class TestEnrichReuse:
+    """Signals another run fetched recently, under the same window, are copied (ADR-054)."""
+
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        fetched: list[str] = []
+
+        def fake_get(self: GitHubAdapter, url: str, params: Any = None, headers: Any = None) -> Any:
+            fetched.append(url)
+            return _fake_get(url, params)
+
+        monkeypatch.setattr(GitHubAdapter, "_governed_get", fake_get)
+        return fetched
+
+    def _signals(self, tmp_path: Path, run_id: str) -> dict[str, RepoSignals]:
+        path = tmp_path / "enrich" / run_id / "github_repos.jsonl"
+        lines = path.read_text(encoding="utf-8").splitlines()
+        return {s.repo: s for s in map(RepoSignals.model_validate_json, lines)}
+
+    def _append(self, tmp_path: Path, run_id: str, *signals: RepoSignals) -> None:
+        path = tmp_path / "enrich" / run_id / "github_repos.jsonl"
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.writelines(s.model_dump_json() + "\n" for s in signals)
+
+    def test_copies_recent_error_free_signals(self, tmp_path: Path, monkeypatch) -> None:
+        fetched = self._setup(tmp_path, monkeypatch)
+        runner = CliRunner()
+        ItemStorage(tmp_path).save_items([_item("https://github.com/acme/rag")], "run-a")
+        assert runner.invoke(app, ["enrich", "--run", "run-a"]).exit_code == 0
+        old = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        now = datetime.now(UTC).isoformat()
+        self._append(
+            tmp_path, "run-a",
+            RepoSignals(repo="acme/old", fetched_at=old, has_ci=True),
+            RepoSignals(repo="acme/err", fetched_at=now, error="HTTPError: 502"),
+        )  # fmt: skip
+        urls = ["https://github.com/acme/rag", "https://github.com/acme/old",
+                "https://github.com/acme/err"]  # fmt: skip
+        ItemStorage(tmp_path).save_items([_item(u) for u in urls], "run-b")
+        fetched.clear()
+
+        result = runner.invoke(app, ["enrich", "--run", "run-b", "--reuse-days", "14"])
+        assert result.exit_code == 0, result.stdout
+        assert "0 already enriched, 1 reused, 2 to go" in result.stdout
+        assert "Reused from: run-a" in result.stdout
+        assert not any("/repos/acme/rag" in u for u in fetched)  # copied, not fetched
+        signals = self._signals(tmp_path, "run-b")
+        assert signals["acme/rag"].reused_from == "run-a"
+        original = self._signals(tmp_path, "run-a")["acme/rag"]
+        assert signals["acme/rag"].fetched_at == original.fetched_at
+        for repo in ("acme/old", "acme/err"):  # too old, or failed: fetched again
+            assert signals[repo].reused_from is None
+            assert any(f"/repos/{repo}" in u for u in fetched)
+        assert ItemStorage(tmp_path).read_items("run-b")[0].tech.has_ci is True
+
+    def test_off_by_default_and_needs_the_same_window(self, tmp_path: Path, monkeypatch) -> None:
+        self._setup(tmp_path, monkeypatch)
+        runner = CliRunner()
+        for run_id in ("run-a", "run-b", "run-c"):
+            ItemStorage(tmp_path).save_items([_item("https://github.com/acme/rag")], run_id)
+        assert runner.invoke(app, ["enrich", "--run", "run-a"]).exit_code == 0
+        meta = tmp_path / "enrich" / "run-a" / "meta.json"
+        key = json.loads(meta.read_text(encoding="utf-8"))
+        meta.write_text(json.dumps({**key, "since": "2024-01-01"}), encoding="utf-8")
+
+        result = runner.invoke(app, ["enrich", "--run", "run-b", "--reuse-days", "14"])
+        assert "0 reused, 1 to go" in result.stdout
+        assert "0 earlier run(s) eligible" in result.stdout
+
+        meta.write_text(json.dumps(key), encoding="utf-8")  # same window again
+        result = runner.invoke(app, ["enrich", "--run", "run-c"])
+        assert "0 already enriched, 1 to go" in result.stdout  # reuse is opt-in
+
+    def test_runs_without_meta_use_the_manifest_window(self, tmp_path: Path, monkeypatch) -> None:
+        from msrkit.models import Manifest
+        from msrkit.provenance import save_manifest
+
+        self._setup(tmp_path, monkeypatch)
+        runner = CliRunner()
+        for run_id in ("run-a", "run-b"):
+            ItemStorage(tmp_path).save_items([_item("https://github.com/acme/rag")], run_id)
+        assert runner.invoke(app, ["enrich", "--run", "run-a"]).exit_code == 0
+        key = json.loads((tmp_path / "enrich" / "run-a" / "meta.json").read_text("utf-8"))
+        (tmp_path / "enrich" / "run-a" / "meta.json").unlink()
+        manifest = Manifest(
+            run_id="run-a", msrkit_version="t", protocol_path=PROTOCOL, protocol_sha256="x",
+            started_at=datetime.now(UTC),
+            effective_protocol={"window": {"since": key["since"], "until": key["until"]}},
+        )  # fmt: skip
+        save_manifest(manifest, tmp_path)
+        result = runner.invoke(app, ["enrich", "--run", "run-b", "--reuse-days", "14"])
+        assert "1 reused, 0 to go" in result.stdout
 
 
 def test_core_rate_limit_is_under_quota_and_above_search_rate():

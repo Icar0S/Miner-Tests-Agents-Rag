@@ -51,6 +51,10 @@ class TestPipeline:
         assert all(f"--run {RUN}" in c for c in commands)
         enrich = next(s for s in steps if s.args[0] == "enrich")
         assert "--graphql" in enrich.args and "--limit" not in enrich.args
+        assert "--reuse-days" not in enrich.args
+        steps = coleta.pipeline(RUN, "p.yaml", enrich=True, reuse_days=14)
+        enrich = next(s for s in steps if s.args[0] == "enrich")
+        assert enrich.args[-2:] == ["--reuse-days", "14"]
         heads = [s.args[0] for s in steps]
         assert heads.index("report") < heads.index("package")  # the report ships in the package
         assert any(c.startswith("analyze topics") for c in commands)
@@ -141,6 +145,7 @@ class TestMain:
         ]  # fmt: skip
         assert heads[-1] == "stats"
         assert runner.calls[1][-2:] == ["--per-query-limit", "100"]
+        assert runner.calls[3][-2:] == ["--reuse-days", "14"]  # enrich reuses by default
         assert all(e["MSRKIT_TERMS"] == "" for e in runner.envs)
         out = capsys.readouterr().out
         assert "Concluído em" in out and RUN in out

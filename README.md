@@ -150,7 +150,7 @@ python scripts/coleta_local.py                                   # nativo (Pytho
 docker compose run --rm msrkit python scripts/coleta_local.py    # ou no container
 ```
 
-Padrões: 100 itens por consulta, todos os repositórios enriquecidos, as fontes públicas mais o GitHub, sem o RSS (os feeds só têm posts recentes, sempre fora da janela; o RSS fica na coleta diária do Actions). Veja `--help` para mudar (`--por-consulta`, `--enriquecer`, `--fontes-manuais ""` para deixar o GitHub de fora, `--sem-analises`). A saída vai para `data/` e o log completo para `data/logs/`. No Windows, o script impede a suspensão por inatividade enquanto roda. Se a coleta cair, ele mostra o comando para continuar de onde parou:
+Padrões: 100 itens por consulta, todos os repositórios enriquecidos, as fontes públicas mais o GitHub, sem o RSS (os feeds só têm posts recentes, sempre fora da janela; o RSS fica na coleta diária do Actions). O enriquecimento reaproveita os sinais de repositórios que outra execução enriqueceu nos últimos 14 dias com a mesma janela (`--reaproveitar-dias 0` enriquece tudo de novo). Veja `--help` para mudar (`--por-consulta`, `--enriquecer`, `--fontes-manuais ""` para deixar o GitHub de fora, `--sem-analises`). A saída vai para `data/` e o log completo para `data/logs/`. No Windows, o script impede a suspensão por inatividade enquanto roda. Se a coleta cair, ele mostra o comando para continuar de onde parou:
 
 ```bash
 python scripts/coleta_local.py --retomar <run_id>

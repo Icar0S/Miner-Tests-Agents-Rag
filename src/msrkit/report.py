@@ -80,6 +80,7 @@ class EvidenceSummary(BaseModel):
     repos_enriched: int
     repos_with_ci: int
     repos_with_tests: int
+    repos_reused: int = 0  # signals copied from an earlier run (ADR-054)
     detections: dict[str, int]  # level -> detections
     items_with_detection: int
     top: list[EntrySummary]
@@ -200,6 +201,7 @@ def _evidence(
         repos_enriched=len(signals),
         repos_with_ci=sum(s.has_ci for s in signals.values()),
         repos_with_tests=sum(s.has_tests for s in signals.values()),
+        repos_reused=sum(s.reused_from is not None for s in signals.values()),
         detections=dict(sorted(Counter(d.level for d in detections).items())),
         items_with_detection=len({d.item_id for d in detections}),
         top=rows[:TOP_ENTRIES],
@@ -580,9 +582,14 @@ def _counts(r: MiningReport) -> list[str]:
         levels = " · ".join(f"{lvl} {_n(n)}" for lvl, n in ev.detections.items()) or "nenhuma"
         lines += ["### Evidência (enriquecimento e extração)", ""]
         if ev.repos_enriched:
+            reused = (
+                f"; {_n(ev.repos_reused)} reaproveitados de execuções anteriores"
+                if ev.repos_reused
+                else ""
+            )
             lines.append(
                 f"- Repositórios do GitHub enriquecidos: {_n(ev.repos_enriched)} "
-                f"(com CI: {_n(ev.repos_with_ci)}; com testes: {_n(ev.repos_with_tests)})"
+                f"(com CI: {_n(ev.repos_with_ci)}; com testes: {_n(ev.repos_with_tests)}{reused})"
             )
         lines += [f"- Detecções: {levels}, em {_n(ev.items_with_detection)} itens", ""]
         if ev.top:
