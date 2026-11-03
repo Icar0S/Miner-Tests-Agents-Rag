@@ -176,7 +176,7 @@ Implemente cada item num commit próprio, com teste. O congelamento de escopo do
 **P0 (bloqueiam a avaliação):**
 
 1. **PRISMA e manifesto.** Consultas que não rodaram porque a fonte bateu o teto devem aparecer como truncamento `source_cap` e ser contadas no PRISMA. Mantenha o `estimated_total` mesmo com `per_query_limit ≤ 100` (pelo menos via `msrkit plan --estimate`), para reportar o que não foi recuperado. Na `d28a`, o PRISMA informa 0, o que está errado.
-2. **Orçamento por estrato de idioma.** As 4 consultas PT de issues ficaram sem cota na `d28a`. Reserve cota por idioma ou execute o estrato PT antes.
+2. ~~**Orçamento por estrato de idioma.**~~ Resolvido com a saída do estrato PT: o léxico ficou só em inglês (ADR-050).
 3. **Registro de desvios.** Quando o `protocol_sha256` mudar em relação à execução anterior, grave o diff no manifesto.
 4. **Planilha de precisão.** Separe as colunas `pre_llm`, `juiz_a`, `juiz_b` e `final`. O `precision score` deve se recusar a calcular só a partir de `pre_llm`, ou rotular o resultado como pré-avaliação.
 5. **Janela no Hugging Face.** 29 cards da `d28a` estão fora da janela. `[VERIFICAR]` se o adaptador usa `createdAt` ou `lastModified`.

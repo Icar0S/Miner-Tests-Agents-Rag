@@ -53,28 +53,8 @@ terms:
   - "tool calling evaluation"
   - "multi-agent testing"
 
-# ---- Léxico em português (estrato exploratório, critério I4) ----
-# Buscado junto com `terms`; cada ocorrência registra o idioma do termo
-# (campo `lang` em matched_terms e coluna matched_languages no CSV).
-# Sobreposto por MSRKIT_TERMS_PT no .env.
-terms_by_language:
-  pt:
-    - "teste de RAG"
-    - "avaliação de RAG"
-    - "avaliacao de RAG"
-    - "teste de LLM"
-    - "avaliação de LLM"
-    - "avaliacao de LLM"
-    - "LLM como juiz"
-    - "teste de agentes"
-    - "avaliação de agentes"
-    - "avaliacao de agentes"
-    - "dataset de referência"
-    - "dataset de referencia"
-    - "teste de alucinação"
-    - "teste de alucinacao"
-    - "regressão de prompt"
-    - "regressao de prompt"
+# Só inglês, o idioma comum da área. O estrato em português saiu após a
+# execução d855: 16 termos, 63 itens, 4 termos sem casamento (ADR-050).
 
 # ---- Grupos de conceito (§3.1, RQ5) ----
 # Cada item recebe os conceitos cujo léxico casou. Rótulo de sistema do E2:
@@ -90,7 +70,6 @@ concepts:
     - "vector database"
     - "chunking"
     - "knowledge base"
-    - "geração aumentada por recuperação"
   agente:
     - "agent"
     - "agentic"
@@ -98,7 +77,6 @@ concepts:
     - "tool calling"
     - "function calling"
     - "tool use"
-    - "agente"
   teste:
     - "test"
     - "eval"
@@ -109,8 +87,6 @@ concepts:
     - "judge"
     - "red teaming"
     - "guardrail"
-    - "teste"
-    - "avaliação"
 
 # ---- Gazetteer (§7.2) ----
 # Ferramentas e métodos conhecidos; caminho relativo a este arquivo.
@@ -123,7 +99,7 @@ screening:
     I1: "Trata de teste, avaliação com veredito, verificação ou validação de sistema RAG ou agêntico"
     I2: "Publicado ou com última atividade dentro da janela temporal"
     I3: "Conteúdo público, acessível sem autenticação de terceiro"
-    I4: "Inglês ou português"
+    I4: "Inglês"
     I5: "Artefato de código com elemento de teste identificável"
   exclusion:
     E1: "Usa LLM como ferramenta para testar outro software"
@@ -196,7 +172,6 @@ coding:
 # Idiomas alvo
 languages:
   - en
-  - pt
 
 # ---- Fontes ----
 # Cada fonte pode ser habilitada/desabilitada independentemente.
@@ -242,7 +217,6 @@ sources:
         - sqa
         - datascience
         - ai
-        - pt.stackoverflow   # estrato em português
       # Piloto (set/2026): enviar a lista inteira em `tagged` trouxe 0 itens em
       # 180 requisições, apesar de a documentação descrevê-la como OU; o
       # comportamento é o de um E (ADR-042). Os termos já são específicos, então

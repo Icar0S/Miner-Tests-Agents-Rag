@@ -524,3 +524,11 @@ This document records architectural, design, and technical decisions made during
   - A 422 no longer looks like an empty result. The adapter keeps going through the query's other languages and then raises `QueryRejectedError` with GitHub's message, so the query is recorded as not completed, the mining report lists it under failed queries, and `--resume` redoes it.
   - The GitHub adapter version goes to 0.2.0, so manifests show which runs used the new queries.
 - **Consequences:** Pull requests leave the corpus. Runs with adapter 0.2.0 are not directly comparable with d28a on `kind: issue`: d28a's PRs (37% of its issue items) have no counterpart. A comparison should drop URLs containing `/pull/` from d28a first. Run 2026-11-01T23-59-22Z-7837 is superseded for GitHub issues and should be rerun.
+
+---
+
+## ADR-050: English-Only Lexicon
+
+- **Context:** ADR-018 added a Portuguese lexicon (16 terms) as an exploratory stratum for criterion I4. It stayed small: 90 items in run d28a and 63 of 11,316 unique items in run 2026-11-02T19-14-30Z-d855, and 4 of its terms never matched. English is the working language of the field, and the team decided to search in English only.
+- **Decision:** The protocol drops `terms_by_language.pt`, `pt` from `languages`, the `pt.stackoverflow` site, and the Portuguese concept terms ("geração aumentada por recuperação", "agente", "teste", "avaliação"). Criterion I4 becomes "English". The `terms_by_language` mechanism and the Portuguese inflection rules in `keywords.py` stay in the code for other studies.
+- **Consequences:** The E2 corpus describes the community that publishes in English. Runs before this change are not comparable on the language stratum. The Paper 2 macro `ResItensPt` now counts 0.

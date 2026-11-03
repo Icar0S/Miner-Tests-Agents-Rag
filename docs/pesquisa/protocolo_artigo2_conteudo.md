@@ -258,7 +258,7 @@ São duas trilhas complementares:
   - A pré-avaliação por LLM não substitui a codificação.
 - **Externa:**
   - São 6 fontes, sem Reddit, X, Discord e LinkedIn, que concentram muita discussão de praticantes. Declare a exclusão e o motivo.
-  - O inglês domina: o estrato PT tem só 90 itens na `d28a`, o que permite apenas descrição, sem conclusões sobre a comunidade lusófona.
+  - Só inglês: o léxico em português trouxe 90 itens na `d28a` e 63 na `d855` e saiu do protocolo (ADR-050). Os achados valem para a comunidade que publica em inglês.
   - Janela de 01/2023 a 08/2026, com o GitHub somando ≈81% dos itens.
 - **Conclusão:**
   - Comparações múltiplas (corrigidas por Holm).

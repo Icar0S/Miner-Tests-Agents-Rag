@@ -100,7 +100,7 @@ O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_te
 
 | Seção | Define |
 |---|---|
-| `window`, `terms`, `terms_by_language`, `languages` | janela temporal e léxico, com estrato por idioma |
+| `window`, `terms`, `terms_by_language`, `languages` | janela temporal e léxico; `terms_by_language` acrescenta léxicos de outros idiomas, e o E2 busca só em inglês |
 | `sources` | fontes ativas, tipos de item e consultas literais por fonte (`queries`, com modelos `{anchor}`/`{repo}`) |
 | `concepts`, `concept_queries` | grupos de léxico que rotulam cada item (`rag`, `agente`, `teste`) |
 | `gazetteer` | catálogo de ferramentas e métodos ([`protocols/gazetteer.yaml`](protocols/gazetteer.yaml)) |
@@ -120,7 +120,6 @@ O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_te
 |---|---|
 | `MSRKIT_WINDOW_SINCE`, `MSRKIT_WINDOW_UNTIL` | `2023-01-01` a `2026-08-31` (§7.5: RAG e agentes como prática de engenharia, até o data-cutoff) |
 | `MSRKIT_TERMS` | 20 termos em inglês, separados por `;`: RAG, LLM em geral (juiz, golden dataset, regressão, red teaming), vocabulário acadêmico (metamorphic testing, test oracle) e agentes (trajectory, tool calling, multi-agent) |
-| `MSRKIT_TERMS_PT` | 10 termos em português (estrato I4) |
 
 **2–4. Fontes por condição de acesso.** Só as fontes listadas nos grupos pública e manual são coletadas; as pagas e inviáveis ficam desligadas mesmo que o protocolo as habilite.
 

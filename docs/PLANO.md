@@ -138,6 +138,27 @@ publica os achados.
 | A2-4 | **Codificação** pelo Anexo A com dupla codificação, κ por dimensão e síntese temática; habilita H2, QP4 e QP5 | ⏳ equipe |
 | A2-5 | **Artigo** reestruturado em torno dos resultados (método, uma subseção por QP, discussão, ameaças) | 🔄 |
 
+## Fase 5 — Ajustes antes da coleta oficial
+
+A execução 2026-11-02T19-14-30Z-d855 (7 h 23 min) foi a primeira completa sem consultas com
+falha: 21.694 identificados, 11.316 únicos, 5.260 repositórios enriquecidos, 9.750 detecções.
+A análise dela mostrou o que falta para a coleta oficial, a que o Artigo 1 congela e o Artigo 2
+analisa. As etapas estão em ordem de complexidade, cada uma num commit `O<n>: ...`. As que
+mudam o protocolo são desvios registrados em ADR.
+
+| Etapa | Descrição | Status |
+|---|---|---|
+| O1 | **Léxico só em inglês.** Sai o estrato em português: 16 termos que trouxeram 63 itens na d855, 4 deles sem nenhum casamento. Saem também `pt.stackoverflow`, os termos em português dos conceitos e "português" do critério I4. O mecanismo `terms_by_language` continua no código | ✅ |
+| O2 | **RSS fora da coleta oficial.** Na janela do protocolo o RSS dá sempre 0, porque os feeds só têm posts recentes. `scripts/coleta_local.py` deixa de consultá-lo; o monitoramento diário no Actions continua | ⏳ |
+| O3 | **Execução 7837 arquivada** fora de `data/` (issues quebradas, ADR-049), para que o acúmulo entre execuções e as estatísticas não a misturem | ⏳ |
+| O4 | **Consultas literais de repositório corrigidas.** O GitHub ignora o grupo `(eval OR test OR testing)`: `RAG (eval OR test OR testing) in:name,description,readme stars:>5` dá 27.662 resultados, o mesmo que `RAG in:name,description,readme stars:>5`, e com `agentic` dá 175.235. As duas viram 8 consultas sem OU, só em nome e descrição. RAG: eval 100, evaluation 266, test 113, testing 99. agentic: eval 394, evaluation 1.068, test 1.489, testing 1.456. `"tool_call" "assert"` (291.840 arquivos de código) vira `"expected_tool_calls"` (1.076) e `"assert_tool_call"` (463), em `path:tests` | ⏳ |
+| O5 | **dev.to pela janela inteira.** Com 10 páginas por tag, a coleta para por volta de set/2026. As tags `rag`, `llm`, `agents`, `testing` e `llmops` têm todas as páginas acessíveis até 2021, ≈97 mil artigos em ~100 requisições, então `max_pages` sobe para 40. A tag `ai` sai: tem 60 mil artigos só em set–out/2026, suas 10 páginas não chegavam à janela, e cobrir a janela exigiria mais de mil páginas | ⏳ |
+| O6 | **Reprodutibilidade da busca de código registrada.** Em 24 h, o top-100 de 3 consultas de código ficou 98–100% igual. A diferença com a d28a (61% em comum) vem de 13 dias de reindexação. O adapter deixa de mandar `sort=indexed`, que a API ignora (dá o mesmo conjunto da ordem por relevância). O relatório passa a mostrar, por fonte, a sobreposição com as execuções anteriores. A ameaça entra no guia do Artigo 1, e o corpus oficial é o do pacote | ⏳ |
+| O7 | **Enriquecimento reaproveitado entre execuções.** `msrkit enrich --reuse-days N` copia os sinais de um repositório já enriquecido em outra execução, desde que tenha a mesma janela e os mesmos arquivos de configuração do gazetteer e tenha sido coletado há até N dias. A origem fica marcada (`reused_from`), e o script local usa 14 dias. Na d855, 3.977 dos 5.260 repositórios (76%) já estavam na 7837: são ~5 h a menos por coleta | ⏳ |
+| O8 | **Amostra estratificada por ano.** Com `sampling: {strata: year}` no protocolo, cada consulta das fontes que filtram por data (GitHub repositórios e issues, Hacker News, Stack Exchange, dev.to) roda uma vez por ano da janela (2023, 2024, 2025 e 2026 até agosto), com o mesmo teto por consulta. Hoje 65% das issues e 93 dos 98 artigos do dev.to são de 2026, porque cada consulta fica com os 100 mais recentes. O total disponível de cada estrato (`total_count` do GitHub, `nbHits` do HN) vai para o manifesto, para que a análise pondere as frequências. Busca de código e Hugging Face não filtram por data e ficam sem estratos | ⏳ |
+| O9 | **Coleta oficial** com O1–O8, rodada pelo pesquisador com `scripts/coleta_local.py`, e congelada: id da execução registrado aqui e no Artigo 1, pacote no Zenodo | ⏳ pesquisador |
+| O10 | **Precisão e triagem da execução oficial:** preencher `correct` (1/0) nas 200 detecções de `data/validation/<run>/precision_sample.csv` e rodar `msrkit precision score`; depois, a triagem (A2-3) | ⏳ equipe |
+
 ## Registro
 
 Cada etapa é entregue num commit próprio, cujo título começa com o identificador da etapa
