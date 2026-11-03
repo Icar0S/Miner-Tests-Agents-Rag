@@ -99,6 +99,7 @@ class MiningReport(BaseModel):
     window_overridden: bool = False  # MSRKIT_WINDOW_* changed the protocol window
     run_options: dict[str, Any] = {}
     census: list[str] = []  # sources collected whole, without the per-query cap
+    strata: str = "none"  # "year": date-filtered queries ran once per year (ADR-055)
     terms: dict[str, list[str]] = {}  # language -> protocol terms
     sources: list[SourceSummary] = []
     identified: int
@@ -299,6 +300,7 @@ def build_report(
         ),
         run_options=manifest.run_options if manifest else {},
         census=list(eff.get("census_sources") or []),
+        strata=eff.get("strata") or "none",
         terms=terms,
         sources=sources,
         identified=flow.total_identified,
@@ -505,6 +507,11 @@ def _searched(r: MiningReport) -> list[str]:
             lines.append(f"- **Consultas literais em {s.name}** (protocolo `queries:`): {labels}")
     options = ", ".join(f"`{k}={v}`" for k, v in r.run_options.items()) or "nenhuma"
     lines.append(f"- Opções da execução: {options}")
+    if r.strata == "year":
+        lines.append(
+            "- Amostra estratificada por ano: cada consulta das fontes que filtram por data "
+            "rodou uma vez por ano da janela, cada ano com o limite por consulta"
+        )
     if r.census:
         lines.append(
             f"- Coletadas inteiras na janela, sem o limite por consulta: {', '.join(r.census)}"

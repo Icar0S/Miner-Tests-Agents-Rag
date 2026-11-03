@@ -21,6 +21,15 @@ window:
   since: "2023-01-01"
   until: "2026-08-31"
 
+# ---- Amostragem (§7.4) ----
+# Cada consulta das fontes que filtram por data (GitHub repositórios e issues,
+# Hacker News, Stack Exchange) roda uma vez por ano da janela, cada ano com o
+# teto por consulta da execução, e o manifesto guarda o total disponível de cada
+# estrato para ponderar as análises. Sem estratos, o teto ficava com os itens
+# mais recentes: 65% das issues da d855 eram de 2026 (ADR-055).
+sampling:
+  strata: year
+
 # ---- Léxico de busca (§7.1, léxico controlado duplo) ----
 # Cada termo combina o sistema (RAG, LLM, agente) com teste/avaliação e cobre os
 # dois vocabulários: o de prática (eval, judge, golden dataset, red teaming,

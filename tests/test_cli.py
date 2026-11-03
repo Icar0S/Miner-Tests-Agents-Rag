@@ -1042,6 +1042,7 @@ class TestPartitionCheckpoint:
 
         monkeypatch.setattr(HackerNewsAdapter, "partition", two_partitions)
         monkeypatch.setattr(HackerNewsAdapter, "search", search)
+        monkeypatch.setattr(HackerNewsAdapter, "stratifies_by_date", lambda self, q: False)
 
         result = runner.invoke(app, ["run", proto, "--source", "hackernews"])
         assert result.exit_code == 0, result.stdout

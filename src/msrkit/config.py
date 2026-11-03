@@ -78,6 +78,14 @@ class SourceConfig(BaseModel):
     census: bool = False
 
 
+class SamplingConfig(BaseModel):
+    """How queries sample their sources (ADR-055)."""
+
+    # "year": each query of a source that filters by date runs once per calendar
+    # year of the window, every stratum with the run's per-query cap.
+    strata: Literal["none", "year"] = "none"
+
+
 class LimitsConfig(BaseModel):
     """Global limits for the collection run."""
 
@@ -98,6 +106,7 @@ class ProtocolConfig(BaseModel):
     terms_by_language: dict[str, list[str]] = {}
     languages: list[str] = ["en"]
     sources: dict[str, SourceConfig]
+    sampling: SamplingConfig = SamplingConfig()
     limits: LimitsConfig = LimitsConfig()
     # Concept groups with their own lexicons, e.g. {"rag": [...], "agente": [...],
     # "teste": [...]}; items are labeled with every concept whose lexicon matches.
@@ -143,6 +152,7 @@ class ProtocolConfig(BaseModel):
             "enabled_sources": self.enabled_sources(),
             "source_groups": self.source_groups,
             "census_sources": sorted(n for n, s in self.sources.items() if s.census),
+            "strata": self.sampling.strata,
         }
 
     def differs_from_file(self) -> list[str]:

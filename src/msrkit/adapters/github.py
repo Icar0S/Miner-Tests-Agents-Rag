@@ -164,12 +164,30 @@ class GitHubAdapter(BaseAdapter):
         search() sends one query per (term, language), each capped at 1,000
         results, so the partition decision depends on the largest of them.
         """
+        counts = self._total_counts(q)
+        return None if counts is None else max(counts, default=0)
+
+    def population(self, q: Query) -> int | None:
+        """Sum of total_count over the (term, language) queries search() issues.
+
+        Languages are disjoint; a query normally holds one term after split_by_term.
+        """
+        counts = self._total_counts(q)
+        return None if counts is None else sum(counts)
+
+    def stratifies_by_date(self, q: Query) -> bool:
+        """Repositories and issues take created:; code search has no date qualifier."""
+        fixed_dates = q.raw and any("created:" in t for t in q.terms)
+        return (q.kind or "repo") != "code" and not fixed_dates
+
+    def _total_counts(self, q: Query) -> list[int] | None:
+        """total_count of each (term, language) query search() issues; None on failure."""
         kind = q.kind or "repo"
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
         terms: list[str | None] = list(q.terms) or [None]
         languages = [None] if q.raw else (q.extra.get("languages") or [None])
 
-        largest = 0
+        counts: list[int] = []
         for term in terms:
             for lang in languages:
                 query_string = self._build_single_query_string(q, term=term, language=lang)
@@ -178,8 +196,8 @@ class GitHubAdapter(BaseAdapter):
                 if resp.status_code != 200:
                     logger.warning("GitHub estimate failed: %d", resp.status_code)
                     return None
-                largest = max(largest, resp.json().get("total_count", 0))
-        return largest
+                counts.append(resp.json().get("total_count", 0))
+        return counts
 
     def partition(self, q: Query) -> list[Query]:
         """Split by term, then by date window until each query fits the 1,000 cap."""

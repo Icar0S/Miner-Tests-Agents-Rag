@@ -27,6 +27,7 @@ from msrkit.cli._common import (
 
 if TYPE_CHECKING:
     from msrkit.adapters.base import BaseAdapter
+    from msrkit.models import Query
 
 
 @app.command()
@@ -265,6 +266,15 @@ def validate(
         console.print("\n[yellow]⚠ Some sources have issues. Review above.[/yellow]")
 
 
+def _year_strata(adapter: BaseAdapter, queries: list[Query]) -> list[Query]:
+    """Split each query the source filters by date into one per year of the window (ADR-055)."""
+    from msrkit.partition import split_by_year
+
+    return [
+        s for q in queries for s in (split_by_year(q) if adapter.stratifies_by_date(q) else [q])
+    ]
+
+
 @app.command()
 def plan(
     protocol: str = typer.Argument(DEFAULT_PROTOCOL, help="Path to protocol YAML file"),
@@ -355,6 +365,8 @@ def plan(
         queries = config.build_queries(source_name)
         if not policy.supports_raw_queries:
             queries = [q for q in queries if not q.raw]
+        if config.sampling.strata == "year" and not config.sources[source_name].census:
+            queries = _year_strata(adapter, queries)
         max_pages = policy.max_pages or 10
 
         if estimate:
@@ -604,8 +616,10 @@ def run(
 
         console.print(f"  Status: [{avail.status}] {avail.reason}")
 
-        # A census source is collected whole: the per-query cap does not apply.
+        # A census source is collected whole: the per-query cap does not apply, and
+        # strata, which give each year the same cap, are not needed.
         query_cap = None if src_cfg.census else per_query_limit
+        strata = config.sampling.strata == "year" and not src_cfg.census
         if src_cfg.census and per_query_limit is not None:
             console.print("  [dim]Census: --per-query-limit does not apply[/dim]")
         if source_entry.planned:
@@ -613,6 +627,8 @@ def run(
             queries = [Query.model_validate(d) for d in source_entry.planned]
         else:
             queries = config.build_queries(source_name)
+            if strata:
+                queries = _year_strata(adapter, queries)
             if query_cap is not None:
                 for q in queries:
                     q.limit = min(q.limit or query_cap, query_cap)
@@ -726,6 +742,9 @@ def run(
             query_display = " ".join(query_display_parts)
 
             try:
+                if strata and query.estimated_total is None and adapter.stratifies_by_date(query):
+                    # Size of the stratum at the source: the sampling weight (ADR-055).
+                    query.estimated_total = adapter.population(query)
                 for raw_item in adapter.search(query):
                     partition_hash = key
                     raw_ref = raw_storage.save_raw(raw_item, run_id, partition_hash)

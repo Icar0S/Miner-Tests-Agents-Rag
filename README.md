@@ -106,6 +106,7 @@ O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_te
 | `gazetteer` | catálogo de ferramentas e métodos ([`protocols/gazetteer.yaml`](protocols/gazetteer.yaml)) |
 | `screening` | critérios de inclusão e exclusão e tamanho do lote |
 | `coding` | campos do formulário, catálogo de modos de falha e parâmetros da dupla codificação |
+| `sampling` | `strata: year`: cada consulta das fontes que filtram por data roda uma vez por ano da janela, com o total disponível de cada estrato no manifesto |
 | `limits` | tetos de itens e de requisições por fonte e o que fazer quando a cota diária esgota |
 
 `msrkit validate` confere tudo isso antes de qualquer requisição.

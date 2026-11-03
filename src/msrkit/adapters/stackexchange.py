@@ -122,6 +122,22 @@ class StackExchangeAdapter(BaseAdapter):
         total = data.get("total")
         return int(total) if total is not None else None
 
+    def population(self, q: Query) -> int | None:
+        """'total' summed over every configured site (estimate() reads the first one)."""
+        total = 0
+        for site in q.extra.get("sites", ["stackoverflow"]):
+            params = self._build_params(q, site=site, page=1, pagesize=1)
+            params["filter"] = "total"
+            resp = self._governed_get(f"{_BASE_URL}/search/advanced", params=params)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            self._handle_backoff(data)
+            if data.get("total") is None:
+                return None
+            total += int(data["total"])
+        return total
+
     def partition(self, q: Query) -> list[Query]:
         """Split multi-term queries so each term runs as its own query."""
         from msrkit.partition import split_by_term
