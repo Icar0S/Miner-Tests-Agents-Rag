@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -68,6 +69,23 @@ class TestPipeline:
         assert enrich.args[-2:] == ["--limit", "300"]
         assert not any(s.args[0] in ("analyze", "precision") for s in steps)
         assert all(s.args[0] != "enrich" for s in coleta.pipeline(RUN, "p.yaml", enrich=False))
+
+
+def test_logo_fits_the_terminal() -> None:
+    art = coleta.logo(120).plain.splitlines()
+    assert len(art) == 6 and max(map(len, art)) <= 80
+    assert coleta.logo(40).plain.strip() == "MSR-KIT"  # narrow terminal: just the name
+
+
+def test_run_step_indents_the_output_on_screen_only(tmp_path: Path, capsys) -> None:
+    log_path = tmp_path / "step.log"
+    with open(log_path, "w", encoding="utf-8") as log:
+        rc = coleta.run_step(coleta.Step("Ajuda", ["--help"]), dict(os.environ), tmp_path, log)
+    assert rc == 0
+    screen = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert screen and all(line.startswith("  │ ") for line in screen)
+    log = log_path.read_text(encoding="utf-8").splitlines()
+    assert log and not any(line.startswith("  │ ") for line in log)
 
 
 def test_new_run_id(tmp_path: Path) -> None:
@@ -152,7 +170,35 @@ class TestMain:
         assert "10 identificados → 7 itens únicos" in out
         assert "aviso: rss: sem histórico" in out
         assert "ignorando do .env (vale o protocolo): MSRKIT_TERMS" in out
+        steps = len(runner.calls)
+        assert f"◆ 1/{steps}  Validação" in out and f"◆ {steps}/{steps}  Estatísticas" in out
         assert len(list((work / "data" / "logs").glob("coleta_*.log"))) == 1
+
+    def test_banner_shows_which_credentials_exist_never_their_values(
+        self, work: Path, capsys
+    ) -> None:
+        (work / ".env").write_text("GITHUB_TOKEN=ghp_segredo123\nHF_TOKEN=hf_segredo456\n")
+        assert coleta.main(["--pasta", str(work)], runner=FakeRunner()) == 0
+        out = capsys.readouterr().out
+        (log_path,) = (work / "data" / "logs").glob("coleta_*.log")
+        log = log_path.read_text(encoding="utf-8")
+        for text in (out, log):
+            assert "GITHUB_TOKEN encontrado" in text and "HF_TOKEN encontrado" in text
+            assert "segredo" not in text
+        assert "STACKEXCHANGE_KEY vazio" in out
+
+    def test_log_gets_the_panel_as_plain_text_without_the_logo(self, work: Path, capsys) -> None:
+        (work / ".env").write_text("GITHUB_TOKEN=t\n")
+        assert coleta.main(["--pasta", str(work)], runner=FakeRunner()) == 0
+        assert "███" in capsys.readouterr().out
+        (log_path,) = (work / "data" / "logs").glob("coleta_*.log")
+        log = log_path.read_text(encoding="utf-8")
+        cfg = load_protocol(PROTOCOL, environ={})
+        assert "Coleta completa local" in log
+        assert f"{cfg.window.since} → {cfg.window.until}" in log
+        assert "devto (censo)" in log  # census sources are flagged
+        assert "███" not in log and "\x1b[" not in log
+        assert "Dicas" not in log  # tips are for the screen only
 
     def test_fatal_failure_tells_how_to_resume(self, work: Path, capsys) -> None:
         (work / ".env").write_text("GITHUB_TOKEN=t\n")

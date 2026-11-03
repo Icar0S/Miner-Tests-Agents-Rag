@@ -31,7 +31,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
+
+if TYPE_CHECKING:
+    from rich.console import Console, RenderableType
+    from rich.text import Text
+
+    from msrkit.config import ProtocolConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROTOCOL = "protocols/v0_rag_agents_testing.yaml"
@@ -43,6 +49,18 @@ PAID = "x_twitter"
 UNAVAILABLE = "linkedin,discord,bluesky"
 # Parâmetros de busca que só o protocolo define na coleta oficial.
 SEARCH_OVERRIDES = ("MSRKIT_WINDOW_", "MSRKIT_TERMS")
+
+# Abertura: "MSR-KIT" na fonte ANSI Shadow, pintado em degradê da esquerda para a direita.
+LOGO = """\
+███╗   ███╗███████╗██████╗       ██╗  ██╗██╗████████╗
+████╗ ████║██╔════╝██╔══██╗      ██║ ██╔╝██║╚══██╔══╝
+██╔████╔██║███████╗██████╔╝█████╗█████╔╝ ██║   ██║
+██║╚██╔╝██║╚════██║██╔══██╗╚════╝██╔═██╗ ██║   ██║
+██║ ╚═╝ ██║███████║██║  ██║      ██║  ██╗██║   ██║
+╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝      ╚═╝  ╚═╝╚═╝   ╚═╝
+"""
+GRADIENT = ((45, 212, 191), (59, 130, 246), (168, 85, 247))  # turquesa, azul, violeta
+ACCENT = "#818cf8"
 
 
 @dataclass
@@ -170,7 +188,11 @@ def new_run_id(before: set[str], runs_dir: Path) -> str | None:
 
 
 def run_step(step: Step, env: Mapping[str, str], cwd: Path, log: TextIO) -> int:
-    """Roda `msrkit <args>` com a saída na tela e no log."""
+    """Roda `msrkit <args>` com a saída na tela, recuada sob o título da etapa, e no log."""
+    from rich.console import Console
+    from rich.text import Text
+
+    screen = Console(highlight=False, soft_wrap=True)
     cmd = [sys.executable, "-m", "msrkit.cli", *step.args]
     proc = subprocess.Popen(
         cmd,
@@ -184,7 +206,7 @@ def run_step(step: Step, env: Mapping[str, str], cwd: Path, log: TextIO) -> int:
     )
     assert proc.stdout is not None
     for line in proc.stdout:
-        sys.stdout.write(line)
+        screen.print(Text.assemble(("  │ ", f"dim {ACCENT}"), line.rstrip("\r\n")))
         log.write(line)
     return proc.wait()
 
@@ -207,6 +229,23 @@ def utf8_output() -> None:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(encoding="utf-8", errors="replace")
+
+
+def ansi_console() -> None:
+    """No Windows, liga as sequências ANSI no console (como o terminal do VS Code já faz).
+
+    Sem elas o rich cai nas 16 cores da API antiga do console e o degradê some. Saída
+    redirecionada para arquivo não tem modo de console e fica como está.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined,unused-ignore]
+    handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+    mode = ctypes.c_uint32()
+    if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
 
 
 def check_stackexchange_key(key: str) -> tuple[bool, str]:
@@ -241,18 +280,321 @@ def _duration(seconds: float) -> str:
     return f"{hours} h {minutes:02d} min" if hours else f"{minutes} min {secs:02d} s"
 
 
-def _say(log: TextIO, text: str = "") -> None:
-    print(text, flush=True)
-    log.write(text + "\n")
-    log.flush()
+class Output:
+    """A tela, em cores, e o log, em texto puro, recebem o mesmo conteúdo."""
+
+    def __init__(self) -> None:
+        from rich.console import Console
+
+        self.screen = Console(highlight=False)
+        self.log: Console | None = None
+
+    def open_log(self, file: TextIO) -> None:
+        from rich.console import Console
+
+        self.log = Console(
+            file=file, width=100, color_system=None, highlight=False, legacy_windows=False
+        )
+
+    def show(
+        self, *items: RenderableType, screen_only: bool = False, soft_wrap: bool = False
+    ) -> None:
+        """Cada item numa linha (print(*items) os juntaria na mesma, separados por espaço)."""
+        for item in items:
+            self.screen.print(item, soft_wrap=soft_wrap)
+            if self.log is not None and not screen_only:
+                self.log.print(item, soft_wrap=soft_wrap)
+
+    def fail(self, title: str, detail: str = "") -> None:
+        """Erro que impede a coleta de começar, sem quebra de linha para copiar o texto."""
+        from rich.text import Text
+
+        self.show(Text.assemble(("✗ ", "bold red"), (title, "bold")), soft_wrap=True)
+        if detail:
+            self.show(Text(detail), soft_wrap=True)
 
 
-def _resume_hint(log: TextIO, run_id: str | None) -> None:
-    if run_id:
-        _say(log, "\nPara continuar de onde parou:")
-        _say(log, f"    python scripts/coleta_local.py --retomar {run_id}")
+def _blend(t: float) -> tuple[int, int, int]:
+    """Cor do degradê na posição t, de 0 (esquerda) a 1 (direita)."""
+    pos = t * (len(GRADIENT) - 1)
+    i = min(int(pos), len(GRADIENT) - 2)
+    (r0, g0, b0), (r1, g1, b1) = GRADIENT[i], GRADIENT[i + 1]
+    f = pos - i
+    return round(r0 + (r1 - r0) * f), round(g0 + (g1 - g0) * f), round(b0 + (b1 - b0) * f)
+
+
+def logo(width: int) -> Text:
+    """O logotipo em degradê; as bordas dos blocos, mais escuras, fazem a sombra.
+
+    Num terminal mais estreito que o desenho, só o nome.
+    """
+    from rich.text import Text
+
+    lines = LOGO.splitlines()
+    size = max(map(len, lines))
+    if width < size + 4:
+        r, g, b = _blend(0.5)
+        return Text("  MSR-KIT", style=f"bold #{r:02x}{g:02x}{b:02x}")
+    art = Text()
+    for line in lines:
+        art.append("  ")
+        for x, char in enumerate(line):
+            if char == " ":
+                art.append(char)
+                continue
+            r, g, b = _blend(x / (size - 1))
+            if char != "█":
+                r, g, b = round(r * 0.55), round(g * 0.55), round(b * 0.55)
+            art.append(char, style=f"#{r:02x}{g:02x}{b:02x}")
+        art.append("\n")
+    art.rstrip()
+    return art
+
+
+def tagline() -> Text:
+    from rich.text import Text
+
+    return Text.assemble(
+        "  ",
+        ("Mining Software Repositories", "bold"),
+        (" · testes de sistemas RAG e de agentes", "dim"),
+    )
+
+
+def _sample(args: argparse.Namespace, strata: bool) -> str:
+    if args.retomar:
+        return "a da execução retomada"
+    if not args.por_consulta:
+        text = "sem teto por consulta"
     else:
-        _say(log, "\nA coleta não chegou a criar uma execução; rode o script de novo.")
+        text = f"{args.por_consulta} itens por consulta" + (" e por ano" if strata else "")
+    return text + (f" · até {args.limite} por fonte" if args.limite else "")
+
+
+def _enrichment(args: argparse.Namespace) -> str:
+    scope = f"até {args.enriquecer}" if args.enriquecer else "todos os"
+    text = f"{scope} repositórios do GitHub · {'REST' if args.sem_graphql else 'GraphQL'}"
+    if args.reaproveitar_dias:
+        text += f" · reaproveita até {args.reaproveitar_dias} dias"
+    return text
+
+
+def banner(
+    args: argparse.Namespace,
+    cfg: ProtocolConfig | None,
+    protocol: Path,
+    sources: list[str],
+    github: bool,
+    log_path: Path,
+    total: int,
+) -> RenderableType:
+    """O painel de abertura: o que a coleta vai fazer e onde grava."""
+    from rich import box
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    from msrkit import __version__
+    from msrkit.config import protocol_sha256
+
+    work = Path(args.pasta).resolve()
+    strata = cfg is not None and cfg.sampling.strata == "year"
+    census = {n for n, s in cfg.sources.items() if s.census} if cfg is not None else set()
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column(style=f"bold {ACCENT}", no_wrap=True)
+    grid.add_column()
+    if cfg is None:
+        grid.add_row("Protocolo", _shown(protocol, ROOT))
+    else:
+        sha = protocol_sha256(protocol)[:12]
+        version = (f" · versão {cfg.version} · sha256 {sha}", "dim")
+        grid.add_row("Protocolo", Text.assemble((cfg.name, "bold"), version))
+        by_year = (" · estratificada por ano" if strata else "", "dim")
+        grid.add_row("Janela", Text.assemble(f"{cfg.window.since} → {cfg.window.until}", by_year))
+    names = [
+        Text.assemble((name, "bold"), (" (censo)" if name in census else "", "dim"))
+        for name in sources
+    ]
+    grid.add_row("Fontes", Text(" · ", style="dim").join(names))
+    grid.add_row("Amostra", Text(_sample(args, strata)))
+    if github:
+        grid.add_row("Enriquecimento", Text(_enrichment(args)))
+    analyses = "puladas" if args.sem_analises else "A1–A6 e amostra de precisão"
+    grid.add_row("Análises", Text(analyses))
+    if args.retomar:
+        grid.add_row("Retomando", Text(args.retomar, style="bold"))
+    grid.add_row("Pasta", Text(_home(work)))
+    grid.add_row("Log", _shown(log_path, work))
+    return Panel(
+        grid,
+        title="[bold]◆ Coleta completa local[/]",
+        title_align="left",
+        subtitle=f"[dim]msrkit {__version__} · {len(sources)} fontes · {total} etapas[/]",
+        subtitle_align="right",
+        border_style=ACCENT,
+        box=box.ROUNDED,
+        padding=(1, 2),
+        expand=False,
+    )
+
+
+def startup_checks(
+    github: bool, se_status: str, credential: Callable[[str], bool], ignored: list[str]
+) -> list[Text]:
+    """Credenciais (só se existem, nunca o valor) e variáveis do .env que o protocolo ignora."""
+    checks = [_check(True, "GITHUB_TOKEN encontrado")] if github else []
+    if se_status:
+        checks.append(_check(not se_status.startswith("aviso:"), se_status))
+    for name in ("STACKEXCHANGE_KEY", "HF_TOKEN"):
+        if not credential(name):
+            checks.append(_check(False, f"{name} vazio; a fonte roda com cota menor."))
+    if credential("HF_TOKEN"):
+        checks.append(_check(True, "HF_TOKEN encontrado"))
+    if ignored:
+        checks.append(_check(False, f"ignorando do .env (vale o protocolo): {', '.join(ignored)}"))
+    return checks
+
+
+def tips(args: argparse.Namespace, github: bool) -> list[Text]:
+    from rich.text import Text
+
+    lines = ["Ctrl+C interrompe; depois, --retomar <run_id> continua de onde parou."]
+    if github and args.reaproveitar_dias:
+        lines.append(
+            "A coleta leva de 1 a 2 h; o enriquecimento só busca os repositórios que "
+            "nenhuma execução recente buscou."
+        )
+    elif github:
+        lines.append(
+            "A coleta leva de 1 a 2 h, e o enriquecimento de todos os repositórios, "
+            "algumas horas a mais."
+        )
+    if sys.platform == "win32":
+        lines.append("O Windows não entra em suspensão enquanto a coleta roda.")
+    numbered = [Text.assemble((f"  {i}. ", ACCENT), tip) for i, tip in enumerate(lines, start=1)]
+    return [Text(), Text("  Dicas", style="bold"), *numbered]
+
+
+def _check(ok: bool, text: str) -> Text:
+    from rich.text import Text
+
+    return Text.assemble(("  ✓ ", "bold green") if ok else ("  ▲ ", "bold yellow"), text)
+
+
+def _shown(path: Path, base: Path) -> Text:
+    """Caminho relativo à pasta de trabalho, com link para o arquivo nos terminais que aceitam."""
+    from rich.style import Style
+    from rich.text import Text
+
+    try:
+        shown = str(path.relative_to(base))
+    except ValueError:
+        shown = str(path)
+    return Text(shown, style=Style(link=path.as_uri()))
+
+
+def _home(path: Path) -> str:
+    try:
+        return str(Path("~") / path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def step_header(number: int, total: int, step: Step) -> list[RenderableType]:
+    from rich.rule import Rule
+    from rich.text import Text
+
+    title = Text.assemble(("◆ ", ACCENT), (f"{number}/{total}  ", "dim"), (step.name, "bold"))
+    started = datetime.now().strftime("%H:%M:%S")
+    # Caminhos do repositório, como o do protocolo, aparecem relativos à raiz.
+    args = " ".join(a.removeprefix(str(ROOT) + os.sep) for a in step.args)
+    command = Text.assemble(("  " + started, "dim"), ("  msrkit " + args, "dim"))
+    return [Text(), Rule(title, align="left", style=ACCENT), command]
+
+
+def step_result(name: str, seconds: float, rc: int) -> Text:
+    from rich.text import Text
+
+    if rc == 0:
+        return Text.assemble(("  ✓ ", "bold green"), (_duration(seconds), "dim"))
+    return Text.assemble(
+        ("  ✗ ", "bold red"),
+        (f"{name} terminou com erro (código {rc})", "red"),
+        (f" · {_duration(seconds)}", "dim"),
+    )
+
+
+def _resume_hint(out: Output, run_id: str | None) -> None:
+    from rich.text import Text
+
+    if run_id:
+        out.show(Text("\nPara continuar de onde parou:"))
+        out.show(
+            Text(f"    python scripts/coleta_local.py --retomar {run_id}", style="bold cyan"),
+            soft_wrap=True,
+        )
+    else:
+        out.show(Text("\nA coleta não chegou a criar uma execução; rode o script de novo."))
+
+
+def final_summary(
+    timings: list[tuple[str, float, int]], run_id: str, elapsed: float, work: Path, log_path: Path
+) -> list[RenderableType]:
+    """O fecho: tempo de cada etapa, o tamanho do corpus e onde estão os arquivos."""
+    from rich.padding import Padding
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    failed = sum(1 for _, _, rc in timings if rc)
+    color = "yellow" if failed else "green"
+    headline = Text.assemble(
+        ("▲ " if failed else "✓ ", f"bold {color}"),
+        (f"Concluído em {_duration(elapsed)}", "bold"),
+        (" · execução ", "dim"),
+        (run_id, f"bold {ACCENT}"),
+        (f" · {failed} etapa(s) com erro" if failed else "", color),
+    )
+    steps = Table.grid(padding=(0, 2))
+    steps.add_column(no_wrap=True)
+    steps.add_column(justify="right", style="dim", no_wrap=True)
+    steps.add_column()
+    for name, seconds, rc in timings:
+        mark = Text("✗", style="bold red") if rc else Text("✓", style="green")
+        steps.add_row(mark, _duration(seconds), name)
+    items: list[RenderableType] = [
+        Text(),
+        Panel(headline, border_style=color, expand=False, padding=(0, 2)),
+        Padding(steps, (1, 0, 0, 2), expand=False),
+    ]
+
+    data = work / "data"
+    report = data / "reports" / run_id / "relatorio_mineracao.json"
+    if report.is_file():
+        rep = json.loads(report.read_text(encoding="utf-8"))
+        identified, unique = str(rep["identified"]), str(rep["unique"])
+        items += [
+            Text(),
+            Text.assemble(
+                "  ", (identified, "bold"), " identificados → ",
+                (unique, f"bold {ACCENT}"), " itens únicos",
+            ),
+        ]  # fmt: skip
+        items += [Text.assemble(("  ▲ aviso: ", "yellow"), w) for w in rep.get("warnings", [])]
+
+    files = Table.grid(padding=(0, 3))
+    files.add_column(style=f"bold {ACCENT}", no_wrap=True)
+    files.add_column()
+    for label, path in (
+        ("Relatório", data / "reports" / run_id / "relatorio_mineracao.md"),
+        ("PRISMA", data / "reports" / run_id / "prisma.md"),
+        ("CSV", data / "exports" / f"itens_{run_id}.csv"),
+        ("Pacote", data / "packages" / f"msrkit_{run_id}.zip"),
+        ("Log", log_path),
+    ):
+        files.add_row(label, _shown(path, work))
+    items += [Text(), Text("  Arquivos", style="bold"), Padding(files, (0, 0, 0, 4), expand=False)]
+    return items
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -269,8 +611,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--sem-graphql", action="store_true",
                     help="enriquecer só pela API REST (mais lento)")  # fmt: skip
     ap.add_argument("--reaproveitar-dias", type=int, default=14,
-                    help="reaproveita o enriquecimento de repositórios feito por outra execução "
-                         "nos últimos N dias, com a mesma janela (0 = enriquece tudo de novo)")  # fmt: skip
+                    help="reaproveita o enriquecimento de repositórios feito por outra "
+                         "execução nos últimos N dias, com a mesma janela "
+                         "(0 = enriquece tudo de novo)")  # fmt: skip
     ap.add_argument("--fontes", default=PUBLIC, help="fontes públicas, separadas por vírgula")
     ap.add_argument("--fontes-manuais", default=MANUAL,
                     help="fontes com credencial; vazio (\"\") deixa o GitHub de fora")  # fmt: skip
@@ -287,6 +630,7 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
     utf8_output()
     args = parse_args(argv)
     try:
+        from msrkit.config import load_protocol
         from msrkit.envfile import parse_dotenv
     except ImportError:
         print(
@@ -296,12 +640,17 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
             "e rode o script com o Python do .venv."
         )
         return 2
+    from rich.text import Text
+
+    ansi_console()
+    out = Output()
+    out.show(Text(), logo(out.screen.width), Text(), tagline(), Text())
 
     work = Path(args.pasta).resolve()
     protocol = Path(args.protocolo)
     protocol = protocol if protocol.is_absolute() else ROOT / protocol
     if not protocol.is_file():
-        print(f"Protocolo não encontrado: {protocol}")
+        out.fail("Protocolo não encontrado", str(protocol))
         return 2
     # O mesmo .env que o msrkit carrega: o da pasta de trabalho, senão o da raiz.
     env_file = work / ".env" if (work / ".env").is_file() else ROOT / ".env"
@@ -313,26 +662,33 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
     manual = [s.strip() for s in args.fontes_manuais.split(",") if s.strip()]
     github = "github" in manual
     if github and not credential("GITHUB_TOKEN"):
-        print(
-            "GITHUB_TOKEN não encontrado (nem no ambiente nem em .env).\n"
+        out.fail(
+            "GITHUB_TOKEN não encontrado (nem no ambiente nem em .env).",
             "Sem token o GitHub responde a 60 req/h, sem busca de código, e a coleta levaria\n"
             "muitas horas. Crie o .env a partir do .env.example e preencha GITHUB_TOKEN\n"
-            '(https://github.com/settings/tokens), ou rode sem o GitHub com --fontes-manuais "".'
+            '(https://github.com/settings/tokens), ou rode sem o GitHub com --fontes-manuais "".',
         )
         return 2
 
     se_key = os.environ.get("STACKEXCHANGE_KEY") or dotenv.get("STACKEXCHANGE_KEY")
     se_status = ""
     if se_key and "stackexchange" in args.fontes.split(","):
-        ok, se_status = check_stackexchange_key(se_key)
+        with out.screen.status("Conferindo a STACKEXCHANGE_KEY…", spinner="dots"):
+            ok, se_status = check_stackexchange_key(se_key)
         if not ok:
-            print(
-                f"A API do Stack Exchange recusou a STACKEXCHANGE_KEY ({se_status}).\n"
+            out.fail(
+                f"A API do Stack Exchange recusou a STACKEXCHANGE_KEY ({se_status}).",
                 "Copie o campo Key (não o Client Secret) da página do seu app em\n"
                 "https://stackapps.com/apps/oauth, ou deixe a variável vazia para coletar\n"
-                "sem chave (300 req/dia)."
+                "sem chave (300 req/dia).",
             )
             return 2
+
+    # Só para o painel: quem mostra o erro de um protocolo inválido é o passo de validação.
+    try:
+        cfg = load_protocol(protocol, environ={})
+    except Exception:
+        cfg = None
 
     env = child_env(os.environ, dotenv, args.fontes, ",".join(manual))
     data = work / "data"
@@ -343,41 +699,34 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
     timings: list[tuple[str, float, int]] = []
     run_id: str | None = args.retomar
 
+    def after_collect(run: str) -> list[Step]:
+        return pipeline(
+            run,
+            str(protocol),
+            enrich=github,
+            enrich_limit=args.enriquecer,
+            graphql=not args.sem_graphql,
+            reuse_days=args.reaproveitar_dias,
+            analyses=not args.sem_analises,
+        )
+
+    total = 2 + len(after_collect(""))
+    sources = [s.strip() for s in args.fontes.split(",") if s.strip()] + manual
+    ignored = sorted(k for k in env if k.startswith(SEARCH_OVERRIDES) and dotenv.get(k))
+
     with open(log_path, "w", encoding="utf-8") as log:
+        out.open_log(log)
+        out.show(banner(args, cfg, protocol, sources, github, log_path, total))
+        out.show(Text(), *startup_checks(github, se_status, credential, ignored))
+        out.show(*tips(args, github), screen_only=True)
 
         def step(s: Step) -> int:
-            _say(log, f"\n=== {s.name} · msrkit {' '.join(s.args)}")
+            out.show(*step_header(len(timings) + 1, total, s))
             t0 = time.monotonic()
             rc = runner(s, env, work, log)
             timings.append((s.name, time.monotonic() - t0, rc))
-            if rc:
-                _say(log, f"--- {s.name} terminou com erro (código {rc})")
+            out.show(step_result(s.name, timings[-1][1], rc))
             return rc
-
-        _say(log, "Coleta completa local — MSR-Kit")
-        _say(log, f"  protocolo:      {protocol}")
-        _say(log, f"  dados:          {data}")
-        _say(log, f"  log:            {log_path}")
-        _say(log, f"  fontes:         {args.fontes}" + (f",{','.join(manual)}" if manual else ""))
-        per_query = args.por_consulta or "sem teto"
-        enrich_scope = args.enriquecer or "todos"
-        _say(log, f"  por consulta:   {per_query} · enriquecer: {enrich_scope}"
-                  + ("" if args.sem_graphql else " (GraphQL)")
-                  + (f" · reaproveita até {args.reaproveitar_dias} dias"
-                     if args.reaproveitar_dias else ""))  # fmt: skip
-        for name in ("STACKEXCHANGE_KEY", "HF_TOKEN"):
-            if not credential(name):
-                _say(log, f"  aviso: {name} vazio; a fonte roda com cota menor.")
-        if se_status:
-            _say(log, f"  {se_status}")
-        ignored = sorted(k for k in env if k.startswith(SEARCH_OVERRIDES) and dotenv.get(k))
-        if ignored:
-            _say(log, f"  ignorando do .env (vale o protocolo): {', '.join(ignored)}")
-        if args.retomar:
-            _say(log, f"  retomando:      {args.retomar}")
-        _say(
-            log, "  A d28a levou ~2 h só na coleta; o enriquecimento pode levar mais algumas horas."
-        )
 
         keep_awake(True)
         try:
@@ -395,43 +744,22 @@ def main(argv: list[str] | None = None, runner: Runner = run_step) -> int:
             rc = step(Step("Coleta nas fontes", collect))
             run_id = run_id or new_run_id(before, data / "runs")
             if rc or not run_id:
-                _resume_hint(log, run_id)
+                _resume_hint(out, run_id)
                 return rc or 1
 
-            for s in pipeline(
-                run_id,
-                str(protocol),
-                enrich=github,
-                enrich_limit=args.enriquecer,
-                graphql=not args.sem_graphql,
-                reuse_days=args.reaproveitar_dias,
-                analyses=not args.sem_analises,
-            ):
+            for s in after_collect(run_id):
                 if step(s) and s.fatal:
-                    _resume_hint(log, run_id)
+                    _resume_hint(out, run_id)
                     return 1
         except KeyboardInterrupt:
-            _say(log, "\nInterrompido.")
-            _resume_hint(log, run_id)
+            out.show(Text("\n▲ Interrompido.", style="bold yellow"))
+            _resume_hint(out, run_id)
             return 130
         finally:
             keep_awake(False)
 
-        _say(log, f"\n=== Concluído em {_duration(time.monotonic() - started)} · execução {run_id}")
-        for name, seconds, rc in timings:
-            _say(log, f"  {'ok  ' if rc == 0 else 'ERRO'}  {_duration(seconds):>14}  {name}")
-        report = data / "reports" / run_id / "relatorio_mineracao.json"
-        if report.is_file():
-            rep = json.loads(report.read_text(encoding="utf-8"))
-            _say(log, f"\n  {rep['identified']} identificados → {rep['unique']} itens únicos")
-            for warning in rep.get("warnings", []):
-                _say(log, f"  aviso: {warning}")
-        _say(log, "\nArquivos:")
-        _say(log, f"  relatório:  {data / 'reports' / run_id / 'relatorio_mineracao.md'}")
-        _say(log, f"  PRISMA:     {data / 'reports' / run_id / 'prisma.md'}")
-        _say(log, f"  CSV:        {data / 'exports' / f'itens_{run_id}.csv'}")
-        _say(log, f"  pacote:     {data / 'packages' / f'msrkit_{run_id}.zip'}")
-        _say(log, f"  log:        {log_path}")
+        elapsed = time.monotonic() - started
+        out.show(*final_summary(timings, run_id, elapsed, work, log_path))
     return 0
 
 
