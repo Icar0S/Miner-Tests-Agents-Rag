@@ -243,15 +243,22 @@ sources:
 
   devto:
     enabled: true
+    # Censo: a API não busca por texto, então a coleta lê as tags e filtra pelos
+    # termos; cerca de 1% dos artigos casa. Sem teto por consulta, a fonte inteira
+    # cabe em ~1 mil requisições (ADR-052).
+    census: true
     extra:
+      # `ai` saiu: 60 mil artigos só em set–out/2026; as páginas dela não chegavam
+      # à janela, e cobri-la exigiria mais de mil páginas.
       tags:
         - rag
         - llm
-        - ai
         - agents
         - llmops
         - testing
-      max_pages: 10
+      # Todas as páginas das tags (nov/2026: rag 6, llm 35, agents 32, testing 27,
+      # llmops 1, com 1.000 artigos por página); a coleta para ao passar da janela.
+      max_pages: 40
 
   reddit:
     # Desabilitado no Estudo E2: credenciais novas exigem aprovação manual

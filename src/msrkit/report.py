@@ -97,6 +97,7 @@ class MiningReport(BaseModel):
     until: str | None = None
     window_overridden: bool = False  # MSRKIT_WINDOW_* changed the protocol window
     run_options: dict[str, Any] = {}
+    census: list[str] = []  # sources collected whole, without the per-query cap
     terms: dict[str, list[str]] = {}  # language -> protocol terms
     sources: list[SourceSummary] = []
     identified: int
@@ -291,6 +292,7 @@ def build_report(
             v.startswith("MSRKIT_WINDOW") for v in (manifest.env_overrides if manifest else [])
         ),
         run_options=manifest.run_options if manifest else {},
+        census=list(eff.get("census_sources") or []),
         terms=terms,
         sources=sources,
         identified=flow.total_identified,
@@ -495,7 +497,12 @@ def _searched(r: MiningReport) -> list[str]:
             labels = ", ".join(f"{k} ({v})" for k, v in s.literal.items())
             lines.append(f"- **Consultas literais em {s.name}** (protocolo `queries:`): {labels}")
     options = ", ".join(f"`{k}={v}`" for k, v in r.run_options.items()) or "nenhuma"
-    lines += [f"- Opções da execução: {options}", ""]
+    lines.append(f"- Opções da execução: {options}")
+    if r.census:
+        lines.append(
+            f"- Coletadas inteiras na janela, sem o limite por consulta: {', '.join(r.census)}"
+        )
+    lines.append("")
 
     lang_of = {t: lang for lang, lexicon in r.terms.items() for t in lexicon}
     if r.term_hits:

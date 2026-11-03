@@ -544,3 +544,14 @@ This document records architectural, design, and technical decisions made during
   - The eight queries return 99 to 266 repositories for RAG and 394 to 1,489 for agentic (`stars:>5`, window 2023-01-01..2026-08-31). The RAG ones fit almost entirely in 100 items per query per year, once the queries run by year (PLANO, step O8); the agentic ones remain samples.
   - The tool-call query becomes two queries for names that only appear in tests of tool calls: `"expected_tool_calls"` (1,076 files) and `"assert_tool_call"` (463).
 - **Consequences:** This is a recorded deviation from the queries of protocol §7.3. Repository items from runs before this change are not comparable on these labels. The repository term queries (`"RAG evaluation"`, `"agent testing"` and the rest, with `language:` and `stars:>=3`) are unchanged.
+
+---
+
+## ADR-052: dev.to Collected Whole (Census Sources)
+
+- **Context:** The dev.to API has no text search, so the adapter reads tags page by page and keeps articles that match the lexicon, about 1% of them. In run d855 the source ran as a single query with the run's cap of 100 items and `max_pages: 10` per tag. Ten pages of 1,000 articles reach back only to about September 2026, so most of what was read fell after the window, and 93 of the 98 articles kept were from 2026. The `ai` tag adds 60,000 articles in September–October 2026 alone, so its ten pages never reached the window.
+- **Decision:**
+  - A source can be marked `census: true` in the protocol. The run's per-query cap (`--per-query-limit`) and the fair-share caps then do not apply to it; `--limit` and the protocol's per-source limits still do. The manifest records the census sources in `effective_protocol.census_sources`, and the mining report lists them next to the run options.
+  - dev.to is a census source, with `max_pages: 40` over the tags `rag`, `llm`, `agents`, `llmops` and `testing`, which covers every page of each (November 2026). `ai` is dropped.
+  - Expected cost: about 100 list requests and one body request per kept article, roughly 1,000 requests at 30/min, or about 30 minutes.
+- **Consequences:** dev.to's share of the corpus reflects every matching article of five tags over the whole window, with no sampling. The local-filter discards grow accordingly (tens of thousands of `no_term_match` records), which the PRISMA flow counts as removed before screening. Articles tagged only `ai` are out of the corpus.

@@ -28,6 +28,11 @@ No divergences found during initial implementation. All endpoints, parameters, a
 - **Decision:** Collect articles by research-relevant tags and perform local keyword filtering (`match_terms`) against article titles, descriptions, and tags. Recorded explicitly in manifest (ADR-004).
 - **Link:** https://developers.forem.com/api/v0#tag/articles/operation/getArticles
 
+### Dev.to — 2026-11-03 (paginação por tag)
+- **Observed (live calls, `per_page=1000`):** `GET /api/articles?tag=` pages through a tag's whole history and returns an empty list after the last page: `rag` ends at page 6 (≈5.7k articles, oldest 2021-01), `llm` at 35 (≈34k), `agents` at 32 (≈31k), `testing` at 27 (≈26k, back to 2014), `llmops` at 1 (258). `ai` still had 1,000 articles of September–October 2026 on page 60. Pages are roughly, not strictly, in reverse publication order: page 10 of `llm` spans 2026-08-05..2026-10-03.
+- **Decision:** dev.to is collected whole inside the window (`census: true`, ADR-052), with `max_pages: 40` over `rag`, `llm`, `agents`, `llmops` and `testing`. `ai` is dropped: covering the window through it would take more than a thousand pages.
+- **Link:** https://developers.forem.com/api/v1#tag/articles/operation/getArticles
+
 ### Stack Exchange — 2026-09-12
 - **Spec says:** Standard HTTP JSON search across Stack Overflow / Software Engineering questions.
 - **Docs say:** Stack Exchange API v2.3 strictly requires `Accept-Encoding: gzip` (uncompressed requests trigger errors), enforces dynamic `backoff` directives, and interprets multiple tags as strict `AND` conjunctions.

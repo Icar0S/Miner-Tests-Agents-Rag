@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,16 +20,21 @@ PROTO = "protocols/v0_rag_agents_testing.yaml"
 runner = CliRunner()
 
 
-def _bilingual_protocol(tmp_path: Path) -> str:
-    """The sample protocol with Portuguese declared; E2 itself is English-only (ADR-050)."""
+def _protocol_copy(tmp_path: Path, change: Callable[[dict[str, Any]], None]) -> str:
+    """A copy of the sample protocol in tmp_path, edited by `change`."""
     import yaml
 
     data = yaml.safe_load(Path(PROTO).read_text(encoding="utf-8"))
-    data["languages"] = ["en", "pt"]
     data["gazetteer"] = str(Path(PROTO).parent.resolve() / data["gazetteer"])
-    path = tmp_path / "bilingual.yaml"
+    change(data)
+    path = tmp_path / "protocol.yaml"
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
     return str(path)
+
+
+def _bilingual_protocol(tmp_path: Path) -> str:
+    """The sample protocol with Portuguese declared; E2 itself is English-only (ADR-050)."""
+    return _protocol_copy(tmp_path, lambda d: d.update(languages=["en", "pt"]))
 
 
 class TestDotenv:
@@ -196,6 +202,23 @@ class TestRunRecordsEffectiveProtocol:
         queries = next(s for s in manifest["sources"] if s["name"] == "hackernews")["queries"]
         assert queries and all(q["items"] <= 2 for q in queries)
         assert all("item_limit" in q["truncation_reasons"] for q in queries)
+        assert manifest["effective_protocol"]["census_sources"] == ["devto"]
+
+    def test_census_source_ignores_the_per_query_limit(self, tmp_path: Path, monkeypatch) -> None:
+        proto = _protocol_copy(tmp_path, lambda d: d["sources"]["hackernews"].update(census=True))
+        monkeypatch.setattr("msrkit.cli.DATA_DIR", tmp_path)
+        monkeypatch.setenv("MSRKIT_TERMS", "RAG evaluation;agent testing")
+        monkeypatch.setenv("MSRKIT_SOURCES_PUBLIC", "hackernews")
+        self._mock_hn(monkeypatch)
+        result = runner.invoke(app, ["run", proto, "--per-query-limit", "2"])
+        assert result.exit_code == 0, result.stdout
+        assert "Census: --per-query-limit does not apply" in result.stdout
+        (run_dir,) = (tmp_path / "runs").iterdir()
+        manifest = json.loads((run_dir / "manifest.json").read_text())
+        assert "hackernews" in manifest["effective_protocol"]["census_sources"]
+        queries = next(s for s in manifest["sources"] if s["name"] == "hackernews")["queries"]
+        assert len(queries) == 2
+        assert all(q["items"] == 5 and not q["truncation_reasons"] for q in queries)
 
 
 class TestPilotFixes:

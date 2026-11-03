@@ -101,7 +101,7 @@ O protocolo ([`protocols/v0_rag_agents_testing.yaml`](protocols/v0_rag_agents_te
 | Seção | Define |
 |---|---|
 | `window`, `terms`, `terms_by_language`, `languages` | janela temporal e léxico; `terms_by_language` acrescenta léxicos de outros idiomas, e o E2 busca só em inglês |
-| `sources` | fontes ativas, tipos de item e consultas literais por fonte (`queries`, com modelos `{anchor}`/`{repo}`) |
+| `sources` | fontes ativas, tipos de item, consultas literais por fonte (`queries`, com modelos `{anchor}`/`{repo}`) e `census: true` para coletar a fonte inteira na janela, sem o teto por consulta |
 | `concepts`, `concept_queries` | grupos de léxico que rotulam cada item (`rag`, `agente`, `teste`) |
 | `gazetteer` | catálogo de ferramentas e métodos ([`protocols/gazetteer.yaml`](protocols/gazetteer.yaml)) |
 | `screening` | critérios de inclusão e exclusão e tamanho do lote |

@@ -85,6 +85,7 @@ def _manifest() -> Manifest:
             "window": {"since": "2023-01-01", "until": "2026-08-31"},
             "terms": ["RAG testing", "LLM as a judge"],
             "terms_by_language": {"pt": ["teste de RAG"]},
+            "census_sources": ["hackernews"],
         },
         run_options={"per_query_limit": 10},
         sources=[
@@ -317,6 +318,7 @@ class TestRender:
         assert "| github | 2/3 | 4 | 3 | 0 | 3 | item_limit 1 |" in md
         assert "- **linkedin**: UNSUPPORTED: no API" in md  # manifest without source groups
         assert "- **Português (1):** `teste de RAG`" in md
+        assert "- Coletadas inteiras na janela, sem o limite por consulta: hackernews" in md
         assert "- **Consultas literais em github** (protocolo `queries:`): ci (2)" in md
         assert "Termos sem nenhum casamento: `LLM as a judge`" in md
         assert "| `RAG testing` | en | 2 |" in md

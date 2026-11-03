@@ -74,6 +74,8 @@ class SourceConfig(BaseModel):
     # Literal per-source queries, run in addition to (or instead of) the lexicon.
     queries: list[RawQueryConfig] = []
     use_terms: bool = True  # False: run only `queries`
+    # Collected whole inside the window: the run's per-query cap does not apply.
+    census: bool = False
 
 
 class LimitsConfig(BaseModel):
@@ -140,6 +142,7 @@ class ProtocolConfig(BaseModel):
             "terms_by_language": {k: list(v) for k, v in self.terms_by_language.items()},
             "enabled_sources": self.enabled_sources(),
             "source_groups": self.source_groups,
+            "census_sources": sorted(n for n, s in self.sources.items() if s.census),
         }
 
     def differs_from_file(self) -> list[str]:

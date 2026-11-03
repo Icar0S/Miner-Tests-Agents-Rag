@@ -604,14 +604,18 @@ def run(
 
         console.print(f"  Status: [{avail.status}] {avail.reason}")
 
+        # A census source is collected whole: the per-query cap does not apply.
+        query_cap = None if src_cfg.census else per_query_limit
+        if src_cfg.census and per_query_limit is not None:
+            console.print("  [dim]Census: --per-query-limit does not apply[/dim]")
         if source_entry.planned:
             # Resume: reuse the frozen partition plan instead of re-estimating.
             queries = [Query.model_validate(d) for d in source_entry.planned]
         else:
             queries = config.build_queries(source_name)
-            if per_query_limit is not None:
+            if query_cap is not None:
                 for q in queries:
-                    q.limit = min(q.limit or per_query_limit, per_query_limit)
+                    q.limit = min(q.limit or query_cap, query_cap)
             if limit is not None:
                 for q in queries:
                     q.limit = limit
@@ -642,10 +646,10 @@ def run(
         if limit is not None:
             for q in queries:
                 q.limit = limit
-        if per_query_limit is not None:
+        if query_cap is not None:
             for q in queries:
-                q.limit = min(q.limit or per_query_limit, per_query_limit)
-        elif config.limits.max_items_per_source and len(queries) > 1:
+                q.limit = min(q.limit or query_cap, query_cap)
+        elif not src_cfg.census and config.limits.max_items_per_source and len(queries) > 1:
             # Fair-share scheduling: if user did not set --per-query-limit,
             # calculate a sensible ceiling for non-literal queries so broad
             # text queries cannot exhaust the source budget and starve the rest.
