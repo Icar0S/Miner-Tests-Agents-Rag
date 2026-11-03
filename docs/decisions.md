@@ -513,6 +513,7 @@ This document records architectural, design, and technical decisions made during
   - Output goes to `data/` and a full log to `data/logs/`. A fatal step stops the run and prints `--retomar <run_id>`, which resumes the collection (`msrkit run --resume`) and reruns the later steps. Those steps are idempotent, and enrichment resumes from what is saved. Optional steps (analyses, precision sample, stats) do not stop the run.
   - On Windows the script keeps the system awake while it runs (`SetThreadExecutionState`).
 - **Consequences:** The workflow stays for test samples and the daily RSS accumulation. Official runs are local, and the manifest records where and how they ran (`env_overrides`, `run_options`). `scripts/` is mounted in docker-compose so the container sees the script.
+- **Revision after run 2026-11-02T19-14-30Z-d855:** The script no longer collects RSS. The feeds carry only the ~10 latest posts each, so every local run got 0 items inside the protocol window (2023-01-01 to 2026-08-31). RSS stays in the daily Actions accumulation, as monitoring outside the E2 corpus, and `--fontes` can still add it. The mining report lists it as outside the run.
 
 ---
 

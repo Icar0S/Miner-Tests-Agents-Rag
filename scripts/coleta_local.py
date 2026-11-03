@@ -35,8 +35,9 @@ from typing import TextIO
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROTOCOL = "protocols/v0_rag_agents_testing.yaml"
-# Os mesmos grupos de fontes do workflow Coleta.
-PUBLIC = "hackernews,devto,stackexchange,huggingface,rss"
+# Os grupos de fontes do workflow Coleta, sem o RSS: os feeds só trazem posts recentes e
+# nunca têm itens da janela do protocolo; o RSS fica no monitoramento diário do Actions.
+PUBLIC = "hackernews,devto,stackexchange,huggingface"
 MANUAL = "github"
 PAID = "x_twitter"
 UNAVAILABLE = "linkedin,discord,bluesky"

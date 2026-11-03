@@ -35,9 +35,9 @@ class TestChildEnv:
         cfg = load_protocol(PROTOCOL, environ=env)
         assert cfg.window == file_cfg.window and cfg.terms == file_cfg.terms
 
-    def test_source_groups_match_the_workflow(self) -> None:
+    def test_source_groups_match_the_workflow_without_rss(self) -> None:
         env = coleta.child_env({}, {}, coleta.PUBLIC, "github")
-        assert env["MSRKIT_SOURCES_PUBLIC"] == "hackernews,devto,stackexchange,huggingface,rss"
+        assert env["MSRKIT_SOURCES_PUBLIC"] == "hackernews,devto,stackexchange,huggingface"
         assert env["MSRKIT_SOURCES_MANUAL"] == "github"
         assert env["MSRKIT_SOURCES_PAID"] == "x_twitter"
         assert env["MSRKIT_SOURCES_UNAVAILABLE"] == "linkedin,discord,bluesky"
