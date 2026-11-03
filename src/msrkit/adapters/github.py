@@ -77,7 +77,8 @@ class GitHubAdapter(BaseAdapter):
     """GitHub adapter using the REST search API."""
 
     name: ClassVar[str] = "github"
-    version: ClassVar[str] = "0.2.0"  # 0.2.0: issue searches add is:issue (ADR-049)
+    # 0.2.0: issue searches add is:issue (ADR-049); 0.2.1: code search without sort (ADR-053)
+    version: ClassVar[str] = "0.2.1"
     policy: ClassVar[SourcePolicy] = SourcePolicy(
         requires_auth=True,
         auth_env_vars=["GITHUB_TOKEN"],
@@ -242,12 +243,11 @@ class GitHubAdapter(BaseAdapter):
                         "per_page": page_size,
                         "page": page,
                     }
-                    if kind == "code":
-                        params["sort"] = "indexed"
-                        params["order"] = "desc"
-                    else:
+                    if kind != "code":
                         params["sort"] = "updated"
                         params["order"] = "desc"
+                    # Code search keeps the default best-match order: its `sort` is
+                    # closing down, and `indexed` returned the same set (ADR-053).
 
                     resp = self._governed_get(f"{_BASE_URL}{endpoint}", params=params)
 

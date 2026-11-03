@@ -119,6 +119,7 @@ class MiningReport(BaseModel):
     earlier_runs: int = 0
     new_items: int | None = None  # unique items whose URL no earlier run had
     accumulated: int | None = None  # distinct URLs over earlier runs and this one
+    seen_before: dict[str, int] = {}  # source -> unique items an earlier run also had
     term_hits: dict[str, int]  # term -> unique items that matched it
     term_languages: dict[str, int]  # "en", "pt", "en+pt"...; "" = no term matched
     concepts: dict[str, int]  # concept group -> unique items; "" = no concept
@@ -271,10 +272,13 @@ def build_report(
         concepts.update(it.concepts or [""])
 
     new_items = accumulated = None
+    seen_before: Counter[str] = Counter()
     if earlier_runs:
         earlier = {canonicalize_url(u) for u in earlier_urls or set()}
         current = {canonicalize_url(str(it.url)) for it in pool}
         new_items, accumulated = len(current - earlier), len(current | earlier)
+        seen_before.update({s: 0 for s in unique_by_source})
+        seen_before.update(it.source for it in pool if canonicalize_url(str(it.url)) in earlier)
 
     started = manifest.started_at if manifest else None
     finished = manifest.finished_at if manifest else None
@@ -311,6 +315,7 @@ def build_report(
         protocol_until=p_until.isoformat() if p_until else None,
         outside_protocol_window=outside_protocol,
         earlier_runs=earlier_runs,
+        seen_before=dict(seen_before),
         new_items=new_items,
         accumulated=accumulated,
         term_hits=dict(term_hits.most_common()),
@@ -549,6 +554,19 @@ def _counts(r: MiningReport) -> list[str]:
             f"- Total acumulado (URLs distintas em todas as execuções): {_n(r.accumulated or 0)}",
             "",
         ]
+    if r.seen_before:
+        lines += [
+            "Itens únicos que alguma execução anterior também trouxe, por fonte (o quanto a "
+            "busca se repete entre coletas):",
+            "",
+            "| Fonte | Itens únicos | Também em anteriores | % |",
+            "|---|---:|---:|---:|",
+        ]
+        for source, seen in r.seen_before.items():
+            unique = sum(r.by_source_kind.get(source, {}).values())
+            share = f"{seen / unique:.0%}" if unique else "—"
+            lines.append(f"| {source} | {_n(unique)} | {_n(seen)} | {share} |")
+        lines.append("")
     if r.concepts:
         lines += [
             "Conceitos do protocolo nos itens únicos:",

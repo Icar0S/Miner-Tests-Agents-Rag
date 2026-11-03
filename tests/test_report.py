@@ -290,6 +290,9 @@ class TestSourcesWindowAndAccumulation:
         assert "Destes, 3 não apareciam nas 2 execuções anteriores; o acumulado soma 5" in md
         assert "### Acúmulo entre execuções" in md
         assert "nenhuma anterior trouxe: **3** de 4" in md
+        assert r.seen_before == {"github": 1, "hackernews": 0}
+        assert "| github | 3 | 1 | 33% |" in md
+        assert "| hackernews | 1 | 0 | 0% |" in md
 
     def test_no_accumulation_without_earlier_runs(self, tmp_path: Path) -> None:
         r = _report(tmp_path)

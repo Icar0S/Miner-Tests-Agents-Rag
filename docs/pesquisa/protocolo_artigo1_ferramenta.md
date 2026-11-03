@@ -241,6 +241,7 @@ Implemente cada item num commit próprio, com teste. O congelamento de escopo do
   - As APIs podem mudar ou fechar, como aconteceu com Reddit e X.
 - **Confiabilidade:**
   - As buscas das APIs não são determinísticas e os rankings mudam (medido em EQ3b).
+  - A busca de código do GitHub deriva com a reindexação. Em 24 h, o top-100 de 3 consultas ficou 98–100% igual, mas só 61% dos hits de código da `d855` estavam na `d28a`, coletada 13 dias antes; Hacker News, Hugging Face e Stack Exchange ficaram em 99–100%. Mitigação: o corpus do estudo é o pacote congelado da execução oficial, não uma nova consulta. O relatório de cada coleta mostra, por fonte, quanto se repete das anteriores (ADR-053).
   - O comportamento sob limite de taxa varia.
 - **Gazetteer:** um minerador ancorado em lista acha principalmente o que já conhece. Reporte a fração do catálogo que veio da descoberta aberta (A5).
 

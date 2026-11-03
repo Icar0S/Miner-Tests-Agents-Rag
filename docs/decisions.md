@@ -555,3 +555,17 @@ This document records architectural, design, and technical decisions made during
   - dev.to is a census source, with `max_pages: 40` over the tags `rag`, `llm`, `agents`, `llmops` and `testing`, which covers every page of each (November 2026). `ai` is dropped.
   - Expected cost: about 100 list requests and one body request per kept article, roughly 1,000 requests at 30/min, or about 30 minutes.
 - **Consequences:** dev.to's share of the corpus reflects every matching article of five tags over the whole window, with no sampling. The local-filter discards grow accordingly (tens of thousands of `no_term_match` records), which the PRISMA flow counts as removed before screening. Articles tagged only `ai` are out of the corpus.
+
+---
+
+## ADR-053: Reproducibility of GitHub Code Search
+
+- **Context:** Only 61% of run d855's GitHub code hits were also in run d28a, collected 13 days earlier, while Hacker News, Hugging Face and Stack Exchange matched 99–100%. Code search has no date qualifier, so its results cannot be pinned to the window. The adapter sent `sort=indexed&order=desc`, which the REST docs mark as closing down.
+- **Measured on 2026-11-03:**
+  - Re-running three code queries 24 h after d855 (`"from ragas import"`, `"import deepeval"`, `filename:promptfooconfig.yaml`) returned 100, 100 and 98 of the same 100 files. The search is stable from one day to the next and drifts over weeks as GitHub re-indexes repositories. Part of the d28a gap also comes from query changes between the runs, such as renamed gazetteer repositories.
+  - `sort=indexed` and the default best-match order returned the same 100 files for the same three queries.
+- **Decision:**
+  - Code searches drop `sort`/`order` and use the default order (GitHub adapter 0.2.1). Repository and issue searches keep `sort=updated`.
+  - With earlier runs in `data/`, the mining report adds a per-source table of the unique items an earlier run also had, so each collection measures how much each source repeats.
+  - The study corpus is the frozen package of the official run (PLANO, O9), not a re-query. Paper 1 reports the drift as a reliability threat, with these numbers.
+- **Consequences:** Two runs a few days apart give nearly the same code hits; runs weeks apart do not, and the per-source table shows by how much.

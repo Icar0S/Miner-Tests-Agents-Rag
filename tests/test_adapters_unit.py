@@ -1005,7 +1005,7 @@ class TestSearchLoopsAndQueryBuilding:
         item_ds = adapter.normalize(raw_ds)
         assert item_so.id != item_ds.id
 
-    def test_github_code_search_omits_created_and_stars_and_sorts_indexed(
+    def test_github_code_search_omits_created_stars_and_sort(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         adapter = GitHubAdapter()
@@ -1049,7 +1049,7 @@ class TestSearchLoopsAndQueryBuilding:
         qs = captured_params[0]["q"]
         assert "created:" not in qs
         assert "stars:" not in qs
-        assert captured_params[0]["sort"] == "indexed"
+        assert "sort" not in captured_params[0]  # closing down; best match (ADR-053)
 
     def test_github_bot_filtering_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
         adapter = GitHubAdapter()
