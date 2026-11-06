@@ -335,6 +335,9 @@ sources:
 
 # ---- Limites globais ----
 limits:
-  max_items_per_source: 10000
+  # O GitHub planeja 384 consultas de até 100 itens (ADR-055). Com teto de 10.000, a
+  # fb68 parou antes das issues por termo de 2024 a 2026; o plano completo pede até
+  # ~16.500 itens.
+  max_items_per_source: 20000
   max_requests_per_source: 2500
   stop_on_quota_exhausted: true
