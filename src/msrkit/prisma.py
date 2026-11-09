@@ -6,6 +6,7 @@ Every number is traceable to a file:
 |-------------------------------------|-------------------------------------------------|
 | Identified, per source              | items.jsonl + manifest `discarded`              |
 | Not retrieved (source caps, est.)   | manifest `estimated_total` of truncated queries |
+| Planned queries not executed        | manifest `planned` − `queries`, per source      |
 | Removed by local filters            | runs/<id>/discarded.jsonl, by reason            |
 | Duplicates removed                  | items/<id>/dedupe_report.json, by pass          |
 | Screened / excluded / uncertain     | screening/<id>/decisions.jsonl (final decision) |
@@ -35,6 +36,8 @@ class PrismaFlow(BaseModel):
     identified: dict[str, int]  # per source: returned by the search (kept + filtered)
     not_retrieved_estimate: dict[str, int]  # per source, from truncated queries
     truncated_queries: int
+    # Per source: planned queries that never ran (source cap reached, interrupted run).
+    not_executed: dict[str, int] = {}
     filtered: dict[str, int]  # local filter reason -> count
     after_filters: int
     duplicates: dict[str, int] | None  # url/content/near; None when dedupe not run
@@ -76,8 +79,10 @@ def build_flow(
     filtered_by_source: Counter[str] = Counter()
     manifest_kept: Counter[str] = Counter()
     not_retrieved: Counter[str] = Counter()
+    not_executed: Counter[str] = Counter()
     truncated = 0
     for src in manifest.sources if manifest else []:
+        not_executed[src.name] = max(len(src.planned) - len(src.queries), 0)
         for q in src.queries:
             manifest_kept[src.name] += q.items
             filtered_by_source[src.name] += q.discarded
@@ -124,6 +129,7 @@ def build_flow(
         identified=identified,
         not_retrieved_estimate={s: n for s, n in sorted(not_retrieved.items()) if n},
         truncated_queries=truncated,
+        not_executed={s: n for s, n in sorted(not_executed.items()) if n},
         filtered=dict(reasons.most_common()),
         after_filters=len(items),
         duplicates=duplicates,
@@ -145,7 +151,13 @@ def render_markdown(flow: PrismaFlow) -> str:
         lines.append(f"| {s} | {n} | {flow.not_retrieved_estimate.get(s, 0)} |")
     lines.append(f"| **total** | **{flow.total_identified}** | "
                  f"**{sum(flow.not_retrieved_estimate.values())}** |")  # fmt: skip
-    lines += ["", f"Queries truncated by a source cap: {flow.truncated_queries}", ""]
+    lines += ["", f"Queries truncated by a source cap: {flow.truncated_queries}"]
+    skipped = ", ".join(f"{s} {n}" for s, n in flow.not_executed.items())
+    lines.append(
+        f"Planned queries not executed (source cap or interruption): "
+        f"{sum(flow.not_executed.values())}" + (f" ({skipped})" if skipped else "")
+    )
+    lines.append("")
     lines += ["## Records removed before screening", ""]
     for reason, n in flow.filtered.items():
         lines.append(f"- Local filter — {reason}: {n}")

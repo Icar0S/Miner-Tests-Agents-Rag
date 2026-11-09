@@ -493,3 +493,103 @@ This document records architectural, design, and technical decisions made during
   - Warnings list planned − executed queries per source, failed or incomplete queries, `source_cap` truncation, sources without historical coverage, the sample cut by the item limit, unique items dated outside the window, a missing dedupe, a missing manifest and an unfinished run.
   - The Coleta workflow runs `msrkit report` after `msrkit prisma` and before `msrkit package`, so the report ships in the reproducibility package. The job summary shows the report of the latest run only; scheduled RSS runs restore earlier runs from the cache. If the pipeline stops early, the summary step still generates the report for whatever was collected.
 - **Consequences:** Every collection, including the daily RSS one, leaves a readable record of what was mined. The report adds no new data: rerunning `msrkit report` on the same files gives the same output.
+- **Revision after the first scheduled RSS run (run 2026-10-31T13-43-17Z-64b5):**
+  - Sources with no executed query were listed with their availability ("OK: token configured"), which read as if they had been consulted. The reason now comes from `effective_protocol.enabled_sources` and `source_groups`: outside this run, paid, unavailable, disabled in the protocol, or enabled with no query run. Only the last one is a warning.
+  - When `MSRKIT_WINDOW_*` replaces the window, the report reads the protocol file without overrides and states its window and how many unique items fall outside it. All 43 items of that run were published in September–October 2026, after the protocol's 2026-08-31 cutoff: the daily RSS stream cannot enter the E2 corpus without a recorded deviation.
+  - With earlier runs in data/ (the scheduled job restores them from the cache), the report counts the unique items no earlier run had and the accumulated total. The run alone only shows within-run duplicates, which hides the day-to-day overlap of RSS feeds.
+  - The PRISMA flow now also reports planned queries that were not executed, per source.
+  - `protocol_sha256` normalizes CRLF to LF before hashing. The same protocol gave `e48faa103868` on a Windows checkout and `d755f05d757b` on the CI runner. Manifests hashed on Windows before this change carry the CRLF hash.
+
+---
+
+## ADR-048: The Official Collection Runs Locally
+
+- **Context:** The Coleta workflow job has a 240-minute timeout. A collection at the official scale does not fit. Run d28a (100 items per query, every repository enriched) took about two hours of collection in Docker, plus the enrichment of 5,500 repositories.
+- **Decision:**
+  - `scripts/coleta_local.py` runs the workflow's steps locally or in the container, with no time limit and in the same order: validate, run, dedupe, enrich, extract, screening sheet, PRISMA, mining report, CSV, package, preliminary A1–A6 analyses and the precision sample. Every step after the collection is pinned to the run id it created.
+  - The script sets the workflow's source groups. It blanks `MSRKIT_WINDOW_*` and `MSRKIT_TERMS*` in the child environment, so the window and lexicon come from the protocol file alone, as on the Actions runner, whatever the local `.env` holds. An empty variable is ignored by the overrides and blocks the `.env` value, since existing variables win.
+  - GitHub requires `GITHUB_TOKEN` before anything starts. Without it the source runs at 60 requests/hour and without code search, which would take many hours.
+  - Defaults: 100 items per query and every repository enriched through GraphQL (which falls back to REST when it fails).
+  - Output goes to `data/` and a full log to `data/logs/`. A fatal step stops the run and prints `--retomar <run_id>`, which resumes the collection (`msrkit run --resume`) and reruns the later steps. Those steps are idempotent, and enrichment resumes from what is saved. Optional steps (analyses, precision sample, stats) do not stop the run.
+  - On Windows the script keeps the system awake while it runs (`SetThreadExecutionState`).
+- **Consequences:** The workflow stays for test samples and the daily RSS accumulation. Official runs are local, and the manifest records where and how they ran (`env_overrides`, `run_options`). `scripts/` is mounted in docker-compose so the container sees the script.
+- **Revision after run 2026-11-02T19-14-30Z-d855:** The script no longer collects RSS. The feeds carry only the ~10 latest posts each, so every local run got 0 items inside the protocol window (2023-01-01 to 2026-08-31). RSS stays in the daily Actions accumulation, as monitoring outside the E2 corpus, and `--fontes` can still add it. The mining report lists it as outside the run.
+
+---
+
+## ADR-049: GitHub Issue Searches Collect Issues Only
+
+- **Context:** GitHub's `/search/issues` now rejects, with 422, a query that does not say `is:issue` or `is:pull-request`. In run 2026-11-01T23-59-22Z-7837, all 72 term × language issue requests got that 422, and the adapter logged a warning and recorded each query as completed with 0 items, so neither the report nor the PRISMA flow showed the loss: 1,440 issues, against 3,795 `kind: issue` items in run d28a. Run d28a, on 2026-10-20, sent the same queries without the qualifier and received issues and pull requests mixed (2,405 issues, 1,390 PRs).
+- **Decision:**
+  - Issue searches collect issues only, following the protocol's `kind: issue` literally. The adapter appends `is:issue` to every issue query, term or literal, that does not already set `is:`/`type:` issue or PR. The anchor queries (`repo:{repo} is:issue label:bug`) already did.
+  - A 422 no longer looks like an empty result. The adapter keeps going through the query's other languages and then raises `QueryRejectedError` with GitHub's message, so the query is recorded as not completed, the mining report lists it under failed queries, and `--resume` redoes it.
+  - The GitHub adapter version goes to 0.2.0, so manifests show which runs used the new queries.
+- **Consequences:** Pull requests leave the corpus. Runs with adapter 0.2.0 are not directly comparable with d28a on `kind: issue`: d28a's PRs (37% of its issue items) have no counterpart. A comparison should drop URLs containing `/pull/` from d28a first. Run 2026-11-01T23-59-22Z-7837 is superseded for GitHub issues and should be rerun.
+
+---
+
+## ADR-050: English-Only Lexicon
+
+- **Context:** ADR-018 added a Portuguese lexicon (16 terms) as an exploratory stratum for criterion I4. It stayed small: 90 items in run d28a and 63 of 11,316 unique items in run 2026-11-02T19-14-30Z-d855, and 4 of its terms never matched. English is the working language of the field, and the team decided to search in English only.
+- **Decision:** The protocol drops `terms_by_language.pt`, `pt` from `languages`, the `pt.stackoverflow` site, and the Portuguese concept terms ("geração aumentada por recuperação", "agente", "teste", "avaliação"). Criterion I4 becomes "English". The `terms_by_language` mechanism and the Portuguese inflection rules in `keywords.py` stay in the code for other studies.
+- **Consequences:** The E2 corpus describes the community that publishes in English. Runs before this change are not comparable on the language stratum. The Paper 2 macro `ResItensPt` now counts 0.
+
+---
+
+## ADR-051: Literal Repository Queries Without OR Groups
+
+- **Context:** The protocol's two literal repository queries were meant to find repositories about testing RAG and agentic systems: `RAG (eval OR test OR testing) in:name,description,readme stars:>5` and the same with `agentic`. On 2026-11-03, live counts showed that GitHub's repository search ignores the parenthesized OR group: each query returned exactly what `RAG` or `agentic` alone returns (27,662 and 175,235 repositories). The 100 repositories each one collected in run d855 were a sample of every RAG or agentic repository, not of the ones about testing. The code query `"tool_call" "assert" language:Python path:tests` had a similar problem: code search splits `tool_call` into two words, and the query matched 291,840 test files.
+- **Decision:**
+  - Each repository query becomes four, one word each, searched in name and description only: `eval`, `evaluation`, `test`, `testing`. The README match is dropped because it pulls in any repository that mentions both words anywhere (`RAG testing` in READMEs returns 14,863 repositories, `ollama/ollama` among the first).
+  - The eight queries return 99 to 266 repositories for RAG and 394 to 1,489 for agentic (`stars:>5`, window 2023-01-01..2026-08-31). The RAG ones fit almost entirely in 100 items per query per year, once the queries run by year (PLANO, step O8); the agentic ones remain samples.
+  - The tool-call query becomes two queries for names that only appear in tests of tool calls: `"expected_tool_calls"` (1,076 files) and `"assert_tool_call"` (463).
+- **Consequences:** This is a recorded deviation from the queries of protocol §7.3. Repository items from runs before this change are not comparable on these labels. The repository term queries (`"RAG evaluation"`, `"agent testing"` and the rest, with `language:` and `stars:>=3`) are unchanged.
+
+---
+
+## ADR-052: dev.to Collected Whole (Census Sources)
+
+- **Context:** The dev.to API has no text search, so the adapter reads tags page by page and keeps articles that match the lexicon, about 1% of them. In run d855 the source ran as a single query with the run's cap of 100 items and `max_pages: 10` per tag. Ten pages of 1,000 articles reach back only to about September 2026, so most of what was read fell after the window, and 93 of the 98 articles kept were from 2026. The `ai` tag adds 60,000 articles in September–October 2026 alone, so its ten pages never reached the window.
+- **Decision:**
+  - A source can be marked `census: true` in the protocol. The run's per-query cap (`--per-query-limit`) and the fair-share caps then do not apply to it; `--limit` and the protocol's per-source limits still do. The manifest records the census sources in `effective_protocol.census_sources`, and the mining report lists them next to the run options.
+  - dev.to is a census source, with `max_pages: 40` over the tags `rag`, `llm`, `agents`, `llmops` and `testing`, which covers every page of each (November 2026). `ai` is dropped.
+  - Expected cost: about 100 list requests and one body request per kept article, roughly 1,000 requests at 30/min, or about 30 minutes.
+- **Consequences:** dev.to's share of the corpus reflects every matching article of five tags over the whole window, with no sampling. The local-filter discards grow accordingly (tens of thousands of `no_term_match` records), which the PRISMA flow counts as removed before screening. Articles tagged only `ai` are out of the corpus.
+
+---
+
+## ADR-053: Reproducibility of GitHub Code Search
+
+- **Context:** Only 61% of run d855's GitHub code hits were also in run d28a, collected 13 days earlier, while Hacker News, Hugging Face and Stack Exchange matched 99–100%. Code search has no date qualifier, so its results cannot be pinned to the window. The adapter sent `sort=indexed&order=desc`, which the REST docs mark as closing down.
+- **Measured on 2026-11-03:**
+  - Re-running three code queries 24 h after d855 (`"from ragas import"`, `"import deepeval"`, `filename:promptfooconfig.yaml`) returned 100, 100 and 98 of the same 100 files. The search is stable from one day to the next and drifts over weeks as GitHub re-indexes repositories. Part of the d28a gap also comes from query changes between the runs, such as renamed gazetteer repositories.
+  - `sort=indexed` and the default best-match order returned the same 100 files for the same three queries.
+- **Decision:**
+  - Code searches drop `sort`/`order` and use the default order (GitHub adapter 0.2.1). Repository and issue searches keep `sort=updated`.
+  - With earlier runs in `data/`, the mining report adds a per-source table of the unique items an earlier run also had, so each collection measures how much each source repeats.
+  - The study corpus is the frozen package of the official run (PLANO, O9), not a re-query. Paper 1 reports the drift as a reliability threat, with these numbers.
+- **Consequences:** Two runs a few days apart give nearly the same code hits; runs weeks apart do not, and the per-source table shows by how much.
+
+---
+
+## ADR-054: Enrichment Reused Across Runs
+
+- **Context:** Enrichment reads each repository's tree, workflows, manifests, contributors and commit months, and is bound by GitHub's 5,000 core requests per hour. In run d855 it took 6 h 38 min of the 7 h 23 min run, although 3,977 of its 5,260 repositories (76%) had been enriched by run 7837 the day before. Signals were reused only within a run, to resume it.
+- **Decision:**
+  - `msrkit enrich --reuse-days N` copies a repository's signals from another run in `data/enrich/` when that run was enriched with the same window and the same gazetteer config files, the signals have no error, and they were fetched at most N days ago. The newest copy wins. Off by default (`N = 0`).
+  - A copied signal keeps its `fetched_at` and request hashes and gains `reused_from`, the run whose requests produced it. The mining report counts the reused repositories.
+  - Each enrichment writes `data/enrich/<run>/meta.json` with its window and config files. For runs enriched before that file existed, the window comes from the manifest and the config files from the gazetteer of the protocol path the manifest names, which is the file as it is now.
+  - `scripts/coleta_local.py` passes `--reuse-days 14`; `--reaproveitar-dias 0` turns it off.
+- **Consequences:** A new run within two weeks of the last one enriches only the repositories it did not have; checked on d855, 5,257 of its 5,260 repositories are eligible for the next run. N3 signals depend on the window (commit months, which is closed and fixed) and on the repository's current state (workflows, contributors); 14 days bounds how stale that state can be, and `reused_from` keeps it traceable. Signals produced by an older version of the enrichment code are copied as they are; a change to that code should be released with `--reuse-days 0` for one run.
+
+---
+
+## ADR-055: Queries Stratified by Year
+
+- **Context:** Each query keeps at most 100 items (`--per-query-limit`), and the sources return the newest first: GitHub sorts by `updated`, Stack Exchange by `creation`. In run d855, 2,339 of 3,579 GitHub issues (65%) and 93 of 98 dev.to articles were from 2026, and 84 queries stopped at the cap, often far below what the source held (issues for "LLM evaluation": 100 of 13,304). For Paper 2, which ranks tools and engagement, that sample leans toward what was popular in 2026.
+- **Decision:**
+  - With `sampling: {strata: year}` in the protocol, `msrkit run` and `msrkit plan` split every query whose source applies its dates into one query per calendar year of the window (2023, 2024, 2025 and 2026 up to August). Each stratum gets the run's per-query cap. Within a stratum, the source's own order still applies.
+  - Split: GitHub repository and issue searches (`created:`), Hacker News and Stack Exchange. Not split: GitHub code search (no date qualifier), literal queries that set their own `created:`, Hugging Face (no date filter), and census sources (ADR-052), which have no cap to balance.
+  - Before collecting a stratum, the run asks the source how many items the stratum matches and stores it as the query's `estimated_total` in the manifest: GitHub sums `total_count` over the query's languages, Stack Exchange sums `total` over its sites, Hacker News reads `nbHits`. Collected ÷ available gives each stratum's sampling fraction, so analyses can weight frequencies back to the population.
+- **Consequences:** Every year of the window is represented, and the manifest holds what is needed to correct for unequal fractions. Weights matter for population-level frequencies; unweighted counts over-represent the older years. The counts cost one extra request per stratum and language or site: about 600 more GitHub search requests (~20 min at 30/min) and 400 more Stack Exchange requests (with a key, out of 10,000 per day). The corpus grows: GitHub queries go from 182 to 213 and from 182 to 384 partitions, with up to 100 items each, so a run at the same per-query cap collects more than d855.
+- **Correction (2026-11-05):** The per-source cap was not revised with this decision. In run fb68, GitHub reached `max_items_per_source: 10000` after 320 of 384 partitions, so the free-term issue queries for 2024–2026 never ran and 83% of the issues came from the 24 anchor repositories. The cap is now 20,000; the full plan needs at most about 16,500 items at the 100-item per-query cap.

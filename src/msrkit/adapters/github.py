@@ -13,6 +13,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -48,6 +49,13 @@ _KIND_ENDPOINT = {
     "code": "/search/code",
     "issue": "/search/issues",
 }
+# /search/issues rejects (422) a query that does not say issue or pull request
+# (seen on 2026-11-01; d28a ran without it on 2026-10-20). See ADR-049.
+_ISSUE_TYPE = re.compile(r"(?<!\S)-?(is|type):(issue|pr|pull-request)\b")
+
+
+class QueryRejectedError(RuntimeError):
+    """GitHub refused one or more search queries with 422 (invalid query)."""
 
 
 def is_bot_author(author: str | None) -> bool:
@@ -69,7 +77,8 @@ class GitHubAdapter(BaseAdapter):
     """GitHub adapter using the REST search API."""
 
     name: ClassVar[str] = "github"
-    version: ClassVar[str] = "0.1.0"
+    # 0.2.0: issue searches add is:issue (ADR-049); 0.2.1: code search without sort (ADR-053)
+    version: ClassVar[str] = "0.2.1"
     policy: ClassVar[SourcePolicy] = SourcePolicy(
         requires_auth=True,
         auth_env_vars=["GITHUB_TOKEN"],
@@ -155,12 +164,30 @@ class GitHubAdapter(BaseAdapter):
         search() sends one query per (term, language), each capped at 1,000
         results, so the partition decision depends on the largest of them.
         """
+        counts = self._total_counts(q)
+        return None if counts is None else max(counts, default=0)
+
+    def population(self, q: Query) -> int | None:
+        """Sum of total_count over the (term, language) queries search() issues.
+
+        Languages are disjoint; a query normally holds one term after split_by_term.
+        """
+        counts = self._total_counts(q)
+        return None if counts is None else sum(counts)
+
+    def stratifies_by_date(self, q: Query) -> bool:
+        """Repositories and issues take created:; code search has no date qualifier."""
+        fixed_dates = q.raw and any("created:" in t for t in q.terms)
+        return (q.kind or "repo") != "code" and not fixed_dates
+
+    def _total_counts(self, q: Query) -> list[int] | None:
+        """total_count of each (term, language) query search() issues; None on failure."""
         kind = q.kind or "repo"
         endpoint = _KIND_ENDPOINT.get(kind, "/search/repositories")
         terms: list[str | None] = list(q.terms) or [None]
         languages = [None] if q.raw else (q.extra.get("languages") or [None])
 
-        largest = 0
+        counts: list[int] = []
         for term in terms:
             for lang in languages:
                 query_string = self._build_single_query_string(q, term=term, language=lang)
@@ -169,8 +196,8 @@ class GitHubAdapter(BaseAdapter):
                 if resp.status_code != 200:
                     logger.warning("GitHub estimate failed: %d", resp.status_code)
                     return None
-                largest = max(largest, resp.json().get("total_count", 0))
-        return largest
+                counts.append(resp.json().get("total_count", 0))
+        return counts
 
     def partition(self, q: Query) -> list[Query]:
         """Split by term, then by date window until each query fits the 1,000 cap."""
@@ -212,6 +239,7 @@ class GitHubAdapter(BaseAdapter):
 
         terms_to_search: list[str | None] = list(q.terms) or [None]
         languages = [None] if q.raw else (q.extra.get("languages") or [None])
+        rejected: list[str] = []
 
         for term in terms_to_search:
             for lang in languages:
@@ -233,17 +261,20 @@ class GitHubAdapter(BaseAdapter):
                         "per_page": page_size,
                         "page": page,
                     }
-                    if kind == "code":
-                        params["sort"] = "indexed"
-                        params["order"] = "desc"
-                    else:
+                    if kind != "code":
                         params["sort"] = "updated"
                         params["order"] = "desc"
+                    # Code search keeps the default best-match order: its `sort` is
+                    # closing down, and `indexed` returned the same set (ADR-053).
 
                     resp = self._governed_get(f"{_BASE_URL}{endpoint}", params=params)
 
                     if resp.status_code == 422:
-                        logger.warning("GitHub: validation error for query=%s", query_string)
+                        message = self._error_message(resp)
+                        logger.warning(
+                            "GitHub: validation error for query=%s: %s", query_string, message
+                        )
+                        rejected.append(f"{query_string} ({message})")
                         break
                     if resp.status_code == 401:
                         logger.warning("GitHub: 401 unauthorized for %s (token required)", kind)
@@ -300,6 +331,30 @@ class GitHubAdapter(BaseAdapter):
 
                     if len(items) < page_size:
                         break
+
+        # Raised after the other languages ran, so their items are kept; the query
+        # is recorded as not completed, reported, and redone by --resume.
+        if rejected:
+            raise QueryRejectedError(
+                f"GitHub rejected {len(rejected)} query(ies) with 422: {'; '.join(rejected)}"
+            )
+
+    @staticmethod
+    def _error_message(resp: httpx.Response) -> str:
+        """The API's reason for an error response, or its status code."""
+        try:
+            data = resp.json()
+        except ValueError:
+            return f"HTTP {resp.status_code}"
+        messages = [e.get("message", "") for e in data.get("errors", []) if isinstance(e, dict)]
+        return "; ".join(m for m in [data.get("message", ""), *messages] if m)
+
+    @staticmethod
+    def _with_issue_type(kind: str, query: str) -> str:
+        """Restrict issue searches to issues: the protocol's kind is `issue` (ADR-049)."""
+        if kind != "issue" or _ISSUE_TYPE.search(query):
+            return query
+        return f"{query} is:issue"
 
     def normalize(self, raw: RawItem, terms: list[str] | None = None) -> Item:
         """Convert GitHub search result to canonical Item."""
@@ -457,7 +512,7 @@ class GitHubAdapter(BaseAdapter):
         if kind == "repo" and extra.get("min_stars"):
             parts.append(f"stars:>={extra['min_stars']}")
 
-        return " ".join(parts)
+        return self._with_issue_type(kind, " ".join(parts))
 
     def _build_single_query_string(
         self, q: Query, term: str | None = None, language: str | None = None
@@ -465,14 +520,17 @@ class GitHubAdapter(BaseAdapter):
         """Build GitHub search query string for a single term and language qualifier."""
         kind = q.kind or "repo"
         if q.raw and term:
-            # Literal protocol query: keep it verbatim, add only the date window.
+            # Literal protocol query: keep it verbatim, add only the date window
+            # (and is:issue to issue searches that do not set the type).
             if kind == "code" or "created:" in term or not (q.since or q.until):
-                return term
-            if q.since and q.until:
-                return f"{term} created:{q.since}..{q.until}"
-            if q.since:
-                return f"{term} created:>={q.since}"
-            return f"{term} created:<={q.until}"
+                literal = term
+            elif q.since and q.until:
+                literal = f"{term} created:{q.since}..{q.until}"
+            elif q.since:
+                literal = f"{term} created:>={q.since}"
+            else:
+                literal = f"{term} created:<={q.until}"
+            return self._with_issue_type(kind, literal)
         parts = []
         if term:
             parts.append(f'"{term}"' if " " in term else term)
@@ -493,7 +551,7 @@ class GitHubAdapter(BaseAdapter):
         if kind == "repo" and q.extra.get("min_stars"):
             parts.append(f"stars:>={q.extra['min_stars']}")
 
-        return " ".join(parts)
+        return self._with_issue_type(kind, " ".join(parts))
 
     @staticmethod
     def _parse_dt(val: str | None) -> datetime | None:

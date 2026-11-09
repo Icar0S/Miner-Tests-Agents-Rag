@@ -92,6 +92,7 @@ class RepoSignals(BaseModel):
     response_sha256: list[str] = []
     fetched_at: str = ""
     error: str | None = None
+    reused_from: str | None = None  # run that fetched these signals, when copied (ADR-054)
 
     @field_validator("workflows", "manifests", mode="before")
     @classmethod
